@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="desktop.css">
+  <style>
+    .chat { flex: 1; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; background: #f5f6f8; }
+    .msg { max-width: 70%; padding: 8px 12px; border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+    .msg.me { align-self: flex-end; background: #d9e8ff; }
+    .input { margin: 0 16px 16px; padding: 10px 14px; border: 2px solid #2b6fd6; border-radius: 8px; background: #fff; color: #888; }
+    .caret { display: inline-block; width: 1px; height: 15px; background: #1b1b1b; vertical-align: -3px; margin-left: 1px; }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <div class="titlebar"><span class="name" id="app"></span><span class="ctl">&#xE921;</span><span class="ctl">&#xE922;</span><span class="ctl">&#xE8BB;</span></div>
+    <div class="chat">
+      <div class="msg" id="m1"></div>
+      <div class="msg me" id="m2"></div>
+      <div class="msg" id="m3"></div>
+    </div>
+    <div class="input"><span class="caret"></span></div>
+  </div>
+  <img class="capsule" src="img/capsule-recording.png" alt="">
+  <div class="taskbar"><span>&#xE8FC;</span><span class="on">&#xE8BD;</span><span>&#xE8B7;</span><span>&#xE774;</span></div>
+  <script>
+    const zh = new URLSearchParams(location.search).get("lang") === "zh";
+    const text = zh
+      ? { app: "团队聊天", m1: "发布计划定了吗？", m2: "马上发给你", m3: "好的，等你消息" }
+      : { app: "Team chat", m1: "Is the release plan ready?", m2: "Sending it over now", m3: "Great, thanks!" };
+    for (const [id, s] of Object.entries(text)) document.getElementById(id).textContent = s;
+  </script>
+</body>
+</html>

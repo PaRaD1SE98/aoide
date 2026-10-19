@@ -1,0 +1,107 @@
+[
+  {
+    "name": "whisper.cpp / ggml",
+    "version": "via whisper-rs-sys 0.15.0",
+    "license": "MIT",
+    "url": "https://github.com/ggml-org/whisper.cpp",
+    "file": "whisper-cpp-ggml.txt"
+  },
+  {
+    "name": "sherpa-onnx",
+    "version": "1.13.8 (built without TTS)",
+    "license": "Apache-2.0",
+    "url": "https://github.com/k2-fsa/sherpa-onnx",
+    "file": "sherpa-onnx.txt"
+  },
+  {
+    "name": "ONNX Runtime",
+    "version": "1.28.2",
+    "license": "MIT (third-party notices included)",
+    "url": "https://github.com/microsoft/onnxruntime",
+    "file": "onnx-runtime.txt"
+  },
+  {
+    "name": "kaldi-native-fbank",
+    "version": "1.22.3",
+    "license": "Apache-2.0",
+    "url": "https://github.com/csukuangfj/kaldi-native-fbank",
+    "file": "kaldi-native-fbank.txt"
+  },
+  {
+    "name": "kaldi-decoder",
+    "version": "0.3.0",
+    "license": "Apache-2.0",
+    "url": "https://github.com/k2-fsa/kaldi-decoder",
+    "file": "kaldi-decoder.txt"
+  },
+  {
+    "name": "kaldifst",
+    "version": "1.8.0",
+    "license": "Apache-2.0",
+    "url": "https://github.com/k2-fsa/kaldifst",
+    "file": "kaldifst.txt"
+  },
+  {
+    "name": "OpenFst",
+    "version": "1.8.5",
+    "license": "Apache-2.0",
+    "url": "https://www.openfst.org",
+    "file": "openfst.txt"
+  },
+  {
+    "name": "KISS FFT",
+    "version": "febd4ca",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/mborgerding/kissfft",
+    "file": "kiss-fft.txt"
+  },
+  {
+    "name": "simple-sentencepiece",
+    "version": "0.7",
+    "license": "Apache-2.0",
+    "url": "https://github.com/pkufool/simple-sentencepiece",
+    "file": "simple-sentencepiece.txt"
+  },
+  {
+    "name": "Eigen",
+    "version": "5.0.1",
+    "license": "MPL-2.0 (source: https://gitlab.com/libeigen/eigen)",
+    "url": "https://eigen.tuxfamily.org",
+    "file": "eigen.txt"
+  },
+  {
+    "name": "JSON for Modern C++",
+    "version": "3.12.0",
+    "license": "MIT",
+    "url": "https://github.com/nlohmann/json",
+    "file": "json-for-modern-c.txt"
+  },
+  {
+    "name": "hclust-cpp (fastcluster)",
+    "version": "2026-02-25",
+    "license": "BSD-2-Clause",
+    "url": "https://github.com/csukuangfj/hclust-cpp",
+    "file": "hclust-cpp-fastcluster.txt"
+  },
+  {
+    "name": "Vulkan Loader",
+    "version": "1.4.363",
+    "license": "Apache-2.0",
+    "url": "https://github.com/KhronosGroup/Vulkan-Loader",
+    "file": "vulkan-loader.txt"
+  },
+  {
+    "name": "Microsoft Edge WebView2 SDK (static loader)",
+    "version": "via webview2-com-sys 0.39.1",
+    "license": "BSD-3-Clause",
+    "url": "https://www.nuget.org/packages/Microsoft.Web.WebView2",
+    "file": "microsoft-edge-webview2-sdk-static-loader.txt"
+  },
+  {
+    "name": "Interface Sounds by Kenney",
+    "version": "",
+    "license": "CC0-1.0",
+    "url": "https://www.kenney.nl/assets/interface-sounds",
+    "file": "interface-sounds-by-kenney.txt"
+  }
+]

@@ -1,0 +1,9 @@
+# 静态链接 C 运行时：sherpa-onnx 静态库是 /MT 构建的（见 scripts/build-sherpa-onnx.ps1），必须统一；
+# 顺带让安装包不依赖 VC++ 运行库
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[env]
+# 使用 scripts/build-sherpa-onnx.ps1 从源码构建的、不含 TTS（espeak-ng，GPL-3.0）的 sherpa-onnx 静态库，
+# 而不是 sherpa-onnx-sys 默认下载的官方预编译库。目录不存在时构建会直接报错，需先运行该脚本
+SHERPA_ONNX_LIB_DIR = { value = "vendor/sherpa-onnx", relative = true }

@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aoide</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <nav class="sidebar">
+      <div class="brand">
+        <img src="icon.png" alt="">
+        <div>
+          <div class="name">Aoide</div>
+          <div class="ver">v<span id="version"></span></div>
+        </div>
+      </div>
+      <a class="nav-item" data-section="hotkeys"><span class="ico">&#xE765;</span><span data-i18n="sec.hotkeys">快捷键</span></a>
+      <a class="nav-item" data-section="general"><span class="ico">&#xE713;</span><span data-i18n="sec.general">常规</span></a>
+      <a class="nav-item" data-section="speech"><span class="ico">&#xE720;</span><span data-i18n="sec.speech">语音识别</span></a>
+      <a class="nav-item" data-section="llm"><span class="ico">&#xE99A;</span><span data-i18n="sec.llm">LLM 润色与修订</span></a>
+      <a class="nav-item" data-section="prompts"><span class="ico">&#xE8BD;</span><span data-i18n="sec.prompts">提示词</span></a>
+      <a class="nav-item" data-section="about"><span class="ico">&#xE946;</span><span data-i18n="sec.about">关于</span></a>
+    </nav>
+
+    <main class="content" id="content">
+
+    <section class="pane" id="pane-hotkeys" hidden>
+      <h1 class="pane-title" data-i18n="sec.hotkeys">快捷键</h1>
+      <div class="group">
+        <div class="card">
+          <span class="ico">&#xE765;</span>
+          <div class="text">
+            <div class="title" data-i18n="hk.dictate.title">语音输入</div>
+            <div class="desc" data-i18n="hk.dictate.desc">单击开始录音，再单击结束</div>
+          </div>
+          <div class="control">
+            <span class="keys" data-keys="hotkey"></span>
+            <button class="btn" data-capture="hotkey" data-i18n="btn.change">更改</button>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE70F;</span>
+          <div class="text">
+            <div class="title" data-i18n="hk.revise.title">语音修订</div>
+            <div class="desc" data-i18n="hk.revise.desc">先选中文本，再按此键口述修改意见。「主快捷键 + 某键」表示按住主快捷键再按该键</div>
+          </div>
+          <div class="control">
+            <span class="keys" data-keys="revise_hotkey"></span>
+            <button class="btn" data-capture="revise_hotkey" data-i18n="btn.change">更改</button>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE71A;</span>
+          <div class="text">
+            <div class="title" data-i18n="hk.reviseStop.title">结束修订</div>
+            <div class="desc" data-i18n="hk.reviseStop.desc">说完修改意见后按此键；与语音输入键相同时单击即可结束</div>
+          </div>
+          <div class="control">
+            <span class="keys" data-keys="revise_stop_hotkey"></span>
+            <button class="btn" data-capture="revise_stop_hotkey" data-i18n="btn.change">更改</button>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE711;</span>
+          <div class="text">
+            <div class="title" data-i18n="hk.cancel.title">取消</div>
+            <div class="desc" data-i18n="hk.cancel.desc">录音或识别过程中按此键放弃本次任务；平时不会拦截这个键</div>
+          </div>
+          <div class="control">
+            <span class="keys" data-keys="cancel_hotkey"></span>
+            <button class="btn" data-capture="cancel_hotkey" data-i18n="btn.change">更改</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pane" id="pane-general" hidden>
+      <h1 class="pane-title" data-i18n="sec.general">常规</h1>
+      <div class="group">
+        <div class="card">
+          <span class="ico">&#xE8C1;</span>
+          <div class="text">
+            <div class="title" data-i18n="uiLang.title">显示语言</div>
+            <div class="desc" data-i18n="uiLang.desc">界面、托盘菜单和通知使用的语言</div>
+          </div>
+          <div class="control">
+            <select data-key="ui_language">
+              <option value="auto" data-i18n="uiLang.auto">跟随系统</option>
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+            </select>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE7E8;</span>
+          <div class="text">
+            <div class="title" data-i18n="autostart.title">开机自动启动</div>
+            <div class="desc" data-i18n="autostart.desc">登录 Windows 后在托盘中运行</div>
+          </div>
+          <div class="control">
+            <label class="toggle"><input type="checkbox" id="autostart"><span></span></label>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE9F9;</span>
+          <div class="text">
+            <div class="title" data-i18n="logs.title">配置与日志</div>
+            <div class="desc" id="log-dir"></div>
+          </div>
+          <div class="control">
+            <button class="btn" id="open-logs-btn" data-i18n="btn.openFolder">打开文件夹</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pane" id="pane-speech" hidden>
+      <h1 class="pane-title" data-i18n="sec.speech">语音识别</h1>
+      <div class="group">
+        <div class="card">
+          <span class="ico">&#xE720;</span>
+          <div class="text">
+            <div class="title" data-i18n="model.title">识别模型</div>
+            <div class="desc" id="model-desc"></div>
+          </div>
+          <div class="control">
+            <select id="model" data-key="model"></select>
+            <button class="btn accent" id="download-btn" data-i18n="btn.download" hidden>下载</button>
+          </div>
+        </div>
+        <div class="card sub" id="download-row" hidden>
+          <div class="text grow">
+            <div class="progress-head">
+              <span id="download-text"></span>
+              <span id="download-pct"></span>
+            </div>
+            <div class="progress"><div class="bar" id="download-bar"></div></div>
+          </div>
+          <div class="control">
+            <button class="btn" id="cancel-btn" data-i18n="btn.cancel">取消</button>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE8B7;</span>
+          <div class="text">
+            <div class="title" data-i18n="modelDir.title">模型目录</div>
+            <div class="desc" data-i18n="modelDir.desc">留空使用默认目录</div>
+          </div>
+          <div class="control wide">
+            <input type="text" id="model-dir" data-key="model_dir" spellcheck="false">
+            <button class="btn" id="browse-btn" data-i18n="btn.browse">浏览</button>
+            <button class="btn icon-btn" id="open-models-btn" data-i18n-title="btn.openFolder" title="打开文件夹">&#xE8DA;</button>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE774;</span>
+          <div class="text">
+            <div class="title" data-i18n="lang.title">识别语言</div>
+            <div class="desc" data-i18n="lang.desc">固定语言比自动检测更准、更快</div>
+          </div>
+          <div class="control">
+            <select data-key="language">
+              <option value="zh">中文</option>
+              <option value="en">English</option>
+              <option value="ja">日本語</option>
+              <option value="ko">한국어</option>
+              <option value="yue" data-i18n="lang.yue">粤语</option>
+              <option value="auto" data-i18n="lang.auto">自动检测</option>
+            </select>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE7F4;</span>
+          <div class="text">
+            <div class="title" data-i18n="device.title">推理设备</div>
+            <div class="desc" id="device-desc"></div>
+          </div>
+          <div class="control">
+            <div class="segmented" data-key="device" id="device-seg">
+              <button data-value="gpu">GPU</button>
+              <button data-value="cpu">CPU</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE916;</span>
+          <div class="text">
+            <div class="title" data-i18n="duration.title">录音时长</div>
+            <div class="desc" data-i18n="duration.desc">超过最长时长自动停止；短于最短时长的录音会补齐静音再识别</div>
+          </div>
+          <div class="control">
+            <label class="num"><span data-i18n="duration.min">最短</span><input type="number" min="0" max="30" data-key="min_duration" data-type="int"><span data-i18n="unit.sec">秒</span></label>
+            <label class="num"><span data-i18n="duration.max">最长</span><input type="number" min="5" max="600" step="5" data-key="max_duration" data-type="int"><span data-i18n="unit.sec">秒</span></label>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE74F;</span>
+          <div class="text">
+            <div class="title" data-i18n="mute.title">录音时静音其他声音</div>
+            <div class="desc" data-i18n="mute.desc">开始录音时把其他程序正在播放的声音静音，结束后恢复；提示音不受影响</div>
+          </div>
+          <div class="control">
+            <label class="toggle"><input type="checkbox" data-key="mute_while_recording"><span></span></label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pane" id="pane-llm" hidden>
+      <h1 class="pane-title" data-i18n="sec.llm">LLM 润色与修订</h1>
+      <div class="group">
+        <div class="card">
+          <span class="ico">&#xE945;</span>
+          <div class="text">
+            <div class="title" data-i18n="polish.title">自动润色</div>
+            <div class="desc" data-i18n="polish.desc">转写后用 LLM 去除语气词、连接断句，多个要点自动编号</div>
+          </div>
+          <div class="control">
+            <label class="toggle"><input type="checkbox" data-key="polish"><span></span></label>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE71B;</span>
+          <div class="text">
+            <div class="title" data-i18n="api.title">API 地址</div>
+            <div class="desc" data-i18n="api.desc">任意 OpenAI 格式接口，润色和语音修订都会用到</div>
+          </div>
+          <div class="control wide">
+            <input type="text" data-key="polish_api" placeholder="https://api.openai.com/v1" spellcheck="false">
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE192;</span>
+          <div class="text">
+            <div class="title">API Key</div>
+            <div class="desc" data-i18n="apiKey.desc">服务端不需要时留空</div>
+          </div>
+          <div class="control wide">
+            <input type="password" id="api-key" data-key="polish_api_key" spellcheck="false" autocomplete="off">
+            <button class="btn icon-btn" id="reveal-btn" data-i18n-title="btn.reveal" title="显示 / 隐藏">&#xE7B3;</button>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE99A;</span>
+          <div class="text">
+            <div class="title" data-i18n="llmModel.title">模型名</div>
+            <div class="desc" data-i18n="llmModel.desc">例如 gpt-4o-mini</div>
+          </div>
+          <div class="control wide">
+            <input type="text" data-key="polish_model" spellcheck="false">
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xEC4A;</span>
+          <div class="text">
+            <div class="title" data-i18n="noThink.title">关闭思考</div>
+            <div class="desc" data-i18n="noThink.desc">通过 API 参数让推理模型跳过思考过程，明显降低延迟；不支持的服务会自动忽略</div>
+          </div>
+          <div class="control">
+            <label class="toggle"><input type="checkbox" data-key="polish_no_think"><span></span></label>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE916;</span>
+          <div class="text">
+            <div class="title" data-i18n="minSeconds.title">润色最短录音时长</div>
+            <div class="desc" data-i18n="minSeconds.desc">短于此时长的录音不润色，直接输出转写结果；润色主要用来整理大段口述</div>
+          </div>
+          <div class="control">
+            <label class="num"><input type="number" min="0" max="600" data-key="polish_min_seconds" data-type="int"><span data-i18n="unit.sec">秒</span></label>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE8D2;</span>
+          <div class="text">
+            <div class="title" data-i18n="minChars.title">润色最少字数</div>
+            <div class="desc" data-i18n="minChars.desc">更短的转写结果直接输出，不调用 LLM</div>
+          </div>
+          <div class="control">
+            <label class="num"><input type="number" min="0" max="200" data-key="polish_min_chars" data-type="int"><span data-i18n="unit.chars">字</span></label>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE8C3;</span>
+          <div class="text">
+            <div class="title" data-i18n="insert.title">按上下文插入</div>
+            <div class="desc" data-i18n="insert.desc">光标前后已有文字时，用 LLM 把口述内容自然接进光标处；前后原文不会被改动</div>
+          </div>
+          <div class="control">
+            <label class="toggle"><input type="checkbox" data-key="insert_smart"><span></span></label>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE916;</span>
+          <div class="text">
+            <div class="title" data-i18n="insertSeconds.title">插入最短录音时长</div>
+            <div class="desc" data-i18n="insertSeconds.desc">更短的录音直接插入转写结果，不调用 LLM，速度更快</div>
+          </div>
+          <div class="control">
+            <label class="num"><input type="number" min="0" max="600" data-key="insert_min_seconds" data-type="int"><span data-i18n="unit.sec">秒</span></label>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE8D2;</span>
+          <div class="text">
+            <div class="title" data-i18n="insertChars.title">插入最少字数</div>
+            <div class="desc" data-i18n="insertChars.desc">更短的转写结果直接插入，不调用 LLM</div>
+          </div>
+          <div class="control">
+            <label class="num"><input type="number" min="0" max="200" data-key="insert_min_chars" data-type="int"><span data-i18n="unit.chars">字</span></label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pane" id="pane-prompts" hidden>
+      <h1 class="pane-title" data-i18n="sec.prompts">提示词</h1>
+      <p class="pane-desc muted" data-i18n="prompts.desc">发送给 LLM 的指令，可按需修改；花括号里的占位符会被替换成实际内容</p>
+      <div class="group">
+        <div class="card stack">
+          <div class="row">
+            <span class="ico">&#xE8BD;</span>
+            <div class="text">
+              <div class="title" data-i18n="prompt.polish.title">润色提示词</div>
+              <div class="desc" data-i18n="prompt.polish.desc">{text} 会被替换为转写结果</div>
+            </div>
+            <div class="control">
+            </div>
+          </div>
+          <textarea data-prompt="polish_prompt" rows="9" spellcheck="false"></textarea>
+        </div>
+        <div class="card stack">
+          <div class="row">
+            <span class="ico">&#xE70F;</span>
+            <div class="text">
+              <div class="title" data-i18n="prompt.revise.title">修订提示词</div>
+              <div class="desc" data-i18n="prompt.revise.desc">{original} 为选中的原文，{instruction} 为口述的修改意见</div>
+            </div>
+            <div class="control">
+            </div>
+          </div>
+          <textarea data-prompt="revise_prompt" rows="9" spellcheck="false"></textarea>
+        </div>
+        <div class="card stack">
+          <div class="row">
+            <span class="ico">&#xE8C3;</span>
+            <div class="text">
+              <div class="title" data-i18n="prompt.insert.title">插入提示词</div>
+              <div class="desc" data-i18n="prompt.insert.desc">光标前后已有文字时使用：{before}、{after} 为光标前后的文字，{text} 为转写结果</div>
+            </div>
+            <div class="control"></div>
+          </div>
+          <textarea data-prompt="insert_prompt" rows="9" spellcheck="false"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="pane" id="pane-about" hidden>
+      <h1 class="pane-title" data-i18n="sec.about">关于</h1>
+      <div class="about">
+        <img src="icon.png" alt="">
+        <div>
+          <div class="about-name">Aoide <span class="muted">v<span id="about-version"></span></span></div>
+          <div class="muted" data-i18n="hero.subtitle">按快捷键说话，再按一次结束，文字自动输入到当前输入框</div>
+        </div>
+      </div>
+      <div class="group">
+        <div class="card">
+          <span class="ico">&#xE71B;</span>
+          <div class="text">
+            <div class="title">GitHub</div>
+            <div class="desc">github.com/PaRaD1SE98/aoide</div>
+          </div>
+          <div class="control">
+            <button class="btn" data-url="https://github.com/PaRaD1SE98/aoide" data-i18n="btn.open">打开</button>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE8D4;</span>
+          <div class="text">
+            <div class="title" data-i18n="about.license">许可证</div>
+            <div class="desc">MIT</div>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE8A5;</span>
+          <div class="text">
+            <div class="title" data-i18n="about.thirdParty">第三方许可</div>
+            <div class="desc" data-i18n="about.thirdPartyDesc">Aoide 使用的开源组件及其许可证</div>
+          </div>
+          <div class="control">
+            <button class="btn" id="licenses-btn" data-i18n="btn.view">查看</button>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE8D6;</span>
+          <div class="text">
+            <div class="title" data-i18n="about.credits">致谢</div>
+            <div class="desc" data-i18n="about.creditsDesc">音效：Kenney（www.kenney.nl）的 Interface Sounds · 语音识别：SenseVoice、whisper.cpp</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    </main>
+  </div>
+
+  <div id="toast" role="status"></div>
+  <script src="i18n.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body { margin: 0; width: 760px; height: 150px; overflow: hidden; }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: space-evenly;
+      background: linear-gradient(135deg, #dbe6ff, #efe3fb);
+      font: 13px/1.4 "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+      color: #333;
+    }
+    figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    img { width: 120px; height: 36px; }
+  </style>
+</head>
+<body>
+  <figure><img src="img/capsule-recording.png" alt=""><figcaption data-zh="录音中" data-en="Recording"></figcaption></figure>
+  <figure><img src="img/capsule-revising.png" alt=""><figcaption data-zh="语音修订" data-en="Voice edit"></figcaption></figure>
+  <figure><img src="img/capsule-transcribing.png" alt=""><figcaption data-zh="转写中" data-en="Transcribing"></figcaption></figure>
+  <figure><img src="img/capsule-polishing.png" alt=""><figcaption data-zh="LLM 润色中" data-en="LLM polishing"></figcaption></figure>
+  <script>
+    const lang = new URLSearchParams(location.search).get("lang") === "zh" ? "zh" : "en";
+    document.querySelectorAll("figcaption").forEach((el) => (el.textContent = el.dataset[lang]));
+  </script>
+</body>
+</html>

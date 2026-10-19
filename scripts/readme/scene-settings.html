@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="desktop.css">
+  <style>
+    html, body { width: 1060px; height: 700px; }
+    .window { top: 30px; width: 980px; height: 640px; background: #f3f3f3; }
+    /* 设置页先单独渲染成图片（iframe 里 position: fixed 的保存栏在无头浏览器中显示不出来） */
+    .window .page { flex: none; width: 980px; height: 608px; }
+    .titlebar img { width: 16px; height: 16px; }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <div class="titlebar"><img src="ui/icon.png" alt=""><span class="name">Aoide</span><span class="ctl">&#xE921;</span><span class="ctl">&#xE922;</span><span class="ctl">&#xE8BB;</span></div>
+    <img class="page" id="page" alt="">
+  </div>
+  <script>
+    const lang = new URLSearchParams(location.search).get("lang") === "zh" ? "zh" : "en";
+    document.getElementById("page").src = `settings-page-${lang}.png`;
+  </script>
+</body>
+</html>

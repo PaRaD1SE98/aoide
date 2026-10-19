@@ -1,0 +1,85 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      # Visual Studio 生成器在 whisper.cpp 嵌套的 vulkan-shaders-gen 子工程里找不到编译器
+      CMAKE_GENERATOR: Ninja
+      # 与 Rust 的 +crt-static 保持一致
+      CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreaded
+      CMAKE_POLICY_DEFAULT_CMP0091: NEW
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Vulkan SDK
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          install_runtime: true
+          cache: true
+          stripdown: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+
+      # 安装包附带 Vulkan Loader（见 scripts/build-env.ps1）
+      - name: Vendor Vulkan loader
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force src-tauri/vendor | Out-Null
+          Copy-Item "$env:SystemRoot\System32\vulkan-1.dll" src-tauri/vendor/
+
+      # 不含 TTS（espeak-ng，GPL-3.0）的 sherpa-onnx 静态库，见 scripts/build-sherpa-onnx.ps1
+      - name: Cache sherpa-onnx
+        id: sherpa-cache
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/vendor/sherpa-onnx
+          key: sherpa-onnx-${{ hashFiles('src-tauri/Cargo.lock', 'scripts/build-sherpa-onnx.ps1') }}
+
+      - name: Build sherpa-onnx without TTS
+        if: steps.sherpa-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: ./scripts/build-sherpa-onnx.ps1
+
+      # 第三方许可声明，随安装包分发
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+
+      - name: Generate third-party licenses
+        shell: pwsh
+        run: ./scripts/third-party-licenses.ps1
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LIBCLANG_PATH: C:\Program Files\LLVM\bin
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Aoide ${{ github.ref_name }}
+          releaseDraft: true
+          prerelease: false

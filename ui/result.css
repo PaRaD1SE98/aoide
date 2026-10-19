@@ -1,0 +1,105 @@
+:root {
+  color-scheme: light dark;
+  --card: #fbfbfb;
+  --stroke: #e0e0e0;
+  --text: #1b1b1b;
+  --muted: #5f5f5f;
+  --control: #ffffff;
+  --control-hover: #f0f0f0;
+  --control-stroke: #d6d6d6;
+  --accent: #005fb8;
+  --accent-hover: #1a6fc0;
+  --on-accent: #ffffff;
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --card: #2b2b2b;
+    --stroke: #3a3a3a;
+    --text: #ffffff;
+    --muted: #c5c5c5;
+    --control: #373737;
+    --control-hover: #424242;
+    --control-stroke: #454545;
+    --accent: #60cdff;
+    --accent-hover: #4cc2f5;
+    --on-accent: #000000;
+    --shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  color: var(--text);
+  font: 14px/1.5 "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* 窗口四周留出阴影空间 */
+body { padding: 8px; }
+
+.card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--card);
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 4px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+header img { width: 16px; height: 16px; }
+#title { flex: 1; }
+
+#text {
+  flex: 1;
+  padding: 2px 14px 6px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+  cursor: text;
+}
+
+footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 6px 12px 12px;
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--control);
+  border: 1px solid var(--control-stroke);
+  border-radius: 4px;
+}
+button:hover { background: var(--control-hover); }
+
+.btn { height: 30px; min-width: 88px; padding: 0 16px; }
+.btn.accent { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.btn.accent:hover { background: var(--accent-hover); }
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  font: 11px "Segoe Fluent Icons", "Segoe MDL2 Assets";
+}

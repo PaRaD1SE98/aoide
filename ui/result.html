@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aoide</title>
+  <link rel="stylesheet" href="result.css">
+</head>
+<body>
+  <div class="card">
+    <header data-tauri-drag-region>
+      <img src="icon.png" alt="" data-tauri-drag-region>
+      <span id="title" data-tauri-drag-region></span>
+      <button id="close" class="icon-btn" title="关闭 (Esc)" aria-label="关闭" data-i18n-title="result.closeTitle" data-i18n-aria="result.close">&#xE711;</button>
+    </header>
+    <div id="text"></div>
+    <footer>
+      <button id="copy" class="btn accent" data-i18n="result.copy">复制</button>
+    </footer>
+  </div>
+  <script src="i18n.js"></script>
+  <script src="result.js"></script>
+</body>
+</html>

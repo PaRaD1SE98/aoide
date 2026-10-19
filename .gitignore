@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local config / logs (the app stores them in %APPDATA%\Aoide,
+# these entries guard against files left over from older versions)
+voice_config.json
+voice_input.log
+.voice_tray.lock
+*.log
+
+# Node / Tauri
+node_modules/
+src-tauri/target/
+src-tauri/gen/
+src-tauri/vendor/

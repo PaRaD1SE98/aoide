@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aoide · Third-party licenses</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f3f3f3; --card: #fbfbfb; --text: #1b1b1b; --muted: #5d5d5d; --stroke: #e5e5e5; --accent: #005fb8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #202020; --card: #2b2b2b; --text: #ffffff; --muted: #c5c5c5; --stroke: #3a3a3a; --accent: #60cdff; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font-size: 28px; font-weight: 600; margin: 0 0 8px; }
+  h2 { font-size: 20px; font-weight: 600; margin: 36px 0 12px; }
+  h3 { font-size: 16px; font-weight: 600; margin: 0 0 6px; }
+  p { color: var(--muted); margin: 0 0 12px; }
+  a { color: var(--accent); }
+  .card { background: var(--card); border: 1px solid var(--stroke); border-radius: 8px; padding: 16px 20px; margin: 0 0 8px; }
+  .meta { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+  ul.used-by { margin: 0 0 8px; padding-left: 20px; columns: 2; font-size: 13px; }
+  ul.overview { padding-left: 20px; }
+  details summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  pre { white-space: pre-wrap; word-break: break-word; font: 12px/1.5 "Cascadia Mono", Consolas, monospace; background: var(--bg); border-radius: 6px; padding: 12px; margin: 8px 0 0; max-height: 480px; overflow: auto; }
+  @media (max-width: 600px) { ul.used-by { columns: 1; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Third-party licenses</h1>
+  <p>Aoide is licensed under the MIT License. It includes the open-source components listed below, each under its own license.</p>
+
+  <!-- NATIVE -->
+
+  <h2>Rust crates</h2>
+  <p>Licenses used by the Rust crates compiled into Aoide:</p>
+  <ul class="overview">
+    {{#each overview}}<li><a href="#{{id}}">{{name}}</a> ({{count}})</li>
+    {{/each}}
+  </ul>
+  {{#each licenses}}
+  <div class="card">
+    <h3 id="{{id}}">{{name}}</h3>
+    <ul class="used-by">
+      {{#each used_by}}<li><a href="{{#if crate.repository}}{{crate.repository}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}}">{{crate.name}} {{crate.version}}</a></li>
+      {{/each}}
+    </ul>
+    <details><summary>License text</summary><pre>{{text}}</pre></details>
+  </div>
+  {{/each}}
+</main>
+</body>
+</html>
