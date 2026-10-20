@@ -45,7 +45,6 @@ foreach ($page in "index.html", "result.html") {
 
 # 3. 渲染场景（2 倍分辨率）
 $scenes = @(
-    @{ name = "recording"; w = 960; h = 540 },
     @{ name = "states"; w = 760; h = 150 },
     @{ name = "result"; w = 960; h = 540 },
     @{ name = "settings"; w = 1060; h = 700 }

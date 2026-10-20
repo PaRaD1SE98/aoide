@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/en/recording.png" width="760" alt="Recording in a chat app: the floating bar at the bottom of the screen shows a live waveform">
+  <img src="docs/images/en/demo.webp" width="760" alt="Demo: dictating into a chat app, the LLM cleans up the speech; then selecting a reply and rewriting it by voice">
 </p>
 
 <p align="center"><sub><i>Aoide</i> (pronounced "ay-OY-dee") is named after the Greek Muse of voice and song</sub></p>
@@ -135,7 +135,7 @@ pnpm tauri build                     # build the installer → src-tauri\target\
 
 Building sherpa-onnx and the first app build (whisper.cpp and its Vulkan shaders) both take a while. Re-run `third-party-licenses.ps1` whenever dependencies change.
 
-The README screenshots are rendered off-screen by `.\scripts\readme-images.ps1` (the app's own drawing code plus the real UI pages in a headless browser), so they can be regenerated after UI changes.
+The README screenshots are rendered off-screen by `.\scripts\readme-images.ps1` (the app's own drawing code plus the real UI pages in a headless browser), and the demo animation by `.\scripts\readme-demo.ps1` (also needs [FFmpeg](https://ffmpeg.org/)), so they can be regenerated after UI changes.
 
 ## Credits
 

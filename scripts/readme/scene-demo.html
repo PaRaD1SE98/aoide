@@ -1,0 +1,204 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="desktop.css">
+  <style>
+    .window { height: 340px; }
+    .chat { flex: 1; padding: 12px 20px; display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; background: #f5f6f8; overflow: hidden; }
+    .msg { max-width: 70%; padding: 8px 12px; border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+    .msg.me { align-self: flex-end; background: #d9e8ff; }
+    .input { margin: 12px 16px 16px; padding: 9px 14px; min-height: 42px; border: 2px solid #2b6fd6; border-radius: 8px; background: #fff; }
+    .caret { display: inline-block; width: 1px; height: 15px; background: #1b1b1b; vertical-align: -3px; margin-left: 1px; }
+    .sel { background: #b3d4fc; }
+    .new { border-radius: 3px; }
+
+    /* 左侧：步骤 */
+    .steps { position: absolute; left: 20px; top: 56px; width: 124px; display: flex; flex-direction: column; gap: 14px; }
+    .step { padding: 10px 12px; border-radius: 10px; color: #5b6475; background: rgba(255,255,255,.35); border: 1px solid rgba(255,255,255,.5); }
+    .step b { display: block; font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+    .step span { font-size: 12px; }
+    .step.on { color: #1b1b1b; background: rgba(255,255,255,.85); box-shadow: 0 6px 20px rgba(30,40,90,.15); }
+    .step.on b { color: #2b6fd6; }
+
+    /* 右侧：按键提示 */
+    .keys { position: absolute; right: 20px; top: 150px; width: 124px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .kbd-row { display: flex; gap: 6px; align-items: center; }
+    .kbd { min-width: 44px; padding: 8px 10px; border-radius: 8px; background: #fff; border: 1px solid #c9cfdb; border-bottom-width: 4px; font-weight: 600; font-size: 13px; text-align: center; color: #1b1b1b; box-shadow: 0 4px 12px rgba(30,40,90,.12); }
+    .kbd.down { transform: translateY(3px); border-bottom-width: 1px; background: #e8f0ff; border-color: #2b6fd6; }
+    .plus { color: #5b6475; font-weight: 600; }
+    .keys .hint { font-size: 12px; color: #5b6475; text-align: center; }
+
+    /* 底部：口述内容字幕 */
+    .speech { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); max-width: 640px; padding: 6px 14px; border-radius: 16px; background: rgba(24,24,27,.86); color: #fff; font-size: 13px; white-space: nowrap; display: flex; gap: 8px; align-items: center; }
+    .speech .ico { font: 14px "Segoe Fluent Icons", "Segoe MDL2 Assets"; color: #ff6b6b; }
+    .speech .ico.revise { color: #c4b5fd; }
+  </style>
+</head>
+<body>
+  <div class="steps">
+    <div class="step" id="step1"><b id="s1t"></b><span id="s1d"></span></div>
+    <div class="step" id="step2"><b id="s2t"></b><span id="s2d"></span></div>
+  </div>
+  <div class="window">
+    <div class="titlebar"><span class="name" id="app"></span><span class="ctl">&#xE921;</span><span class="ctl">&#xE922;</span><span class="ctl">&#xE8BB;</span></div>
+    <div class="chat" id="chat"></div>
+    <div class="input" id="input"></div>
+  </div>
+  <div class="keys" id="keys"><div class="kbd-row" id="kbd"></div><div class="hint" id="khint"></div></div>
+  <div class="speech" id="speech"><span class="ico" id="sico">&#xE720;</span><span id="stext"></span></div>
+  <img class="capsule" id="capsule" alt="">
+  <div class="taskbar"><span>&#xE8FC;</span><span class="on">&#xE8BD;</span><span>&#xE8B7;</span><span>&#xE774;</span></div>
+  <script>
+    // 由 scripts/readme/record-demo.mjs 逐帧调用 render(t)（t 为毫秒），画面完全由 t 决定
+    const zh = new URLSearchParams(location.search).get("lang") === "zh";
+    const L = zh ? {
+      app: "团队聊天",
+      s1t: "① 语音输入", s1d: "LLM 自动润色", s2t: "② 语音修订", s2d: "说出怎么改",
+      tap: "单击", hold: "按住 Right Alt 再按 Space",
+      q1: "明天的发布会几点开始？",
+      said1: "嗯……那个明天的发布会改到下午三点了，然后呃……记得带上演示用的电脑",
+      out1: "明天的发布会改到下午 3 点，记得带上演示用的电脑。",
+      q2: "新版语音输入用下来感觉怎么样？",
+      draft: "还行吧，就是有时候有点慢",
+      said2: "改得正式一点，再补充一句识别很准",
+      out2: "整体体验不错，识别非常准确，只是偶尔响应稍慢。",
+    } : {
+      app: "Team chat",
+      s1t: "① Dictate", s1d: "polished by an LLM", s2t: "② Voice edit", s2d: "say how to change it",
+      tap: "Tap", hold: "Hold Right Alt, press Space",
+      q1: "What time is the launch meeting tomorrow?",
+      said1: "um so the launch meeting moved to like 3pm tomorrow and uh bring the demo laptop",
+      out1: "The launch meeting moved to 3 PM tomorrow. Please bring the demo laptop.",
+      q2: "How's the new voice typing working for you?",
+      draft: "its ok i guess but kinda slow sometimes",
+      said2: "make it more formal and add that the accuracy is great",
+      out2: "Overall it works well and the accuracy is excellent, though it can be a little slow at times.",
+    };
+    for (const id of ["app", "s1t", "s1d", "s2t", "s2d"]) document.getElementById(id).textContent = L[id];
+
+    // === 时间轴（毫秒）===
+    const T = {
+      rec1: 700, stop1: 4600, pol1: 5500, out1: 7000, send1: 8200, q2: 8900,
+      type2: 9500, typed2: 10700, sel2: 11000, rev2: 11700, stop2: 14500, pol2: 15300, out2: 16700, send2: 17900,
+      end: 19500,
+    };
+    const FPS = 30;
+    const FRAMES = { recording: 240, revising: 180, transcribing: 60, polishing: 90 };
+    // 悬浮条：[开始, 结束, 状态]
+    const CAPSULE = [
+      [T.rec1, T.stop1, "recording"], [T.stop1, T.pol1, "transcribing"], [T.pol1, T.out1, "polishing"],
+      [T.rev2, T.stop2, "revising"], [T.stop2, T.pol2, "transcribing"], [T.pol2, T.out2, "polishing"],
+    ];
+    // 按键：[按下时刻, 键, 提示]
+    const PRESSES = [
+      [T.rec1, ["Right Alt"], L.tap], [T.stop1, ["Right Alt"], L.tap],
+      [T.rev2, ["Right Alt", "Space"], L.hold], [T.stop2, ["Right Alt"], L.tap],
+    ];
+
+    const $ = (id) => document.getElementById(id);
+    const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+    const ramp = (t, start, ms) => clamp((t - start) / ms);
+    const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const slice = (s, n) => Array.from(s).slice(0, n).join("");
+    const len = (s) => Array.from(s).length;
+    const frame = (name, i) => `img/frames/${name}-${String(i).padStart(4, "0")}.png`;
+
+    // 预加载所有悬浮条帧，切换时不用等待
+    const cache = {};
+    window.ready = Promise.all(Object.entries(FRAMES).flatMap(([name, n]) =>
+      Array.from({ length: n }, (_, i) => {
+        const img = new Image();
+        img.src = frame(name, i);
+        cache[img.src] = img;
+        return img.decode();
+      }))).then(() => document.fonts.ready);
+
+    function render(t) {
+      t = t % T.end;
+      $("step1").classList.toggle("on", t < T.q2);
+      $("step2").classList.toggle("on", t >= T.q2);
+
+      // 聊天记录
+      const msgs = [["", L.q1]];
+      if (t >= T.send1) msgs.push(["me", L.out1]);
+      if (t >= T.q2) msgs.push(["", L.q2]);
+      if (t >= T.send2) msgs.push(["me", L.out2]);
+      $("chat").innerHTML = msgs.map(([c, s]) => `<div class="msg ${c}">${esc(s)}</div>`).join("");
+
+      // 输入框
+      const caret = Math.floor(t / 530) % 2 === 0 ? '<span class="caret"></span>' : '<span class="caret" style="opacity:0"></span>';
+      let html = caret;
+      if (t >= T.out1 && t < T.send1) {
+        const flash = 1 - ramp(t, T.out1, 900);
+        html = `<span class="new" style="background:rgba(251,191,36,${0.35 * flash})">${esc(L.out1)}</span>${caret}`;
+      } else if (t >= T.type2 && t < T.sel2) {
+        html = esc(slice(L.draft, Math.round(len(L.draft) * ramp(t, T.type2, T.typed2 - T.type2)))) + caret;
+      } else if (t >= T.sel2 && t < T.out2) {
+        const n = Math.round(len(L.draft) * ramp(t, T.sel2, 350));
+        const chars = Array.from(L.draft);
+        html = esc(chars.slice(0, len(L.draft) - n).join("")) + `<span class="sel">${esc(chars.slice(len(L.draft) - n).join(""))}</span>`;
+      } else if (t >= T.out2 && t < T.send2) {
+        const flash = 1 - ramp(t, T.out2, 900);
+        html = `<span class="new" style="background:rgba(251,191,36,${0.35 * flash})">${esc(L.out2)}</span>${caret}`;
+      }
+      $("input").innerHTML = html;
+
+      // 口述字幕：录音期间逐字出现，文字落地后淡出
+      const speech = $("speech");
+      let said = null, start = 0, stop = 0, out = 0;
+      if (t >= T.rec1 && t < T.out1 + 400) [said, start, stop, out] = [L.said1, T.rec1, T.stop1, T.out1];
+      if (t >= T.rev2 && t < T.out2 + 400) [said, start, stop, out] = [L.said2, T.rev2, T.stop2, T.out2];
+      if (said) {
+        const n = Math.max(1, Math.round(len(said) * ramp(t, start + 200, stop - start - 500)));
+        $("stext").textContent = `“${slice(said, n)}”`;
+        $("sico").classList.toggle("revise", said === L.said2);
+        speech.style.opacity = Math.min(ramp(t, start, 150), 1 - ramp(t, out, 400));
+      } else {
+        speech.style.opacity = 0;
+      }
+
+      // 按键提示：按下 150 ms，提示保留 1.4 s
+      const press = PRESSES.filter(([at]) => t >= at && t < at + 1400).pop();
+      if (press) {
+        const [at, keys, hint] = press;
+        const down = t < at + 150 ? " down" : "";
+        $("kbd").innerHTML = keys.map((k) => `<span class="kbd${down}">${k}</span>`).join('<span class="plus">+</span>');
+        $("khint").textContent = hint;
+        $("keys").style.opacity = Math.min(ramp(t, at, 80), 1 - ramp(t, at + 1100, 300));
+      } else {
+        $("keys").style.opacity = 0;
+      }
+
+      // 悬浮条：用程序自身绘制的逐帧图片；出现/消失时淡入淡出约 100 ms
+      const cap = $("capsule");
+      const seg = CAPSULE.find(([a, b]) => t >= a && t < b);
+      const last = CAPSULE.filter(([, b]) => t >= b).pop();
+      if (seg) {
+        const [a, , name] = seg;
+        const i = Math.floor(((t - a) / 1000) * FPS) % FRAMES[name];
+        cap.src = frame(name, i);
+        const first = !CAPSULE.some(([, b]) => b === a);
+        cap.style.opacity = first ? ramp(t, a, 100) : 1;
+      } else if (last && t < last[1] + 120) {
+        const [a, b, name] = last;
+        cap.src = frame(name, Math.floor(((b - a) / 1000) * FPS) % FRAMES[name]);
+        cap.style.opacity = 1 - ramp(t, b, 100);
+      } else {
+        cap.style.opacity = 0;
+      }
+      // 帧图片都已预加载；decode() 偶尔不返回，最多等 200 ms
+      const decoded = cap.src ? cap.decode().catch(() => {}) : Promise.resolve();
+      return Promise.race([decoded, new Promise((r) => setTimeout(r, 200))]);
+    }
+    // 直接用浏览器打开时自动播放，方便预览
+    if (!navigator.webdriver && !location.search.includes("record")) {
+      window.ready.then(() => {
+        const t0 = performance.now();
+        const loop = () => { render(performance.now() - t0); requestAnimationFrame(loop); };
+        loop();
+      });
+    }
+  </script>
+</body>
+</html>

@@ -558,6 +558,59 @@ mod tests {
         }
     }
 
+    /// README 演示动图用：按 30 fps 导出各状态的逐帧动画（scripts/readme-demo.ps1 调用）
+    /// 输出 {VT_IMG_DIR}/frames/{recording,revising,transcribing,polishing}-NNNN.png
+    #[test]
+    #[ignore]
+    fn export_capsule_frames() {
+        const FPS: f32 = 30.0;
+        let dir = std::path::PathBuf::from(std::env::var("VT_IMG_DIR").unwrap_or_else(|_| "target/readme".into())).join("frames");
+        std::fs::create_dir_all(&dir).unwrap();
+        // 模拟说话的音量：音节起伏 + 句间停顿 + 确定性的抖动
+        let level = |t: f32| {
+            let syllable = 0.5 + 0.5 * (t * 2.0 * std::f32::consts::PI * 4.2).sin();
+            let phrase = ((t * 0.9).sin() * 0.5 + 0.5).powf(0.6);
+            let jitter = ((t * 1000.0).sin() * 43758.547).fract().abs();
+            (0.15 + 0.85 * syllable * phrase * (0.6 + 0.4 * jitter)).min(1.0)
+        };
+        for (name, mode, secs) in [
+            ("recording", Mode::Recording, 8.0),
+            ("revising", Mode::Revising, 6.0),
+            ("transcribing", Mode::Processing, 2.0),
+            ("polishing", Mode::Polishing, 3.0),
+        ] {
+            let now = Instant::now();
+            for i in 0..(secs * FPS) as usize {
+                let t = i as f32 / FPS;
+                let mut v = View {
+                    visible: true,
+                    alpha: 1.0,
+                    shown_mode: mode,
+                    pos: POINT::default(),
+                    scale: 2.0,
+                    monitor: 0,
+                    last_follow: now,
+                    bars: [0.0; N_BARS],
+                    last_shift: now,
+                    start: now - Duration::from_secs_f32(t),
+                    surface: None,
+                };
+                if matches!(mode, Mode::Recording | Mode::Revising) {
+                    // 与 update_bars 相同：每 60 ms 推入一格音量，从右往左滚动
+                    let shifts = (t * 1000.0 / 60.0) as i32;
+                    for (k, b) in v.bars.iter_mut().enumerate() {
+                        let n = shifts - (N_BARS - 1 - k) as i32;
+                        *b = if n > 0 { level(n as f32 * 0.06) } else { 0.0 };
+                    }
+                } else {
+                    update_bars(&mut v);
+                }
+                draw(&v).unwrap().save_png(dir.join(format!("{name}-{i:04}.png"))).unwrap();
+            }
+            println!("wrote {name} ({} frames)", (secs * FPS) as usize);
+        }
+    }
+
     /// 手动运行：cargo test --lib overlay -- --ignored --nocapture
     /// 用一个测试窗口充当「焦点所在窗口」，依次挪到每块屏幕，检查悬浮条跟着换屏
     #[test]

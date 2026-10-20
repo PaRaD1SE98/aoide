@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/zh/recording.png" width="760" alt="在聊天软件里录音：屏幕底部的悬浮条显示实时波形">
+  <img src="docs/images/zh/demo.webp" width="760" alt="演示：在聊天软件里语音输入，LLM 整理口语；再选中一段回复，用语音改写">
 </p>
 
 <p align="center"><sub><i>Aoide</i>（阿俄伊得）得名于希腊神话中掌管歌声与嗓音的缪斯</sub></p>
@@ -135,7 +135,7 @@ pnpm tauri build                     # 构建安装包 → src-tauri\target\rele
 
 构建 sherpa-onnx 和首次构建应用（编译 whisper.cpp 及其 Vulkan 着色器）都比较耗时。依赖变化后请重新运行 `third-party-licenses.ps1`。
 
-README 中的截图由 `.\scripts\readme-images.ps1` 在内存中渲染生成（程序自身的绘制代码 + 无头浏览器渲染真实界面页面），界面改动后重新运行即可更新。
+README 中的截图由 `.\scripts\readme-images.ps1` 在内存中渲染生成（程序自身的绘制代码 + 无头浏览器渲染真实界面页面），演示动图由 `.\scripts\readme-demo.ps1` 生成（另需 [FFmpeg](https://ffmpeg.org/)），界面改动后重新运行即可更新。
 
 ## 致谢
 
