@@ -108,6 +108,30 @@ pub fn data_dir() -> PathBuf {
     env_dir("APPDATA").join("Aoide")
 }
 
+/// 日志：%APPDATA%\Aoide\logs
+pub fn log_dir() -> PathBuf {
+    data_dir().join("logs")
+}
+
+/// 启动时准备日志目录：把旧版本放在数据目录根下的日志搬进来，并把进程的工作目录设到这里。
+/// 有些第三方组件会往「当前目录」写文件（比如注入到所有 Vulkan 程序里的游戏叠加层），
+/// 工作目录默认是启动位置（安装目录、桌面……），设到日志目录后这些文件也只会落在这里
+pub fn prepare_log_dir() {
+    let dir = log_dir();
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
+    if let Ok(entries) = std::fs::read_dir(data_dir()) {
+        for e in entries.flatten() {
+            let path = e.path();
+            if path.is_file() && path.extension().is_some_and(|x| x == "log") {
+                let _ = std::fs::rename(&path, dir.join(e.file_name()));
+            }
+        }
+    }
+    let _ = std::env::set_current_dir(&dir);
+}
+
 /// 默认模型目录：%LOCALAPPDATA%\Aoide\models（模型体积大，不放漫游目录）
 pub fn default_model_dir() -> PathBuf {
     env_dir("LOCALAPPDATA").join("Aoide").join("models")

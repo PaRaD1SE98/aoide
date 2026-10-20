@@ -113,7 +113,7 @@ Settings are stored in `%APPDATA%\Aoide\config.json` and are normally edited thr
 | `auto_check_updates` | `true` | Check for a new version once a day and notify you; updating is always your choice |
 | `polish_prompt` / `revise_prompt` / `insert_prompt` | *(empty)* | Custom LLM prompts for polishing (`{text}`), voice edit (`{original}`, `{instruction}`) and context-aware insertion (`{before}`, `{after}`, `{text}`). Empty = built-in prompt. Edit them in Settings |
 
-The vocabulary is stored in `%APPDATA%\Aoide\vocabulary.json`. The log file is `%APPDATA%\Aoide\app.log` (rotated at 1 MB). It contains your transcripts and stays on your machine.
+The vocabulary is stored in `%APPDATA%\Aoide\vocabulary.json`. The log file is `%APPDATA%\Aoide\logs\app.log` (rotated at 1 MB). It contains your transcripts and stays on your machine.
 
 ## Building from source
 

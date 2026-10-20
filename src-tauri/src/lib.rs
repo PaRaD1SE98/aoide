@@ -361,9 +361,26 @@ fn open_folder(path: String) {
     let _ = std::process::Command::new("explorer").arg(path).spawn();
 }
 
+/// 不加载这些 Vulkan 隐式层：它们会注入所有使用 Vulkan 的程序。Aoide 只用 Vulkan 做计算（whisper.cpp），
+/// 游戏叠加层对它毫无用处，而腾讯 WeGame 的叠加层每次加载都会在当前目录写一个加密的 .log 文件。
+/// 不整体禁用隐式层：双显卡笔记本上用于选择显卡的驱动层也是隐式层
+const DISABLED_VULKAN_LAYERS: &str = "VK_LAYER_TENCENT_wegame_cross_overlay";
+
+/// 必须在创建任何线程、初始化 Vulkan 之前调用（Vulkan 加载器在创建实例时读取这个环境变量）
+fn disable_vulkan_layers() {
+    let value = match std::env::var("VK_LOADER_LAYERS_DISABLE") {
+        Ok(v) if !v.trim().is_empty() => format!("{v},{DISABLED_VULKAN_LAYERS}"),
+        _ => DISABLED_VULKAN_LAYERS.to_string(),
+    };
+    std::env::set_var("VK_LOADER_LAYERS_DISABLE", value);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
+
+    disable_vulkan_layers();
+    config::prepare_log_dir();
 
     let app = tauri::Builder::default()
         // 必须最先注册：重复启动时激活已运行实例的设置窗口
@@ -394,7 +411,7 @@ pub fn run() {
             tauri_plugin_log::Builder::new()
                 .clear_targets()
                 .target(Target::new(TargetKind::Folder {
-                    path: config::data_dir(),
+                    path: config::log_dir(),
                     file_name: Some("app".into()),
                 }))
                 .target(Target::new(TargetKind::Stdout))

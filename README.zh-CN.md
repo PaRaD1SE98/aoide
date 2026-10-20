@@ -113,7 +113,7 @@ Aoide 是一款 Windows 平台的语音输入应用，是 Typeless、Wispr Flow 
 | `auto_check_updates` | `true` | 每天检查一次新版本并通知你；是否更新始终由你决定 |
 | `polish_prompt` / `revise_prompt` / `insert_prompt` | *（空）* | 自定义润色提示词（含 `{text}`）、修订提示词（含 `{original}`、`{instruction}`）和插入提示词（含 `{before}`、`{after}`、`{text}`），留空使用内置提示词，可在设置页编辑 |
 
-词库保存在 `%APPDATA%\Aoide\vocabulary.json`。日志文件为 `%APPDATA%\Aoide\app.log`（超过 1 MB 自动轮转）。日志包含你的转录内容，只保存在本机。
+词库保存在 `%APPDATA%\Aoide\vocabulary.json`。日志文件为 `%APPDATA%\Aoide\logs\app.log`（超过 1 MB 自动轮转）。日志包含你的转录内容，只保存在本机。
 
 ## 从源码构建
 
