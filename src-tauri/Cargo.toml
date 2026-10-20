@@ -35,12 +35,18 @@ similar = "3.2.0"
 strsim = "0.11.1"
 tauri-plugin-updater = "2.14.0"
 
-# whisper.cpp 的 GPU 后端：Windows 用 Vulkan，macOS 用 Metal
+# whisper.cpp 的 GPU 后端：Windows 用 Vulkan，Apple 芯片的 Mac 用 Metal；Intel Mac 只用 CPU
+# （Metal 后端主要面向 Apple 芯片，在 Intel Mac 的显卡上不可靠）
 [target.'cfg(windows)'.dependencies]
 whisper-rs = { version = "0.16", features = ["vulkan"] }
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
 whisper-rs = { version = "0.16", features = ["metal"] }
+
+[target.'cfg(all(target_os = "macos", not(target_arch = "aarch64")))'.dependencies]
+whisper-rs = "0.16"
+
+[target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 dispatch2 = "0.3"
 

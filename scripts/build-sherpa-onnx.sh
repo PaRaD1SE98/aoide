@@ -30,10 +30,11 @@ if [ ! -f "$src/CMakeLists.txt" ]; then
     git clone --quiet --depth 1 --branch "v$version" https://github.com/k2-fsa/sherpa-onnx.git "$src"
 fi
 
-# 只构建 Apple 芯片版本；最低系统版本与 tauri.macos.conf.json 一致
+# 构建本机架构的版本（Apple 芯片 arm64 / Intel x86_64）；最低系统版本与 tauri.macos.conf.json 一致
+arch="$(uname -m)"
 cmake -S "$src" -B "$build" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_OSX_ARCHITECTURES=arm64 \
+    -DCMAKE_OSX_ARCHITECTURES="$arch" \
     -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
     -DCMAKE_INSTALL_PREFIX="$install" \
     -DBUILD_SHARED_LIBS=OFF \
@@ -73,7 +74,7 @@ for name in "${required[@]}"; do
         exit 1
     fi
     echo "/* placeholder: TTS is disabled in Aoide's sherpa-onnx build */" > "$stub/empty.c"
-    cc -arch arm64 -mmacosx-version-min=11.0 -c "$stub/empty.c" -o "$stub/empty.o"
+    cc -arch "$arch" -mmacosx-version-min=11.0 -c "$stub/empty.c" -o "$stub/empty.o"
     ar rcs "$out/lib$name.a" "$stub/empty.o"
 done
 

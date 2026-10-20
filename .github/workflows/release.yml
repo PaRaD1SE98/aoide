@@ -35,6 +35,11 @@ jobs:
             sherpa-key: sherpa-onnx-macos
             sherpa-script: scripts/build-sherpa-onnx.sh
             sherpa-build: bash ./scripts/build-sherpa-onnx.sh
+          # Intel（x86_64）
+          - os: macos-15-intel
+            sherpa-key: sherpa-onnx-macos-x64
+            sherpa-script: scripts/build-sherpa-onnx.sh
+            sherpa-build: bash ./scripts/build-sherpa-onnx.sh
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -150,7 +155,7 @@ jobs:
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
-          name: aoide-${{ runner.os }}-debug
+          name: aoide-${{ runner.os }}-${{ runner.arch }}-debug
           path: |
             src-tauri/target/debug/bundle/nsis/*.exe
             src-tauri/target/debug/bundle/dmg/*.dmg

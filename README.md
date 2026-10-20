@@ -54,7 +54,7 @@ No account, no cloud service, no audio leaves your computer unless you point the
 - **Learns your words**: names, product names and jargon that keep coming out wrong only need to be fixed once. Correct the word in the text box after it is typed, and Aoide compares your edit with what it typed, checks that the two sound alike (so rewording is not mistaken for a recognition error), adds the pair to your vocabulary and shows a small notice with **Undo**. Next time, a misrecognition you have corrected repeatedly is replaced directly; others are passed to the LLM together with the related vocabulary entries, so it can fix them in context. You can also add words by hand under **Settings → Vocabulary**.
 - **LLM polishing**: removes filler words ("um", "uh", 嗯, 那个…), joins broken sentences, and turns lists of points into a numbered list — without adding content you didn't say.
 - **Automatic updates**: Aoide checks for a new version once a day, lets you know with a notification and a tray menu item, and updates in one click: the signed installer is downloaded, verified and installed, and Aoide restarts on its own. It never updates while you are dictating. You can turn the daily check off and check manually under **Settings → About**.
-- **Two speech engines**: SenseVoice (default) is fast on any CPU, very accurate for Chinese and rarely hallucinates; Whisper models run on the GPU through Vulkan (NVIDIA, AMD or Intel, no CUDA install required) and fall back to CPU automatically. On macOS they run on the GPU through Metal.
+- **Two speech engines**: SenseVoice (default) is fast on any CPU, very accurate for Chinese and rarely hallucinates; Whisper models run on the GPU through Vulkan (NVIDIA, AMD or Intel, no CUDA install required) and fall back to CPU automatically. On Apple silicon Macs they run on the GPU through Metal.
 
 > The interface is available in English and Chinese (Settings → *Display language*; follows the system language by default). Transcription supports Chinese, English, Japanese, Korean, Cantonese and more.
 
@@ -70,12 +70,12 @@ No account, no cloud service, no audio leaves your computer unless you point the
 
 ### macOS (preview)
 
-1. Download `Aoide_x.y.z_aarch64.dmg` from [Releases](https://github.com/PaRaD1SE98/aoide/releases), open it and drag Aoide into *Applications*.
+1. Download `Aoide_x.y.z_aarch64.dmg` (Apple silicon) or `Aoide_x.y.z_x64.dmg` (Intel) from [Releases](https://github.com/PaRaD1SE98/aoide/releases), open it and drag Aoide into *Applications*.
 2. Aoide is not notarized by Apple, so macOS blocks the first launch. Open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
 3. Allow Aoide under **System Settings → Privacy & Security → Accessibility** (needed to listen for the hotkey and to paste text) and allow microphone access when asked. The hotkey starts working as soon as Accessibility is allowed, no restart needed.
 4. Download a model in the Settings window, then tap `Right Option` anywhere and start talking.
 
-**Requirements:** macOS 11 or later on Apple silicon (M1 or newer).
+**Requirements:** macOS 11 or later, on Apple silicon or Intel. Whisper models use the GPU (Metal) only on Apple silicon; on Intel Macs they run on the CPU, so SenseVoice is the better choice there.
 
 Aoide is signed ad hoc rather than with an Apple Developer ID, so macOS may stop honoring the Accessibility permission after an update. If the hotkey stops working after updating, remove Aoide from the Accessibility list with "−" and add it again. *Mute other apps while recording* mutes the output device on macOS, which has no per-app volume control.
 
@@ -116,7 +116,7 @@ Settings are stored in `%APPDATA%\Aoide\config.json` (macOS: `~/Library/Applicat
 | `max_duration` | `60` | Maximum recording length in seconds; recording stops automatically |
 | `min_duration` | `3` | Recordings shorter than this are padded with silence to this length; `0` disables |
 | `mute_while_recording` | `true` | Mute other apps that are playing audio while recording, and restore them afterwards. Aoide's own cues are not affected. On macOS the output device is muted |
-| `device` | `gpu` | `gpu` (Vulkan; Metal on macOS) / `cpu`. Whisper only; SenseVoice always runs on the CPU |
+| `device` | `gpu` | `gpu` (Vulkan; Metal on Apple silicon Macs, CPU on Intel Macs) / `cpu`. Whisper only; SenseVoice always runs on the CPU |
 | `polish` | `true` | Enable LLM polishing (skipped while `polish_api` is empty) |
 | `polish_api` | *(empty)* | OpenAI-compatible API base URL, e.g. `https://api.openai.com/v1` |
 | `polish_api_key` | *(empty)* | API key; leave empty if not required |

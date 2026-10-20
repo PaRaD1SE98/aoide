@@ -54,7 +54,7 @@ Aoide 是一款 Windows 和 macOS（预览版）平台的语音输入应用，�
 - **记住你的词**：人名、产品名、行业术语总被识别错，只需改正一次。识别结果输入后，直接在输入框里把错的词改对，Aoide 会比对你的修改和它输入的内容，确认两者读音相近（不会把你换了说法误当成识别错误），把这组纠正加入词库，并弹出带 **撤销** 按钮的提示。之后再遇到：反复纠正过的误识别直接替换，其余的连同相关词条交给 LLM 结合上下文改正。也可以在 **设置 → 词库** 里手动添加。
 - **LLM 润色**：去掉语气词（嗯、啊、那个……），把断句连成完整句子，多个并列要点自动排成编号列表 —— 不会添加你没说的内容。
 - **自动更新**：每天检查一次新版本，通过系统通知和托盘菜单提醒你，一键即可更新：自动下载带签名的安装包、校验后安装，装完自动重启。正在语音输入时不会更新。可以在 **设置 → 关于** 里手动检查，也可以关掉每日检查。
-- **两种识别引擎**：SenseVoice（默认）在任何 CPU 上都很快，中文识别准确，几乎不会产生幻觉；Whisper 模型通过 Vulkan 在 GPU 上运行（支持 NVIDIA、AMD、Intel 显卡，无需安装 CUDA），没有可用 GPU 时自动退回 CPU。macOS 上通过 Metal 在 GPU 上运行。
+- **两种识别引擎**：SenseVoice（默认）在任何 CPU 上都很快，中文识别准确，几乎不会产生幻觉；Whisper 模型通过 Vulkan 在 GPU 上运行（支持 NVIDIA、AMD、Intel 显卡，无需安装 CUDA），没有可用 GPU 时自动退回 CPU。Apple 芯片的 Mac 上通过 Metal 在 GPU 上运行。
 
 > 界面支持中文和英文（设置 → *显示语言*，默认跟随系统语言）。转录支持中文、英文、日语、韩语、粤语等多种语言。
 
@@ -70,12 +70,12 @@ Aoide 是一款 Windows 和 macOS（预览版）平台的语音输入应用，�
 
 ### macOS（预览版）
 
-1. 从 [Releases](https://github.com/PaRaD1SE98/aoide/releases) 下载 `Aoide_x.y.z_aarch64.dmg`，打开后把 Aoide 拖进「应用程序」。
+1. 从 [Releases](https://github.com/PaRaD1SE98/aoide/releases) 下载 `Aoide_x.y.z_aarch64.dmg`（Apple 芯片）或 `Aoide_x.y.z_x64.dmg`（Intel 芯片），打开后把 Aoide 拖进「应用程序」。
 2. Aoide 没有经过 Apple 公证，首次打开会被系统拦下。打开 **系统设置 → 隐私与安全性**，滚动到下方点击 **仍要打开**。
 3. 在 **系统设置 → 隐私与安全性 → 辅助功能** 中允许 Aoide（用于监听快捷键和粘贴文字），并在提示时允许使用麦克风。辅助功能一打开快捷键就生效，不用重启。
 4. 在设置窗口下载模型，然后在任意位置单击 `右Option` 开始说话。
 
-**环境要求：** macOS 11 或更新版本，Apple 芯片（M1 及更新）。
+**环境要求：** macOS 11 或更新版本，Apple 芯片或 Intel 芯片均可。Whisper 模型只在 Apple 芯片上用 GPU（Metal）加速，Intel Mac 上只用 CPU，建议使用 SenseVoice。
 
 Aoide 使用临时签名而不是 Apple 开发者证书签名，更新后 macOS 可能不再认可之前授予的辅助功能权限。如果更新后快捷键没反应，在辅助功能列表里用「−」删除 Aoide 再重新添加即可。macOS 没有按程序调节音量的接口，「录音时静音其他程序」在 macOS 上会静音整个输出设备。
 
@@ -116,7 +116,7 @@ macOS 上 Aoide 在菜单栏中运行：单击图标打开窗口，右键图标�
 | `max_duration` | `60` | 单次录音最长秒数，超时自动停止 |
 | `min_duration` | `3` | 短于此秒数的录音用静音补齐到该长度再识别；设 `0` 关闭 |
 | `mute_while_recording` | `true` | 录音期间静音其他正在播放声音的程序，结束后恢复；Aoide 自己的提示音不受影响。macOS 上静音的是输出设备 |
-| `device` | `gpu` | `gpu`（Vulkan；macOS 上为 Metal）/ `cpu`。仅对 Whisper 生效，SenseVoice 固定使用 CPU |
+| `device` | `gpu` | `gpu`（Vulkan；Apple 芯片的 Mac 上为 Metal，Intel Mac 上为 CPU）/ `cpu`。仅对 Whisper 生效，SenseVoice 固定使用 CPU |
 | `polish` | `true` | 是否启用 LLM 润色（`polish_api` 为空时自动跳过） |
 | `polish_api` | *（空）* | OpenAI 格式 API base，如 `https://api.openai.com/v1` |
 | `polish_api_key` | *（空）* | API Key，不需要时留空 |
