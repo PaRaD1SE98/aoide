@@ -22,20 +22,35 @@
     .step.on b { color: #2b6fd6; }
 
     /* 右侧：按键提示 */
-    .keys { position: absolute; right: 20px; top: 150px; width: 124px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .keys { position: absolute; right: 6px; top: 150px; width: 148px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
     .kbd-row { display: flex; gap: 6px; align-items: center; }
-    .kbd { min-width: 44px; padding: 8px 10px; border-radius: 8px; background: #fff; border: 1px solid #c9cfdb; border-bottom-width: 4px; font-weight: 600; font-size: 13px; text-align: center; color: #1b1b1b; box-shadow: 0 4px 12px rgba(30,40,90,.12); }
+    .kbd { min-width: 40px; padding: 7px 8px; white-space: nowrap; border-radius: 8px; background: #fff; border: 1px solid #c9cfdb; border-bottom-width: 4px; font-weight: 600; font-size: 12px; text-align: center; color: #1b1b1b; box-shadow: 0 4px 12px rgba(30,40,90,.12); }
     .kbd.down { transform: translateY(3px); border-bottom-width: 1px; background: #e8f0ff; border-color: #2b6fd6; }
     .plus { color: #5b6475; font-weight: 600; }
     .keys .hint { font-size: 12px; color: #5b6475; text-align: center; }
 
-    /* 底部：口述内容字幕 */
-    .speech { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); max-width: 640px; padding: 6px 14px; border-radius: 16px; background: rgba(24,24,27,.86); color: #fff; font-size: 13px; white-space: nowrap; display: flex; gap: 8px; align-items: center; }
-    .speech .ico { font: 14px "Segoe Fluent Icons", "Segoe MDL2 Assets"; color: #ff6b6b; }
-    .speech .ico.revise { color: #c4b5fd; }
+    /* 画面 = 960x540 的虚拟屏幕 + 屏幕下方的字幕栏 */
+    html, body { height: 612px; }
+    body { background: #18181b; }
+    .screen {
+      position: relative; width: 960px; height: 540px; overflow: hidden;
+      background:
+        radial-gradient(1200px 600px at 15% 10%, #c9d8ff 0%, transparent 60%),
+        radial-gradient(900px 500px at 90% 90%, #f3d3ff 0%, transparent 55%),
+        linear-gradient(135deg, #dbe6ff, #efe3fb);
+    }
+
+    /* 屏幕外的字幕栏：表示用户对着麦克风说的话。仅用于演示，程序不会在屏幕上显示这些文字 */
+    .speech { position: absolute; left: 0; right: 0; top: 540px; height: 72px; display: flex; align-items: center; justify-content: center; gap: 12px; color: #fff; font-size: 16px; }
+    .speech .label { display: flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: 999px; background: rgba(255,255,255,.08); color: #71717a; font-size: 12px; white-space: nowrap; }
+    .speech .label .ico { font: 13px "Segoe Fluent Icons", "Segoe MDL2 Assets"; }
+    .speech.on .label { background: #e5484d; color: #fff; }
+    .speech.on.revise .label { background: #7c5cd6; }
+    .speech #stext { white-space: nowrap; }
   </style>
 </head>
 <body>
+  <div class="screen">
   <div class="steps">
     <div class="step" id="step1"><b id="s1t"></b><span id="s1d"></span></div>
     <div class="step" id="step2"><b id="s2t"></b><span id="s2d"></span></div>
@@ -46,16 +61,17 @@
     <div class="input" id="input"></div>
   </div>
   <div class="keys" id="keys"><div class="kbd-row" id="kbd"></div><div class="hint" id="khint"></div></div>
-  <div class="speech" id="speech"><span class="ico" id="sico">&#xE720;</span><span id="stext"></span></div>
   <img class="capsule" id="capsule" alt="">
   <div class="taskbar"><span>&#xE8FC;</span><span class="on">&#xE8BD;</span><span>&#xE8B7;</span><span>&#xE774;</span></div>
+  </div>
+  <div class="speech" id="speech"><span class="label"><span class="ico">&#xE720;</span><span id="slabel"></span></span><span id="stext"></span></div>
   <script>
     // 由 scripts/readme/record-demo.mjs 逐帧调用 render(t)（t 为毫秒），画面完全由 t 决定
     const zh = new URLSearchParams(location.search).get("lang") === "zh";
     const L = zh ? {
       app: "团队聊天",
       s1t: "① 语音输入", s1d: "LLM 自动润色", s2t: "② 语音修订", s2d: "说出怎么改",
-      tap: "单击", hold: "按住 Right Alt 再按 Space",
+      tap: "单击", hold: "按住 Right Alt 再按 Space", mic: "你对麦克风说",
       q1: "明天的发布会几点开始？",
       said1: "嗯……那个明天的发布会改到下午三点了，然后呃……记得带上演示用的电脑",
       out1: "明天的发布会改到下午 3 点，记得带上演示用的电脑。",
@@ -66,7 +82,7 @@
     } : {
       app: "Team chat",
       s1t: "① Dictate", s1d: "polished by an LLM", s2t: "② Voice edit", s2d: "say how to change it",
-      tap: "Tap", hold: "Hold Right Alt, press Space",
+      tap: "Tap", hold: "Hold Right Alt, press Space", mic: "You say into the mic",
       q1: "What time is the launch meeting tomorrow?",
       said1: "um so the launch meeting moved to like 3pm tomorrow and uh bring the demo laptop",
       out1: "The launch meeting moved to 3 PM tomorrow. Please bring the demo laptop.",
@@ -76,6 +92,7 @@
       out2: "Overall it works well and the accuracy is excellent, though it can be a little slow at times.",
     };
     for (const id of ["app", "s1t", "s1d", "s2t", "s2d"]) document.getElementById(id).textContent = L[id];
+    document.getElementById("slabel").textContent = L.mic;
 
     // === 时间轴（毫秒）===
     const T = {
@@ -144,7 +161,7 @@
       }
       $("input").innerHTML = html;
 
-      // 口述字幕：录音期间逐字出现，文字落地后淡出
+      // 屏幕外字幕：录音期间逐字出现，文字落地后淡出；标签只在说话时亮起
       const speech = $("speech");
       let said = null, start = 0, stop = 0, out = 0;
       if (t >= T.rec1 && t < T.out1 + 400) [said, start, stop, out] = [L.said1, T.rec1, T.stop1, T.out1];
@@ -152,10 +169,12 @@
       if (said) {
         const n = Math.max(1, Math.round(len(said) * ramp(t, start + 200, stop - start - 500)));
         $("stext").textContent = `“${slice(said, n)}”`;
-        $("sico").classList.toggle("revise", said === L.said2);
-        speech.style.opacity = Math.min(ramp(t, start, 150), 1 - ramp(t, out, 400));
+        $("stext").style.opacity = Math.min(ramp(t, start, 150), 1 - ramp(t, out, 400));
+        speech.classList.toggle("on", t < stop);
+        speech.classList.toggle("revise", said === L.said2);
       } else {
-        speech.style.opacity = 0;
+        $("stext").textContent = "";
+        speech.classList.remove("on");
       }
 
       // 按键提示：按下 150 ms，提示保留 1.4 s

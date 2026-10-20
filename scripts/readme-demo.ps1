@@ -43,14 +43,14 @@ try {
 # 2. 场景页面
 Copy-Item (Join-Path $PSScriptRoot "readme\*") $tmp
 
-# 3. 逐帧录制（逻辑尺寸 960x540，2 倍分辨率）并编码
+# 3. 逐帧录制（逻辑尺寸 960x612：540 的屏幕 + 72 的字幕栏，2 倍分辨率）并编码
 $durationMs = 19500
 $fps = 30
 foreach ($lang in "en", "zh") {
     $frames = "$tmp\frames-$lang"
     $url = "file:///" + ("$tmp\scene-demo.html" -replace '\\', '/') + "?lang=$lang&record=1"
     Write-Host "Recording $lang..."
-    node "$tmp\record-demo.mjs" $browser $url $frames $durationMs $fps 960 540 2
+    node "$tmp\record-demo.mjs" $browser $url $frames $durationMs $fps 960 612 2
     if ($LASTEXITCODE -ne 0) { throw "recording failed" }
 
     New-Item -ItemType Directory -Force "$out\$lang" | Out-Null
@@ -61,11 +61,12 @@ foreach ($lang in "en", "zh") {
     Write-Host "  $webp ($([math]::Round((Get-Item $webp).Length / 1MB, 2)) MB)"
 
     if ($Mp4) {
-        $mp4 = "$tmp\aoide-demo-$lang.mp4"
+        # 注意 PowerShell 变量名不区分大小写，不能叫 $mp4（会和开关参数 -Mp4 冲突）
+        $video = "$tmp\aoide-demo-$lang.mp4"
         ffmpeg -v error -y -framerate $fps -i "$frames\frame-%05d.png" `
-            -c:v libx264 -pix_fmt yuv420p -crf 18 -preset slow -movflags +faststart $mp4
+            -c:v libx264 -pix_fmt yuv420p -crf 18 -preset slow -movflags +faststart $video
         if ($LASTEXITCODE -ne 0) { throw "mp4 encoding failed" }
-        Write-Host "  $mp4"
+        Write-Host "  $video"
     }
 }
 Write-Host "Done."
