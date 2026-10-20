@@ -87,6 +87,9 @@ jobs:
         shell: pwsh
         run: ./scripts/third-party-licenses.ps1
 
+      # 注意：v0.3.1 发版时，GITHUB_TOKEN 创建 Release 被拒（Resource not accessible by integration），
+      # 但往已有的草稿里上传文件正常。遇到这种情况，先用账号建好草稿再重跑：
+      #   gh release create vX.Y.Z --draft --verify-tag --title "Aoide vX.Y.Z" --notes ""
       # 发布版额外生成自动更新用的签名包和 latest.json（tauri.release.conf.json），
       # 应用从 releases/latest/download/latest.json 检查更新；草稿发布前不会被已安装的用户看到
       - uses: tauri-apps/tauri-action@v0
