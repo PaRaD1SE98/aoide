@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aoide</title>
+  <link rel="stylesheet" href="result.css">
+  <style>
+    #items { flex: 1; padding: 2px 14px 4px; overflow-y: auto; }
+    .item { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; }
+    .item .from { color: var(--muted); text-decoration: line-through; }
+    .item .arrow { color: var(--muted); font: 10px "Segoe Fluent Icons", "Segoe MDL2 Assets"; }
+    .item .to { font-weight: 600; }
+    .item .note { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+    footer { justify-content: space-between; align-items: center; gap: 12px; }
+    #hint { color: var(--muted); font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <header data-tauri-drag-region>
+      <img src="icon.png" alt="" data-tauri-drag-region>
+      <span id="title" data-tauri-drag-region data-i18n="learned.title">已加入词库</span>
+      <button id="close" class="icon-btn" title="关闭" aria-label="关闭" data-i18n-title="result.close" data-i18n-aria="result.close">&#xE711;</button>
+    </header>
+    <div id="items"></div>
+    <footer>
+      <span id="hint" data-i18n="learned.hint">下次识别时自动纠正</span>
+      <button id="undo" class="btn" data-i18n="learned.undo">撤销</button>
+    </footer>
+  </div>
+  <script src="i18n.js"></script>
+  <script src="learned.js"></script>
+</body>
+</html>

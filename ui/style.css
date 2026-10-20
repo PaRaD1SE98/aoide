@@ -100,7 +100,7 @@ html, body { height: 100%; overflow: hidden; }
 .content { flex: 1; min-width: 0; overflow-y: auto; padding: 24px 32px 32px 12px; }
 .pane { max-width: 900px; }
 .pane-title { margin: 6px 0 20px; font-size: 28px; font-weight: 600; }
-.pane-desc { margin: -12px 0 16px; font-size: 13px; }
+.pane .pane-desc { margin: -12px 0 16px; font-size: 13px; }
 
 .about { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
 .about img { width: 64px; height: 64px; }
@@ -299,6 +299,23 @@ kbd {
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 #toast.error { color: var(--danger); }
+
+/* 词库 */
+.vocab-add { gap: 8px; }
+.vocab-add input { flex: 1; min-width: 0; }
+.vocab-add #vocab-term { flex: 0.7; }
+.vocab-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.vocab-head h2 { margin-bottom: 8px; }
+.vocab-head input { width: 200px; margin-bottom: 6px; }
+.vocab-entry.off .title, .vocab-entry.off .chips { opacity: 0.5; }
+.vocab-entry .title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.badge { font-size: 11px; font-weight: 400; padding: 0 6px; border-radius: 4px; background: var(--control-hover); color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.chip { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; padding: 1px 2px 1px 8px; border-radius: 10px; background: var(--control); border: 1px solid var(--control-stroke); color: var(--muted); }
+.chip .times { color: var(--accent); }
+.chip button { border: 0; background: transparent; color: var(--muted); font: 8px "Segoe Fluent Icons", "Segoe MDL2 Assets"; width: 16px; height: 16px; border-radius: 8px; cursor: pointer; }
+.chip button:hover { background: var(--control-hover); color: var(--text); }
+.vocab-empty { font-size: 13px; }
 
 [hidden] { display: none !important; }
 

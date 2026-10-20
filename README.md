@@ -48,6 +48,7 @@ No account, no cloud service, no audio leaves your computer unless you point the
   ![Result card shown when there is no input box to type into](docs/images/en/result.png)
 
 - **Context-aware insertion**: when the cursor sits inside existing text, the LLM sees the text before and after the cursor and writes only the piece that belongs at the cursor, matching the surrounding language and punctuation. The existing text is never changed — the result is pasted at the cursor. Short dictation is inserted as transcribed for speed; the LLM step kicks in for longer input (configurable). Requires an LLM API; password fields are never read.
+- **Learns your words**: names, product names and jargon that keep coming out wrong only need to be fixed once. Correct the word in the text box after it is typed, and Aoide compares your edit with what it typed, checks that the two sound alike (so rewording is not mistaken for a recognition error), adds the pair to your vocabulary and shows a small notice with **Undo**. Next time, a misrecognition you have corrected repeatedly is replaced directly; others are passed to the LLM together with the related vocabulary entries, so it can fix them in context. You can also add words by hand under **Settings → Vocabulary**.
 - **LLM polishing**: removes filler words ("um", "uh", 嗯, 那个…), joins broken sentences, and turns lists of points into a numbered list — without adding content you didn't say.
 - **Two speech engines**: SenseVoice (default) is fast on any CPU, very accurate for Chinese and rarely hallucinates; Whisper models run on the GPU through Vulkan (NVIDIA, AMD or Intel, no CUDA install required) and fall back to CPU automatically.
 
@@ -106,9 +107,11 @@ Settings are stored in `%APPDATA%\Aoide\config.json` and are normally edited thr
 | `polish_min_chars` | `12` | Transcripts shorter than this (ignoring spaces) are output as-is without polishing. Doesn't apply to voice edits |
 | `insert_smart` | `true` | Context-aware insertion when there is text around the cursor |
 | `insert_min_seconds` / `insert_min_chars` | `10` / `12` | Shorter recordings / transcripts are inserted as-is without calling the LLM |
+| `vocab_enabled` | `true` | Correct transcripts with your vocabulary: repeated misrecognitions are replaced directly, others go to the LLM with the related entries |
+| `learn_from_edits` | `true` | When you correct a word after it is typed, add the correction to the vocabulary (with an Undo notice) |
 | `polish_prompt` / `revise_prompt` / `insert_prompt` | *(empty)* | Custom LLM prompts for polishing (`{text}`), voice edit (`{original}`, `{instruction}`) and context-aware insertion (`{before}`, `{after}`, `{text}`). Empty = built-in prompt. Edit them in Settings |
 
-The log file is `%APPDATA%\Aoide\app.log` (rotated at 1 MB). It contains your transcripts and stays on your machine.
+The vocabulary is stored in `%APPDATA%\Aoide\vocabulary.json`. The log file is `%APPDATA%\Aoide\app.log` (rotated at 1 MB). It contains your transcripts and stays on your machine.
 
 ## Building from source
 

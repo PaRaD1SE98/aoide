@@ -1,10 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions for the main window and the result card",
+  "description": "Permissions for the main window, the result card and the learned-word card",
   "windows": [
     "settings",
-    "result"
+    "result",
+    "learned"
   ],
   "permissions": [
     "core:default",

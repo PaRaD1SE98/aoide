@@ -265,6 +265,107 @@ fn edit_context(elem: &IUIAutomationElement) -> Option<CaretContext> {
     }
 }
 
+/// 读取全文的上限（再长的文档就不跟踪了）
+const MAX_TEXT: i32 = 20_000;
+
+/// 跟踪某个输入框的全文（学习用户对识别结果的修改，见 learn.rs）。
+/// UIA 对象只能在创建它的线程里用，所以由跟踪线程自己创建并持有
+pub struct TextWatch {
+    _com: ComGuard,
+    uia: IUIAutomation,
+    elem: IUIAutomationElement,
+}
+
+impl TextWatch {
+    /// 跟踪当前焦点控件；密码框、读不到文字的控件返回 None
+    pub fn focused() -> Option<Self> {
+        let com = ComGuard::new();
+        let uia = uia().ok()?;
+        let elem = unsafe { uia.GetFocusedElement() }.ok()?;
+        if prop_bool(&elem, UIA_IsPasswordPropertyId) {
+            return None;
+        }
+        let watch = Self { _com: com, uia, elem };
+        watch.text().map(|_| watch)
+    }
+
+    /// 测试用：跟踪指定窗口（不需要它有焦点）
+    #[cfg(test)]
+    fn of_window(hwnd: windows::Win32::Foundation::HWND) -> Option<Self> {
+        let com = ComGuard::new();
+        let uia = uia().ok()?;
+        let elem = unsafe { uia.ElementFromHandle(hwnd) }.ok()?;
+        if prop_bool(&elem, UIA_IsPasswordPropertyId) {
+            return None;
+        }
+        Some(Self { _com: com, uia, elem })
+    }
+
+    /// 控件当前的全文（换行统一为 \n）
+    pub fn text(&self) -> Option<String> {
+        let normalize = |s: String| s.replace("\r\n", "\n").replace('\r', "\n").replace('\u{a0}', " ");
+        unsafe {
+            if let Ok(p) = self.elem.GetCurrentPattern(UIA_TextPatternId) {
+                if let Ok(tp) = p.cast::<IUIAutomationTextPattern>() {
+                    if let Ok(t) = tp.DocumentRange().and_then(|r| r.GetText(MAX_TEXT)) {
+                        return Some(normalize(t.to_string()));
+                    }
+                }
+            }
+            if let Ok(p) = self.elem.GetCurrentPattern(UIA_ValuePatternId) {
+                if let Ok(vp) = p.cast::<IUIAutomationValuePattern>() {
+                    if let Ok(v) = vp.CurrentValue() {
+                        return Some(normalize(v.to_string()));
+                    }
+                }
+            }
+        }
+        // 经典 Win32 Edit 不提供这两个模式，改用窗口消息读取
+        edit_text(&self.elem).map(normalize)
+    }
+
+    /// 焦点是否还在这个控件上
+    pub fn still_focused(&self) -> bool {
+        unsafe {
+            self.uia
+                .GetFocusedElement()
+                .and_then(|f| self.uia.CompareElements(&f, &self.elem))
+                .is_ok_and(|same| same.as_bool())
+        }
+    }
+}
+
+/// 经典 Win32 Edit 的全文
+fn edit_text(elem: &IUIAutomationElement) -> Option<String> {
+    use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetClassNameW, GetWindowLongW, SendMessageTimeoutW, GWL_STYLE, SMTO_ABORTIFHUNG, WM_GETTEXT,
+        WM_GETTEXTLENGTH,
+    };
+    const ES_PASSWORD: i32 = 0x0020;
+    unsafe {
+        let hwnd = HWND(elem.CurrentNativeWindowHandle().ok()?.0);
+        if hwnd.is_invalid() {
+            return None;
+        }
+        let mut class = [0u16; 64];
+        let n = GetClassNameW(hwnd, &mut class) as usize;
+        if !String::from_utf16_lossy(&class[..n]).to_ascii_uppercase().contains("EDIT") || GetWindowLongW(hwnd, GWL_STYLE) & ES_PASSWORD != 0 {
+            return None;
+        }
+        let send = |msg: u32, w: usize, l: isize| -> Option<usize> {
+            let mut result = 0usize;
+            let ok = SendMessageTimeoutW(hwnd, msg, WPARAM(w), LPARAM(l), SMTO_ABORTIFHUNG, 200, Some(&mut result));
+            (ok.0 != 0).then_some(result)
+        };
+        let len = send(WM_GETTEXTLENGTH, 0, 0)?.min(MAX_TEXT as usize);
+        let mut buf = vec![0u16; len + 1];
+        let copied = send(WM_GETTEXT, buf.len(), buf.as_mut_ptr() as isize)?;
+        buf.truncate(copied);
+        Some(String::from_utf16_lossy(&buf))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -327,6 +428,23 @@ mod tests {
 
     fn ctx(before: &str, after: &str) -> Option<CaretContext> {
         Some(CaretContext { before: before.into(), after: after.into() })
+    }
+
+    /// 学习用户修改时读取输入框全文：经典 Edit 和 RichEdit，改动后能读到新内容；密码框不读
+    #[test]
+    fn watches_full_text() {
+        for class in ["EDIT", "RICHEDIT50W"] {
+            let h = spawn_control(class, "前文。我用思维到图整理需求", (0, 0), ES_MULTILINE);
+            let w = TextWatch::of_window(h).unwrap();
+            assert_eq!(w.text().as_deref(), Some("前文。我用思维到图整理需求"), "{class}");
+            unsafe { SetWindowTextW(h, &HSTRING::from("前文。我用思维导图整理需求\r\n第二行")).unwrap() };
+            assert_eq!(w.text().as_deref(), Some("前文。我用思维导图整理需求\n第二行"), "{class}");
+            drop(w);
+            let _ = read(h); // 关闭窗口
+        }
+        let h = spawn_control("EDIT", "secret", (0, 0), ES_PASSWORD);
+        assert!(TextWatch::of_window(h).is_none_or(|w| w.text().is_none()));
+        let _ = read(h);
     }
 
     /// 用真实的 Windows 输入控件验证光标前后文字的读取

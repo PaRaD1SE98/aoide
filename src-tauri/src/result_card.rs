@@ -8,7 +8,7 @@ use crate::overlay;
 use serde::Serialize;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
-use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_SHOWNOACTIVATE};
+use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, ShowWindow, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_SHOWNOACTIVATE};
 
 pub const LABEL: &str = "result";
 /// 逻辑尺寸（含阴影留白），按显示器缩放
@@ -66,7 +66,10 @@ pub fn show(app: &AppHandle, title: &str, text: &str) {
     let _ = window.set_size(PhysicalSize::new(w as u32, h as u32));
     if let Ok(hwnd) = window.hwnd() {
         unsafe {
-            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE); // 不抢走当前窗口的焦点
+            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            // tao 的无边框窗口保留着标题栏样式，靠 WM_NCCALCSIZE 把边框算成 0；用原生 ShowWindow 显示时
+            // 边框不会重新计算，系统标题栏会露出来。强制重算一次
+            let _ = SetWindowPos(hwnd, None, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE); // 不抢走当前窗口的焦点
         }
     }
 }

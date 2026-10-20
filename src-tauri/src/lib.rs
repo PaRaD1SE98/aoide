@@ -8,14 +8,18 @@ mod hotkeys;
 mod i18n;
 mod input;
 mod keys;
+mod learn;
+mod learned_card;
 mod llm;
 mod models;
 mod mute;
 mod overlay;
+mod phonetic;
 mod result_card;
 mod sound;
 mod transcriber;
 mod tray;
+mod vocab;
 
 use config::Config;
 use controller::Controller;
@@ -287,6 +291,50 @@ fn open_licenses(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 词库：全部词条
+#[tauri::command]
+fn get_vocab() -> Vec<vocab::Entry> {
+    vocab::all()
+}
+
+/// 词库：手动添加（正确写法已存在时合并误识别写法）
+#[tauri::command]
+fn add_vocab(term: String, variants: Vec<String>) -> Result<(), String> {
+    vocab::add_manual(&term, &variants)
+}
+
+#[tauri::command]
+fn remove_vocab(id: u64) {
+    vocab::remove(id)
+}
+
+#[tauri::command]
+fn remove_vocab_variant(id: u64, text: String) {
+    vocab::remove_variant(id, &text)
+}
+
+#[tauri::command]
+fn set_vocab_enabled(id: u64, enabled: bool) {
+    vocab::set_enabled(id, enabled)
+}
+
+/// 词条入库提示：读取当前列出的词条
+#[tauri::command]
+fn get_learned(app: AppHandle) -> Vec<learned_card::Item> {
+    learned_card::items(&app)
+}
+
+/// 词条入库提示：撤销
+#[tauri::command]
+fn undo_learned(app: AppHandle) {
+    learned_card::undo(&app)
+}
+
+#[tauri::command]
+fn close_learned(app: AppHandle) {
+    learned_card::close(&app)
+}
+
 #[tauri::command]
 fn open_folder(path: String) {
     let path = dir_or_default(&path);
@@ -305,6 +353,20 @@ pub fn run() {
             #[cfg(debug_assertions)]
             if _args.iter().any(|a| a == "--demo-result") {
                 result_card::show(app, i18n::tr("没有检测到输入框，识别结果如下", "No input box detected. Here is the transcript"), "这是一段测试文字：今天下午三点的会议改到明天上午十点，请大家提前准备好季度汇报材料。");
+                return;
+            }
+            // 仅调试版：带 --demo-learned 时模拟学到一个词条，弹出入库提示。
+            // 延迟一下再弹：等这次启动带出来的临时控制台关掉，小窗记下的「之前的前台窗口」才是真实的
+            #[cfg(debug_assertions)]
+            if _args.iter().any(|a| a == "--demo-learned") {
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(1500));
+                    let c = learn::Correction { wrong: "思维到图".into(), right: "思维导图".into(), score: 1.0 };
+                    if let Some(change) = vocab::learn(&c.wrong, &c.right) {
+                        learned_card::show(&app, vec![(c, change)]);
+                    }
+                });
                 return;
             }
             open_settings(app)
@@ -331,6 +393,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Downloads::default())
         .manage(result_card::ResultState::default())
+        .manage(learned_card::LearnedState::default())
         .invoke_handler(tauri::generate_handler![
             get_settings,
             list_models,
@@ -345,6 +408,14 @@ pub fn run() {
             get_ui_language,
             copy_result,
             close_result,
+            get_vocab,
+            add_vocab,
+            remove_vocab,
+            remove_vocab_variant,
+            set_vocab_enabled,
+            get_learned,
+            undo_learned,
+            close_learned,
         ])
         .setup(|app| {
             log::info!("=== Aoide {} Started ===", app.package_info().version);

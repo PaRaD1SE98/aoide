@@ -10,7 +10,7 @@ use crate::overlay::{self, Mode};
 use crate::result_card;
 use crate::mute;
 use crate::i18n::tr;
-use crate::{clipboard, focus, llm, models, trf};
+use crate::{clipboard, focus, learn, llm, models, trf, vocab};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex, RwLock};
 use std::thread;
@@ -79,6 +79,8 @@ impl Controller {
     }
 
     fn begin_task(self: &Arc<Self>) -> Task {
+        // 新的语音输入开始：结束对上一段文字的修改观察
+        learn::stop_watching();
         self.in_flight.fetch_add(1, Ordering::SeqCst);
         hotkeys::set_cancel_armed(true);
         Task { ctl: self.clone(), epoch: self.epoch.load(Ordering::SeqCst) }
@@ -302,14 +304,17 @@ impl Controller {
             }
             Ok(text) => {
                 log::info!("Transcribed: {text}");
+                let (text, glossary) = self.apply_vocab(text, &cfg);
                 let text = match self.caret_context(&cfg) {
-                    Some(ctx) => self.insert_in_context(text, seconds, &ctx, &cfg),
-                    None => self.maybe_polish(text, seconds, &cfg),
+                    Some(ctx) => self.insert_in_context(text, seconds, &ctx, glossary.as_deref(), &cfg),
+                    None => self.maybe_polish(text, seconds, glossary.as_deref(), &cfg),
                 };
                 if task.canceled() {
                     return;
                 }
-                self.output_text(&text);
+                if self.output_text(&text) && cfg.learn_from_edits {
+                    learn::watch(self.app.clone(), text, cfg.clone());
+                }
                 self.flash_done();
             }
             Err(e) => {
@@ -319,6 +324,43 @@ impl Controller {
             }
         }
         self.finish_overlay();
+    }
+
+    /// 词库：高置信度的误识别写法直接替换；其余与识别结果相关的词条整理成给 LLM 的说明
+    fn apply_vocab(&self, text: String, cfg: &Config) -> (String, Option<String>) {
+        if !cfg.vocab_enabled {
+            return (text, None);
+        }
+        let (text, applied) = vocab::apply_confident(&text);
+        for (wrong, right) in &applied {
+            log::info!("Vocabulary: {wrong} -> {right}");
+        }
+        let glossary = vocab::glossary(&vocab::relevant(&text));
+        if glossary.is_some() {
+            log::info!("Vocabulary: related entries found, passing them to the LLM");
+        }
+        (text, glossary)
+    }
+
+    /// 文字较短、不值得整段润色时，若有相关词条，只按词库修正误识别的词
+    fn correct_terms(&self, text: String, glossary: Option<&str>, cfg: &Config) -> String {
+        let Some(glossary) = glossary.filter(|_| !cfg.polish_api.trim().is_empty()) else {
+            return text;
+        };
+        overlay::set(Mode::Polishing);
+        match llm::correct_terms(&text, glossary, cfg) {
+            Ok(t) if !t.is_empty() => {
+                if t != text {
+                    log::info!("Terms corrected: {t}");
+                }
+                t
+            }
+            Ok(_) => text,
+            Err(e) => {
+                log::warn!("Term correction skipped: {e}");
+                text
+            }
+        }
     }
 
     /// 开启「按上下文插入」且已配置 LLM 时读取光标前后的文字；光标前后都没有内容时返回 None（按普通润色处理）
@@ -337,7 +379,7 @@ impl Controller {
 
     /// 光标在已有文字中间：让 LLM 根据前后文生成要插入的文字。
     /// 输出仍是在光标处粘贴，前后原文不会被改动；录音太短、文字太少或调用失败时直接插入转写结果
-    fn insert_in_context(&self, text: String, seconds: f32, ctx: &focus::CaretContext, cfg: &Config) -> String {
+    fn insert_in_context(&self, text: String, seconds: f32, ctx: &focus::CaretContext, glossary: Option<&str>, cfg: &Config) -> String {
         let plain = text.chars().filter(|c| !c.is_whitespace()).count();
         if seconds < cfg.insert_min_seconds as f32 || plain < cfg.insert_min_chars {
             log::info!(
@@ -345,11 +387,12 @@ impl Controller {
                 cfg.insert_min_seconds,
                 cfg.insert_min_chars
             );
-            // 不走 LLM，但西文单词之间的空格仍按前后文补上
+            // 不走 LLM 插入（命中词库时仍按词库修正），西文单词之间的空格按前后文补上
+            let text = self.correct_terms(text, glossary, cfg);
             return llm::fit_spacing(text.trim(), &ctx.before, &ctx.after);
         }
         overlay::set(Mode::Polishing);
-        match llm::insert_text(&text, &ctx.before, &ctx.after, cfg) {
+        match llm::insert_text(&text, &ctx.before, &ctx.after, glossary, cfg) {
             Ok(fragment) => {
                 log::info!("Insert in context: {fragment}");
                 fragment
@@ -361,22 +404,22 @@ impl Controller {
         }
     }
 
-    /// LLM 润色（如果启用且已配置 API）；录音太短或文字太少都不值得润色，直接输出
-    fn maybe_polish(&self, text: String, seconds: f32, cfg: &Config) -> String {
+    /// LLM 润色（如果启用且已配置 API）；录音太短或文字太少都不值得润色，此时只按词库修正（有相关词条时）
+    fn maybe_polish(&self, text: String, seconds: f32, glossary: Option<&str>, cfg: &Config) -> String {
         if !cfg.polish || cfg.polish_api.trim().is_empty() {
-            return text;
+            return self.correct_terms(text, glossary, cfg);
         }
         if seconds < cfg.polish_min_seconds as f32 {
             log::info!("Polish skipped (short recording: {seconds:.1}s < {}s)", cfg.polish_min_seconds);
-            return text;
+            return self.correct_terms(text, glossary, cfg);
         }
         let plain = text.chars().filter(|c| !c.is_whitespace()).count();
         if plain < cfg.polish_min_chars {
             log::info!("Polish skipped (short text: {plain} < {} chars)", cfg.polish_min_chars);
-            return text;
+            return self.correct_terms(text, glossary, cfg);
         }
         overlay::set(Mode::Polishing);
-        match llm::polish_text(&text, cfg) {
+        match llm::polish_text(&text, glossary, cfg) {
             Ok(p) if !p.is_empty() && p != text => {
                 log::info!("Polished: {p}");
                 p
@@ -389,14 +432,15 @@ impl Controller {
         }
     }
 
-    /// 聚焦在输入框时粘贴输出（粘完恢复原剪贴板）；无处可粘贴时弹出结果卡片，由用户决定复制
-    fn output_text(&self, text: &str) {
+    /// 聚焦在输入框时粘贴输出（粘完恢复原剪贴板），返回 true；无处可粘贴时弹出结果卡片，由用户决定复制
+    fn output_text(&self, text: &str) -> bool {
         thread::sleep(Duration::from_millis(200));
         if focus::can_type_here() && clipboard::paste_text(text) {
-            return;
+            return true;
         }
         log::info!("No input focused, showing result card: {text}");
         result_card::show(&self.app, tr("没有检测到输入框，识别结果如下", "No input box detected. Here is the transcript"), text);
+        false
     }
 
     // === 修订模式：选中文本 + 口述修改意见 ===
@@ -466,8 +510,10 @@ impl Controller {
                 return Ok(());
             }
             log::info!("Revision instruction: {instruction}");
+            let (instruction, _) = if cfg.vocab_enabled { vocab::apply_confident(&instruction) } else { (instruction, vec![]) };
+            let glossary = cfg.vocab_enabled.then(|| vocab::glossary(&vocab::relevant(&format!("{selected}\n{instruction}")))).flatten();
             overlay::set(Mode::Polishing);
-            let revised = llm::revise_text(&selected, &instruction, &cfg)?;
+            let revised = llm::revise_text(&selected, &instruction, glossary.as_deref(), &cfg)?;
             if canceled() {
                 return Ok(());
             }
@@ -477,9 +523,12 @@ impl Controller {
             }
             thread::sleep(Duration::from_millis(100));
             if focus::can_type_here() {
-                clipboard::paste_text(&revised); // 粘贴替换选中，之后恢复原剪贴板
+                let pasted = clipboard::paste_text(&revised); // 粘贴替换选中，之后恢复原剪贴板
                 log::info!("Revised: {revised}");
                 self.notify(tr("已修改", "Text updated"));
+                if pasted && cfg.learn_from_edits {
+                    learn::watch(self.app.clone(), revised.clone(), cfg.clone());
+                }
             } else {
                 // 选区不可编辑（如网页正文），把修改结果放进卡片，由用户决定复制到哪
                 log::info!("Revised (result card): {revised}");

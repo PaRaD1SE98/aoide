@@ -48,6 +48,10 @@ pub struct Config {
     pub insert_min_seconds: u32,
     /// 转写结果短于此字符数（去空格）时不走 LLM 插入，直接粘贴
     pub insert_min_chars: usize,
+    /// 用词库纠正识别结果：高置信度的误识别直接替换，其余相关词条交给 LLM
+    pub vocab_enabled: bool,
+    /// 用户手动修改识别结果时，自动把纠正的词存入词库
+    pub learn_from_edits: bool,
     /// 自定义润色提示词，{text} 为转写结果；留空使用内置提示词
     pub polish_prompt: String,
     /// 自定义修订提示词，{original} 为选中原文、{instruction} 为修改意见；留空使用内置提示词
@@ -81,6 +85,8 @@ impl Default for Config {
             insert_smart: true,
             insert_min_seconds: 10,
             insert_min_chars: 12,
+            vocab_enabled: true,
+            learn_from_edits: true,
             polish_prompt: String::new(),
             revise_prompt: String::new(),
             insert_prompt: String::new(),

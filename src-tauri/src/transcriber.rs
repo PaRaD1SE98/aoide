@@ -203,6 +203,11 @@ fn decode(ctx: &WhisperContext, audio: &[f32], cfg: &Config) -> Result<String, S
     // 音频证据不足时解码器会退回语言模型先验硬凑。
     // 每次都是独立的一句话，不需要上文；带上文时幻觉会被带进后续片段并滚雪球
     params.set_no_context(true);
+    // 用户词库里的词放进初始提示，让识别更偏向这些写法
+    let terms = if cfg.vocab_enabled { crate::vocab::prompt_terms() } else { String::new() };
+    if !terms.is_empty() {
+        params.set_initial_prompt(&terms);
+    }
     // 平均对数概率低于此值的片段判为不可信（默认 -1.0，收紧到 -0.7）
     params.set_logprob_thold(-0.7);
     // 抑制非语音 token（音乐符号、[掌声] 之类）

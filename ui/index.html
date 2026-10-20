@@ -19,6 +19,7 @@
       <a class="nav-item" data-section="hotkeys"><span class="ico">&#xE765;</span><span data-i18n="sec.hotkeys">快捷键</span></a>
       <a class="nav-item" data-section="general"><span class="ico">&#xE713;</span><span data-i18n="sec.general">常规</span></a>
       <a class="nav-item" data-section="speech"><span class="ico">&#xE720;</span><span data-i18n="sec.speech">语音识别</span></a>
+      <a class="nav-item" data-section="vocab"><span class="ico">&#xE82D;</span><span data-i18n="sec.vocab">词库</span></a>
       <a class="nav-item" data-section="llm"><span class="ico">&#xE99A;</span><span data-i18n="sec.llm">LLM 润色与修订</span></a>
       <a class="nav-item" data-section="prompts"><span class="ico">&#xE8BD;</span><span data-i18n="sec.prompts">提示词</span></a>
       <a class="nav-item" data-section="about"><span class="ico">&#xE946;</span><span data-i18n="sec.about">关于</span></a>
@@ -206,6 +207,49 @@
           </div>
         </div>
       </div>
+    </section>
+
+    <section class="pane" id="pane-vocab" hidden>
+      <h1 class="pane-title" data-i18n="sec.vocab">词库</h1>
+      <p class="pane-desc muted" data-i18n="vocab.desc">人名、产品名、行业术语总被识别错？在输入框里直接改正，Aoide 会记住；也可以在这里手动添加</p>
+      <div class="group">
+        <div class="card">
+          <span class="ico">&#xE8FB;</span>
+          <div class="text">
+            <div class="title" data-i18n="vocabEnabled.title">用词库纠正识别结果</div>
+            <div class="desc" data-i18n="vocabEnabled.desc">反复出现的误识别直接替换，其余交给 LLM 结合上下文判断</div>
+          </div>
+          <div class="control">
+            <label class="toggle"><input type="checkbox" data-key="vocab_enabled"><span></span></label>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE70F;</span>
+          <div class="text">
+            <div class="title" data-i18n="learn.title">从我的修改中学习</div>
+            <div class="desc" data-i18n="learn.desc">识别结果输入后，你手动改正的词会自动加入词库，并弹出可撤销的提示</div>
+          </div>
+          <div class="control">
+            <label class="toggle"><input type="checkbox" data-key="learn_from_edits"><span></span></label>
+          </div>
+        </div>
+      </div>
+
+      <h2 data-i18n="vocab.add">添加词条</h2>
+      <div class="group">
+        <div class="card vocab-add">
+          <input type="text" id="vocab-term" spellcheck="false" data-i18n-placeholder="vocab.termPh" placeholder="正确写法，如 Aoide">
+          <input type="text" id="vocab-variants" spellcheck="false" data-i18n-placeholder="vocab.variantsPh" placeholder="常被识别成（可选，逗号分隔）">
+          <button class="btn accent" id="vocab-add-btn" data-i18n="btn.add">添加</button>
+        </div>
+      </div>
+
+      <div class="vocab-head">
+        <h2><span data-i18n="vocab.list">词条</span> <span class="muted" id="vocab-count"></span></h2>
+        <input type="text" id="vocab-search" spellcheck="false" data-i18n-placeholder="vocab.search" placeholder="搜索">
+      </div>
+      <div class="group" id="vocab-list"></div>
+      <p class="muted vocab-empty" id="vocab-empty" data-i18n="vocab.empty">还没有词条</p>
     </section>
 
     <section class="pane" id="pane-llm" hidden>

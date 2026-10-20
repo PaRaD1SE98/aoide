@@ -192,6 +192,7 @@ function toast(msg, isError = false) {
 function applyLanguage() {
   applyI18n(resolveLang(state.config.ui_language));
   renderModels();
+  renderVocab();
   updateResetButtons();
 }
 
@@ -213,6 +214,63 @@ function initNav() {
     last = localStorage.getItem("aoide.section") || last;
   } catch {}
   showPane(last);
+}
+
+// === 词库 ===
+let vocab = [];
+
+async function loadVocab() {
+  vocab = await invoke("get_vocab");
+  renderVocab();
+}
+
+function el(tag, props = {}, ...children) {
+  const e = Object.assign(document.createElement(tag), props);
+  e.append(...children);
+  return e;
+}
+
+function renderVocab() {
+  const q = $("vocab-search").value.trim().toLowerCase();
+  const match = (e) => !q || e.term.toLowerCase().includes(q) || e.variants.some((v) => v.text.toLowerCase().includes(q));
+  const list = [...vocab].sort((a, b) => b.id - a.id).filter(match);
+  $("vocab-count").textContent = vocab.length ? t("vocab.count", { n: vocab.length }) : "";
+  $("vocab-empty").hidden = list.length > 0;
+  $("vocab-empty").textContent = vocab.length ? t("vocab.noMatch") : t("vocab.empty");
+  $("vocab-list").replaceChildren(...list.map((e) => {
+    const chips = e.variants.length
+      ? e.variants.map((v) => {
+          const remove = el("button", { innerHTML: "&#xE711;", title: t("vocab.removeVariant") });
+          remove.addEventListener("click", () => invoke("remove_vocab_variant", { id: e.id, text: v.text }).then(loadVocab));
+          const times = v.count >= 2 ? el("span", { className: "times", textContent: " " + t("vocab.times", { n: v.count }) }) : "";
+          return el("span", { className: "chip" }, v.text, times, remove);
+        })
+      : [el("span", { className: "desc", textContent: t("vocab.noVariants") })];
+    const toggle = el("input", { type: "checkbox", checked: e.enabled });
+    toggle.addEventListener("input", () => invoke("set_vocab_enabled", { id: e.id, enabled: toggle.checked }).then(loadVocab));
+    const del = el("button", { className: "btn icon-btn", innerHTML: "&#xE74D;", title: t("vocab.delete") });
+    del.addEventListener("click", () => invoke("remove_vocab", { id: e.id }).then(loadVocab));
+    return el("div", { className: "card vocab-entry" + (e.enabled ? "" : " off") },
+      el("span", { className: "ico", innerHTML: e.manual ? "&#xE70F;" : "&#xE945;" }),
+      el("div", { className: "text" },
+        el("div", { className: "title" }, e.term, el("span", { className: "badge", textContent: t(e.manual ? "vocab.manual" : "vocab.learned") })),
+        el("div", { className: "chips" }, ...chips)),
+      el("div", { className: "control" }, el("label", { className: "toggle", title: t("vocab.enable") }, toggle, el("span")), del));
+  }));
+}
+
+async function addVocab() {
+  const term = $("vocab-term").value.trim();
+  const variants = $("vocab-variants").value.split(/[,，、;；]/).map((s) => s.trim()).filter(Boolean);
+  try {
+    await invoke("add_vocab", { term, variants });
+    $("vocab-term").value = "";
+    $("vocab-variants").value = "";
+    $("vocab-term").focus();
+    await loadVocab();
+  } catch (e) {
+    toast(String(e), true);
+  }
 }
 
 // === 交互 ===
@@ -261,6 +319,13 @@ function bind() {
     });
     el.addEventListener("change", () => save());
   });
+
+  $("vocab-add-btn").addEventListener("click", addVocab);
+  for (const id of ["vocab-term", "vocab-variants"]) {
+    $(id).addEventListener("keydown", (e) => e.key === "Enter" && addVocab());
+  }
+  $("vocab-search").addEventListener("input", renderVocab);
+  listen("vocab-changed", loadVocab);
 
   $("autostart").addEventListener("input", (e) => {
     state.autostart = e.target.checked;
@@ -376,6 +441,7 @@ async function init() {
   applyI18n(resolveLang(state.config.ui_language));
   render();
   bind();
+  await loadVocab();
 }
 
 init().catch((e) => toast(String(e), true));

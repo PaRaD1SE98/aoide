@@ -26,7 +26,7 @@
       device: "gpu", mute_while_recording: true, polish: true, polish_api: "https://api.openai.com/v1",
       polish_api_key: "sk-example", polish_model: "gpt-4o-mini", polish_no_think: true, polish_min_chars: 12,
       polish_min_seconds: 10, polish_prompt: "", revise_prompt: "", insert_prompt: "",
-      insert_smart: true, insert_min_seconds: 10, insert_min_chars: 12,
+      insert_smart: true, insert_min_seconds: 10, insert_min_chars: 12, vocab_enabled: true, learn_from_edits: true,
     },
     models,
     default_model_dir: "C:\\Users\\you\\AppData\\Local\\Aoide\\models",
@@ -39,7 +39,7 @@
       cancel_hotkey: "esc", model: "sense-voice", model_dir: "", language: "zh", max_duration: 60, min_duration: 3,
       device: "gpu", mute_while_recording: true, polish: true, polish_api: "", polish_api_key: "", polish_model: "",
       polish_no_think: true, polish_min_chars: 12, polish_min_seconds: 10, polish_prompt: "", revise_prompt: "", insert_prompt: "",
-      insert_smart: true, insert_min_seconds: 10, insert_min_chars: 12,
+      insert_smart: true, insert_min_seconds: 10, insert_min_chars: 12, vocab_enabled: true, learn_from_edits: true,
     },
     default_polish_prompt: "…",
     default_revise_prompt: "…",
@@ -52,7 +52,15 @@
     : { title: "No input box detected. Here is the transcript",
         text: "Here's the plan for next week's release:\n1. Finish final installer testing on Tuesday\n2. Publish to GitHub Releases on Wednesday\n3. Post the release notes to the community on Thursday" };
 
-  const responses = { get_settings: settings, list_models: models, get_ui_language: lang, get_result: result };
+  const vocab = [
+    { id: 3, term: "Aoide", manual: true, enabled: true, variants: [{ text: lang === "zh" ? "奥伊德" : "Aida", count: 0, manual: true }] },
+    { id: 2, term: lang === "zh" ? "思维导图" : "Tauri", manual: false, enabled: true, variants: [{ text: lang === "zh" ? "思维到图" : "tori", count: 2, manual: false }] },
+    { id: 1, term: "SenseVoice", manual: true, enabled: true, variants: [] },
+  ];
+  const responses = { get_settings: settings, list_models: models, get_ui_language: lang, get_result: result, get_vocab: vocab,
+    get_learned: lang === "zh"
+      ? [{ wrong: "思维到图", right: "思维导图", count: 1 }, { wrong: "奥伊德", right: "Aoide", count: 2 }]
+      : [{ wrong: "tori", right: "Tauri", count: 1 }, { wrong: "Aida", right: "Aoide", count: 2 }] };
   window.__TAURI__ = {
     core: { invoke: async (cmd) => responses[cmd] ?? null },
     event: { listen: async () => {} },

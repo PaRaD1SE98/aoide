@@ -62,6 +62,23 @@ pub const INSERT_PROMPT: &str = r#"你是文字输入助手。用户正在一个
 
 要插入的文字："#;
 
+/// 词库纠正提示词：识别结果较短、不值得整段润色时，只按词库修正误识别的词
+const CORRECT_PROMPT: &str = r#"下面是一段语音识别结果。请只参考用户词库，修正其中被误识别的词；其他内容（包括标点、语气、措辞）一字不改。没有需要修正的就原样输出。只输出结果本身，不要加任何解释、引号或前缀。
+
+识别结果：{text}
+
+修正后："#;
+
+/// 判断用户的一处修改是不是在纠正语音识别错误（读音相似度处于中间地带时才用，见 learn.rs）
+const JUDGE_PROMPT: &str = r#"下面是语音识别的输出，以及用户手动修改后的版本。用户把「{wrong}」改成了「{right}」。
+请判断这是在纠正语音识别错误（同音字、近音字、专有名词或口音导致的误识别），还是用户主动改写了内容（换了说法、改了意思）。
+如果是纠正识别错误，只回答"是"；否则只回答"否"。
+
+识别输出：{old}
+修改后：{new}
+
+回答："#;
+
 /// 模型的上下文窗口（prompt + 思考 + 答案的总 token 上限）
 const CONTEXT_TOKENS: usize = 8192;
 
@@ -129,7 +146,18 @@ impl<'a> Api<'a> {
     /// max_tokens 取上下文减去 prompt 估算后的全部余量（思考 token 也计入其中）；
     /// 中文按 1 token/字 保守估算 prompt 占用
     fn call(&self, prompt: &str) -> Result<String, String> {
-        let max_tokens = CONTEXT_TOKENS.saturating_sub(prompt.chars().count() + 100).max(512);
+        self.call_with(None, prompt)
+    }
+
+    /// system：附加的说明（如用户词库），作为 system 消息发送，不影响用户自定义的提示词
+    fn call_with(&self, system: Option<&str>, prompt: &str) -> Result<String, String> {
+        let used = prompt.chars().count() + system.map_or(0, |s| s.chars().count());
+        let max_tokens = CONTEXT_TOKENS.saturating_sub(used + 100).max(512);
+        let mut messages = Vec::new();
+        if let Some(system) = system {
+            messages.push(json!({"role": "system", "content": system}));
+        }
+        messages.push(json!({"role": "user", "content": prompt}));
         let cache_key = format!("{}|{}", self.base, self.model);
         let mut level = if self.no_think {
             NO_THINK_LEVEL.lock().unwrap().as_ref().and_then(|m| m.get(&cache_key).copied()).unwrap_or(0)
@@ -139,7 +167,7 @@ impl<'a> Api<'a> {
         let result = loop {
             let mut body = json!({
                 "model": self.model,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": messages,
                 "temperature": 0.3, "max_tokens": max_tokens, "stream": false,
             });
             apply_no_think(&mut body, level);
@@ -191,13 +219,14 @@ fn prompt_or_default<'a>(custom: &'a str, default: &'a str) -> &'a str {
     }
 }
 
-/// 根据光标前后文，把口述内容整理成要插入光标处的文字；调用失败返回 Err，由调用方决定回退
-pub fn insert_text(text: &str, before: &str, after: &str, cfg: &Config) -> Result<String, String> {
+/// 根据光标前后文，把口述内容整理成要插入光标处的文字；调用失败返回 Err，由调用方决定回退。
+/// glossary：相关的用户词库（见 vocab::glossary）
+pub fn insert_text(text: &str, before: &str, after: &str, glossary: Option<&str>, cfg: &Config) -> Result<String, String> {
     let prompt = prompt_or_default(&cfg.insert_prompt, INSERT_PROMPT)
         .replace("{before}", before)
         .replace("{after}", after)
         .replace("{text}", text);
-    let out = Api::from(cfg)?.call(&prompt)?;
+    let out = Api::from(cfg)?.call_with(glossary, &prompt)?;
     let out = strip_context_echo(&out, before, after);
     if out.is_empty() {
         return Err("empty insertion".into());
@@ -263,22 +292,41 @@ pub fn fit_spacing(text: &str, before: &str, after: &str) -> String {
 }
 
 /// 润色转录文本；调用失败返回 Err，由调用方决定回退
-pub fn polish_text(text: &str, cfg: &Config) -> Result<String, String> {
+pub fn polish_text(text: &str, glossary: Option<&str>, cfg: &Config) -> Result<String, String> {
     if text.trim().is_empty() {
         return Ok(text.to_string());
     }
-    Api::from(cfg)?.call(&prompt_or_default(&cfg.polish_prompt, POLISH_PROMPT).replace("{text}", text))
+    Api::from(cfg)?.call_with(glossary, &prompt_or_default(&cfg.polish_prompt, POLISH_PROMPT).replace("{text}", text))
 }
 
 /// 根据口述指令修改选中文本
-pub fn revise_text(original: &str, instruction: &str, cfg: &Config) -> Result<String, String> {
+pub fn revise_text(original: &str, instruction: &str, glossary: Option<&str>, cfg: &Config) -> Result<String, String> {
     if instruction.trim().is_empty() {
         return Ok(original.to_string());
     }
     let prompt = prompt_or_default(&cfg.revise_prompt, REVISE_PROMPT)
         .replace("{original}", original)
         .replace("{instruction}", instruction);
-    Api::from(cfg)?.call(&prompt)
+    Api::from(cfg)?.call_with(glossary, &prompt)
+}
+
+/// 只按词库修正误识别的词，其余一字不改；结果和原文长度相差太多时视为模型改写过头，返回原文
+pub fn correct_terms(text: &str, glossary: &str, cfg: &Config) -> Result<String, String> {
+    let out = Api::from(cfg)?.call_with(Some(glossary), &CORRECT_PROMPT.replace("{text}", text))?;
+    let (a, b) = (text.chars().count() as f32, out.chars().count() as f32);
+    if b < a * 0.5 || b > a * 1.5 + 8.0 {
+        log::warn!("Term correction rejected (changed too much): {out}");
+        return Ok(text.to_string());
+    }
+    Ok(out)
+}
+
+/// 用户把 wrong 改成 right 是不是在纠正识别错误；old / new 为修改前后的整段文字
+pub fn judge_correction(wrong: &str, right: &str, old: &str, new: &str, cfg: &Config) -> Result<bool, String> {
+    let prompt = JUDGE_PROMPT.replace("{wrong}", wrong).replace("{right}", right).replace("{old}", old).replace("{new}", new);
+    let answer = Api::from(cfg)?.call(&prompt)?;
+    let answer = answer.trim().to_lowercase();
+    Ok(answer.starts_with('是') || answer.starts_with("yes"))
 }
 
 #[cfg(test)]
@@ -299,10 +347,31 @@ mod tests {
         ];
         for (before, after, spoken) in cases {
             let start = std::time::Instant::now();
-            match insert_text(spoken, before, after, &cfg) {
+            match insert_text(spoken, before, after, None, &cfg) {
                 Ok(insert) => println!("[{:?}] insert={insert:?}\n    result={:?}", start.elapsed(), format!("{before}{insert}{after}")),
                 Err(e) => println!("error: {e}"),
             }
+        }
+    }
+
+    /// 手动运行（会用本机配置里的 LLM API）：按词库纠正、判断修改是否在纠正识别错误
+    /// cargo test --lib vocab_with_real_llm -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn vocab_with_real_llm() {
+        let cfg = Config::load();
+        let glossary = "用户词库：语音识别经常把下面这些词识别错。如果文字里出现读音相近、明显是误识别的词，请改成这里的正确写法；不相关的词不要改动。\n\
+            - 思维导图（曾被误识别为：思维到图）\n- Aoide（曾被误识别为：奥伊德）\n- 前端（曾被误识别为：前段）\n- Tauri\n";
+        for text in ["我用思维到图整理了一下需求", "今天试了一下奥一德的语音输入", "前段时间我们讨论了前段的页面怎么改", "这个应用是用 tori 写的", "今天天气不错"] {
+            let start = std::time::Instant::now();
+            println!("[{:?}] {text}\n    -> {:?}", start.elapsed(), correct_terms(text, glossary, &cfg));
+        }
+        for (wrong, right, old, new) in [
+            ("tori", "Tauri", "这个应用是用 tori 写的", "这个应用是用 Tauri 写的"),
+            ("明天下午", "明天晚上", "我们明天下午去公司开会", "我们明天晚上去公司开会"),
+            ("会议", "会面", "下周的会议改到周三", "下周的会面改到周三"),
+        ] {
+            println!("judge {wrong} -> {right}: {:?}", judge_correction(wrong, right, old, new, &cfg));
         }
     }
 
