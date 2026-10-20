@@ -16,7 +16,7 @@ accepted = [
     "MPL-2.0",
     "CDLA-Permissive-2.0",
 ]
-targets = ["x86_64-pc-windows-msvc"]
+targets = ["x86_64-pc-windows-msvc", "aarch64-apple-darwin"]
 # 构建期工具（bindgen、cmake 等）不进入安装包
 ignore-build-dependencies = true
 ignore-dev-dependencies = true

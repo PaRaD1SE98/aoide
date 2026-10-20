@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- macOS：与 tauri.conf.json 生成的 Info.plist 合并 -->
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Aoide 在你按下快捷键后录音，并在这台 Mac 上转写成文字。Aoide records your voice after you press the hotkey and transcribes it on this Mac.</string>
+</dict>
+</plist>

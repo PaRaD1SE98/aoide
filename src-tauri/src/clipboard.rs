@@ -1,8 +1,8 @@
 //! 剪贴板读写、粘贴输出、获取选中文本
 
 use crate::input;
+use crate::platform::clipboard_sequence;
 use std::time::{Duration, Instant};
-use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
 
 pub fn get_text() -> Option<String> {
     arboard::Clipboard::new().ok()?.get_text().ok()
@@ -26,7 +26,7 @@ pub fn paste_text(text: &str) -> bool {
         return false;
     }
     std::thread::sleep(Duration::from_millis(50));
-    input::ctrl('v');
+    input::shortcut('v');
     log::info!("Pasted: {text}");
     if let Some(old) = old.filter(|o| o != text) {
         std::thread::spawn(move || {
@@ -37,14 +37,14 @@ pub fn paste_text(text: &str) -> bool {
     true
 }
 
-/// 通过 Ctrl+C 获取当前选中的文本，之后恢复原剪贴板。
-/// 用剪贴板序列号判断 Ctrl+C 是否真的复制了东西，没选中文本时不会误把旧剪贴板当成选区。
+/// 通过 Ctrl+C（macOS 上是 Command+C）获取当前选中的文本，之后恢复原剪贴板。
+/// 用剪贴板序列号判断复制是否真的复制了东西，没选中文本时不会误把旧剪贴板当成选区。
 pub fn get_selected_text() -> String {
     let old = get_text();
-    let seq = unsafe { GetClipboardSequenceNumber() };
-    input::ctrl('c');
+    let seq = clipboard_sequence();
+    input::shortcut('c');
     let start = Instant::now();
-    while unsafe { GetClipboardSequenceNumber() } == seq {
+    while clipboard_sequence() == seq {
         if start.elapsed() > Duration::from_millis(400) {
             return String::new();
         }

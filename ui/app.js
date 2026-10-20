@@ -70,6 +70,7 @@ const resolveLang = (setting) => (setting === "zh" || setting === "en" ? setting
 // === 快捷键显示 ===
 const KEY_LABELS = {
   ctrl: "Ctrl", alt: "Alt", shift: "Shift", windows: "Win", esc: "Esc", space: "Space",
+  option: "Option", command: "Command", fn: "fn",
   enter: "Enter", tab: "Tab", backspace: "Backspace", delete: "Delete", insert: "Insert",
   home: "Home", end: "End", "page up": "PgUp", "page down": "PgDn", "caps lock": "Caps Lock",
   "print screen": "PrtSc", "scroll lock": "Scroll Lock", pause: "Pause", menu: "Menu",
@@ -77,6 +78,7 @@ const KEY_LABELS = {
 };
 
 function keyLabel(k) {
+  if (PLATFORM === "macos" && k === "ctrl") return "Control";
   if (KEY_LABELS[k]) return KEY_LABELS[k];
   return k.replace(/\b\w/g, (c) => c.toUpperCase()).replace("Windows", "Win");
 }
@@ -499,6 +501,7 @@ async function init() {
   models = s.models;
   defaultModelDir = s.default_model_dir;
   systemLanguage = s.system_language;
+  PLATFORM = s.platform;
   defaultPrompts = {
     polish_prompt: s.default_polish_prompt,
     revise_prompt: s.default_revise_prompt,

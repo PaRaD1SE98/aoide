@@ -4,18 +4,12 @@
 //! 设置页等前端文字见 ui/i18n.js。
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use windows::Win32::Globalization::GetUserDefaultUILanguage;
 
 static ENGLISH: AtomicBool = AtomicBool::new(false);
 
-/// Windows 显示语言是否为中文
+/// 系统显示语言：中文为 zh，其他为 en
 pub fn system_language() -> &'static str {
-    const LANG_CHINESE: u16 = 0x04;
-    if unsafe { GetUserDefaultUILanguage() } & 0x3ff == LANG_CHINESE {
-        "zh"
-    } else {
-        "en"
-    }
+    crate::platform::system_language()
 }
 
 /// 按配置（auto / zh / en）设置当前语言

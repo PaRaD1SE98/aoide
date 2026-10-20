@@ -62,13 +62,16 @@ pub struct Config {
     pub insert_prompt: String,
 }
 
+/// 默认的主快捷键：右 Alt（macOS 上是右 Option）
+const DEFAULT_HOTKEY: &str = if cfg!(target_os = "macos") { "right option" } else { "right alt" };
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             ui_language: "auto".into(),
-            hotkey: "right alt".into(),
-            revise_hotkey: "right alt+space".into(),
-            revise_stop_hotkey: "right alt".into(),
+            hotkey: DEFAULT_HOTKEY.into(),
+            revise_hotkey: format!("{DEFAULT_HOTKEY}+space"),
+            revise_stop_hotkey: DEFAULT_HOTKEY.into(),
             cancel_hotkey: "esc".into(),
             model: "sense-voice".into(),
             model_dir: String::new(),
@@ -103,14 +106,26 @@ fn env_dir(var: &str) -> PathBuf {
         .unwrap_or_else(std::env::temp_dir)
 }
 
-/// 配置和日志：%APPDATA%\Aoide
-pub fn data_dir() -> PathBuf {
-    env_dir("APPDATA").join("Aoide")
+/// macOS：~/Library 下的子目录
+#[cfg(target_os = "macos")]
+fn library_dir(sub: &str) -> PathBuf {
+    env_dir("HOME").join("Library").join(sub).join("Aoide")
 }
 
-/// 日志：%APPDATA%\Aoide\logs
+/// 配置和日志：%APPDATA%\Aoide；macOS：~/Library/Application Support/Aoide
+pub fn data_dir() -> PathBuf {
+    #[cfg(windows)]
+    return env_dir("APPDATA").join("Aoide");
+    #[cfg(target_os = "macos")]
+    return library_dir("Application Support");
+}
+
+/// 日志：%APPDATA%\Aoide\logs；macOS：~/Library/Logs/Aoide
 pub fn log_dir() -> PathBuf {
-    data_dir().join("logs")
+    #[cfg(windows)]
+    return data_dir().join("logs");
+    #[cfg(target_os = "macos")]
+    return library_dir("Logs");
 }
 
 /// 启动时准备日志目录：把旧版本放在数据目录根下的日志搬进来，并把进程的工作目录设到这里。
@@ -132,9 +147,13 @@ pub fn prepare_log_dir() {
     let _ = std::env::set_current_dir(&dir);
 }
 
-/// 默认模型目录：%LOCALAPPDATA%\Aoide\models（模型体积大，不放漫游目录）
+/// 默认模型目录：%LOCALAPPDATA%\Aoide\models（模型体积大，不放漫游目录）；
+/// macOS：~/Library/Application Support/Aoide/models
 pub fn default_model_dir() -> PathBuf {
-    env_dir("LOCALAPPDATA").join("Aoide").join("models")
+    #[cfg(windows)]
+    return env_dir("LOCALAPPDATA").join("Aoide").join("models");
+    #[cfg(target_os = "macos")]
+    return data_dir().join("models");
 }
 
 fn config_file() -> PathBuf {

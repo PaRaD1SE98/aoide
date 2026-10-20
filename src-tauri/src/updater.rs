@@ -2,7 +2,8 @@
 //!
 //! - 启动 30 秒后检查一次，之后每 24 小时一次（设置里可关闭）；设置页「关于」可随时手动检查
 //! - 发现新版本：系统通知 + 托盘菜单「更新到 x.y.z」+ 设置页显示「立即更新」
-//! - 一键更新：下载（进度推给设置页）→ 校验签名 → 运行安装程序（只显示进度）并退出，装完自动重启
+//! - 一键更新：下载（进度推给设置页）→ 校验签名 → 运行安装程序（只显示进度）并退出，装完自动重启；
+//!   macOS 上就地替换 Aoide.app 后自己重启
 //! - 正在录音 / 识别时不安装
 
 use crate::controller::Controller;
@@ -92,7 +93,8 @@ pub fn start(app: AppHandle) {
     });
 }
 
-/// 下载并安装新版本。成功时不会返回：安装程序启动后本进程退出，装完自动重启
+/// 下载并安装新版本。成功时不会返回：Windows 上安装程序启动后本进程退出，装完自动重启；
+/// macOS 上替换完程序包后重启
 pub async fn install(app: &AppHandle) -> Result<(), String> {
     if app.state::<Arc<Controller>>().is_busy() {
         return Err(tr("正在录音或识别，请稍后再更新", "Aoide is recording or transcribing. Update when it is done").into());
@@ -124,7 +126,12 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
         // 安装程序会结束本进程：先恢复被静音的程序
         crate::mute::end();
         log::info!("=== Aoide Ended (installing update {}) ===", update.version);
-        update.install(bytes).map_err(|e| e.to_string())
+        let installed = update.install(bytes).map_err(|e| e.to_string());
+        #[cfg(target_os = "macos")]
+        if installed.is_ok() {
+            app.restart();
+        }
+        installed
     }
     .await;
     state.installing.store(false, Ordering::SeqCst);

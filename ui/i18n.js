@@ -272,10 +272,29 @@ const I18N = {
   },
 };
 
+// macOS 上不同的文字（托盘 → 菜单栏、Vulkan → Metal……），优先于上面的同名键
+const I18N_MACOS = {
+  zh: {
+    "device.gpu": "GPU 通过 Metal 加速（Apple 芯片）",
+    "uiLang.desc": "界面、菜单栏菜单和通知使用的语言",
+    "autostart.title": "登录时启动",
+    "autostart.desc": "登录 Mac 后在菜单栏中运行",
+  },
+  en: {
+    "device.gpu": "GPU acceleration through Metal on Apple silicon",
+    "uiLang.desc": "Language of this window, the menu bar menu and notifications",
+    "autostart.title": "Open at login",
+    "autostart.desc": "Runs in the menu bar after you log in",
+  },
+};
+
 let LANG = "zh";
+/** windows / macos，设置页加载时由后端告知 */
+let PLATFORM = "windows";
 
 function t(key, vars) {
-  let s = I18N[LANG][key] ?? I18N.zh[key] ?? key;
+  const platform = PLATFORM === "macos" ? I18N_MACOS[LANG][key] ?? I18N_MACOS.zh[key] : undefined;
+  let s = platform ?? I18N[LANG][key] ?? I18N.zh[key] ?? key;
   for (const [k, v] of Object.entries(vars ?? {})) s = s.replaceAll(`{${k}}`, v);
   return s;
 }

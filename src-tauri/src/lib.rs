@@ -1,18 +1,15 @@
 mod audio;
 mod clipboard;
-mod com;
 mod config;
 mod controller;
 mod focus;
 mod hotkeys;
 mod i18n;
-mod input;
 mod keys;
 mod learn;
 mod learned_card;
 mod llm;
 mod models;
-mod mute;
 mod overlay;
 mod phonetic;
 mod result_card;
@@ -21,6 +18,16 @@ mod transcriber;
 mod tray;
 mod updater;
 mod vocab;
+
+/// 平台相关的实现（键盘钩子、模拟按键、焦点检测、静音、原生窗口……）。两个平台提供相同的接口
+#[cfg(windows)]
+#[path = "win/mod.rs"]
+mod platform;
+#[cfg(target_os = "macos")]
+#[path = "macos/mod.rs"]
+mod platform;
+
+use platform::{input, mute};
 
 use config::Config;
 use controller::Controller;
@@ -49,8 +56,17 @@ pub fn open_settings(app: &AppHandle) {
         .min_inner_size(560.0, 480.0)
         .center()
         .build();
-    if let Err(e) = built {
-        log::error!("Open settings failed: {e}");
+    match built {
+        Ok(w) => {
+            platform::main_window_shown(app);
+            let app = app.clone();
+            w.on_window_event(move |e| {
+                if let tauri::WindowEvent::Destroyed = e {
+                    platform::main_window_closed(&app);
+                }
+            });
+        }
+        Err(e) => log::error!("Open settings failed: {e}"),
     }
 }
 
@@ -89,6 +105,8 @@ struct SettingsPayload {
     log_dir: String,
     autostart: bool,
     version: String,
+    /// windows / macos（设置页据此调整文字和按键名）
+    platform: &'static str,
     /// 「跟随系统」时实际使用的语言
     system_language: &'static str,
     /// 各项设置的默认值（设置页「恢复默认」用）
@@ -109,6 +127,7 @@ fn get_settings(app: AppHandle, ctl: State<Arc<Controller>>) -> SettingsPayload 
         log_dir: config::data_dir().to_string_lossy().into(),
         autostart: app.autolaunch().is_enabled().unwrap_or(false),
         version: app.package_info().version.to_string(),
+        platform: std::env::consts::OS,
         system_language: i18n::system_language(),
         defaults: Config::default(),
         default_polish_prompt: llm::POLISH_PROMPT,
@@ -170,11 +189,11 @@ fn save_settings(
         ));
     }
 
-    // 开机启动是系统状态（注册表 Run 项），不入配置文件
+    // 开机启动是系统状态（Windows 注册表 Run 项、macOS 登录项），不入配置文件
     let launcher = app.autolaunch();
     if launcher.is_enabled().unwrap_or(false) != autostart {
         let r = if autostart { launcher.enable() } else { launcher.disable() };
-        r.map_err(|e| trf!("开机启动设置失败：{e}", "Failed to update start with Windows: {e}"))?;
+        r.map_err(|e| trf!("开机启动设置失败：{e}", "Failed to update start at login: {e}"))?;
     }
 
     config.save().map_err(|e| trf!("保存失败：{e}", "Failed to save: {e}"))?;
@@ -277,7 +296,7 @@ pub(crate) fn refresh_dismiss_key() {
 #[tauri::command]
 fn open_url(url: String) {
     if url.starts_with("https://") {
-        let _ = std::process::Command::new("explorer").arg(url).spawn();
+        let _ = platform::open(url);
     }
 }
 
@@ -291,8 +310,7 @@ fn open_licenses(app: AppHandle) -> Result<(), String> {
     if !path.is_file() {
         return Err(trf!("找不到第三方许可文件：{}", "Third-party license file not found: {}", path.display()));
     }
-    std::process::Command::new("explorer").arg(path).spawn().map_err(|e| e.to_string())?;
-    Ok(())
+    platform::open(path).map_err(|e| e.to_string())
 }
 
 /// 词库：全部词条
@@ -361,28 +379,14 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
 fn open_folder(path: String) {
     let path = dir_or_default(&path);
     let _ = std::fs::create_dir_all(&path);
-    let _ = std::process::Command::new("explorer").arg(path).spawn();
-}
-
-/// 不加载这些 Vulkan 隐式层：它们会注入所有使用 Vulkan 的程序。Aoide 只用 Vulkan 做计算（whisper.cpp），
-/// 游戏叠加层对它毫无用处，而腾讯 WeGame 的叠加层每次加载都会在当前目录写一个加密的 .log 文件。
-/// 不整体禁用隐式层：双显卡笔记本上用于选择显卡的驱动层也是隐式层
-const DISABLED_VULKAN_LAYERS: &str = "VK_LAYER_TENCENT_wegame_cross_overlay";
-
-/// 必须在创建任何线程、初始化 Vulkan 之前调用（Vulkan 加载器在创建实例时读取这个环境变量）
-fn disable_vulkan_layers() {
-    let value = match std::env::var("VK_LOADER_LAYERS_DISABLE") {
-        Ok(v) if !v.trim().is_empty() => format!("{v},{DISABLED_VULKAN_LAYERS}"),
-        _ => DISABLED_VULKAN_LAYERS.to_string(),
-    };
-    std::env::set_var("VK_LOADER_LAYERS_DISABLE", value);
+    let _ = platform::open(path);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 
-    disable_vulkan_layers();
+    platform::prepare();
     config::prepare_log_dir();
 
     let app = tauri::Builder::default()
@@ -465,8 +469,7 @@ pub fn run() {
             log::info!("=== Aoide {} Started ===", app.package_info().version);
             // whisper.cpp 默认把每个 token 的调试信息打到 stderr，这里统一屏蔽
             whisper_rs::install_logging_hooks();
-            // 禁止窗口幽灵化：界面线程短暂卡顿时，系统不会用带标题栏的默认外壳替换窗口
-            unsafe { windows::Win32::UI::WindowsAndMessaging::DisableProcessWindowsGhosting() };
+            platform::setup(app);
             overlay::init();
             // 上次被强退时可能还有程序处于静音
             mute::recover();
@@ -490,10 +493,12 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building Aoide");
 
-    app.run(|_app, event| {
+    app.run(|_app, event| match event {
         // 关闭设置窗口后继续在托盘运行；只有托盘菜单「退出」才真正退出
-        if let RunEvent::ExitRequested { api, code: None, .. } = event {
-            api.prevent_exit();
-        }
+        RunEvent::ExitRequested { api, code: None, .. } => api.prevent_exit(),
+        // macOS：程序已在运行时再次打开它（访达、启动台、程序坞）
+        #[cfg(target_os = "macos")]
+        RunEvent::Reopen { .. } => open_settings(_app),
+        _ => {}
     });
 }

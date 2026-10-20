@@ -10,23 +10,43 @@ on:
     paths:
       - src-tauri/Cargo.lock
       - scripts/build-sherpa-onnx.ps1
+      - scripts/build-sherpa-onnx.sh
       - .github/workflows/warm-cache.yml
   workflow_dispatch:
 
 jobs:
   warm:
-    runs-on: windows-latest
-    env:
-      CMAKE_GENERATOR: Ninja
-      CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreaded
-      CMAKE_POLICY_DEFAULT_CMP0091: NEW
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 与 release.yml 中的设置一致，缓存键才一致
+          - os: windows-latest
+            sherpa-key: sherpa-onnx
+            sherpa-script: scripts/build-sherpa-onnx.ps1
+            sherpa-build: ./scripts/build-sherpa-onnx.ps1
+          - os: macos-latest
+            sherpa-key: sherpa-onnx-macos
+            sherpa-script: scripts/build-sherpa-onnx.sh
+            sherpa-build: bash ./scripts/build-sherpa-onnx.sh
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
+      - name: Windows build environment
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "CMAKE_GENERATOR=Ninja" >> $env:GITHUB_ENV
+          "CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded" >> $env:GITHUB_ENV
+          "CMAKE_POLICY_DEFAULT_CMP0091=NEW" >> $env:GITHUB_ENV
+
       - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
 
       # 与 release.yml 相同的设置，缓存键才一致
       - name: Install Vulkan SDK
+        if: runner.os == 'Windows'
         uses: jakoch/install-vulkan-sdk-action@v1
         with:
           install_runtime: true
@@ -47,9 +67,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: src-tauri/vendor/sherpa-onnx
-          key: sherpa-onnx-${{ steps.sherpa-version.outputs.version }}-${{ hashFiles('scripts/build-sherpa-onnx.ps1') }}
+          key: ${{ matrix.sherpa-key }}-${{ steps.sherpa-version.outputs.version }}-${{ hashFiles(matrix.sherpa-script) }}
 
       - name: Build sherpa-onnx without TTS
         if: steps.sherpa-cache.outputs.cache-hit != 'true'
         shell: pwsh
-        run: ./scripts/build-sherpa-onnx.ps1
+        run: ${{ matrix.sherpa-build }}

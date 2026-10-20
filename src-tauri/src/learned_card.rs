@@ -4,13 +4,12 @@
 //! 用户可以接着打字。页面在约 8 秒后自动关闭（鼠标悬停时暂停）
 
 use crate::learn::Correction;
-use crate::{overlay, vocab};
+use crate::platform::popup;
+use crate::vocab;
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
-use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, SetForegroundWindow, SetWindowPos, ShowWindow, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_SHOWNOACTIVATE};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub const LABEL: &str = "learned";
 /// 逻辑尺寸（含阴影留白），按显示器缩放
@@ -30,7 +29,7 @@ pub struct Item {
 pub struct Toast {
     pub items: Vec<Item>,
     pub changes: Vec<vocab::Change>,
-    /// 弹出前的前台窗口，关闭时把焦点还给它
+    /// 弹出前的前台窗口（macOS 上是前台程序的进程号），关闭时把焦点还给它
     pub previous: isize,
 }
 
@@ -58,7 +57,7 @@ pub fn show(app: &AppHandle, learned: Vec<(Correction, vocab::Change)>) {
         let mut toast = state.0.lock().unwrap();
         // 窗口还开着：追加，「撤销」对窗口里列出的全部生效
         if app.get_webview_window(LABEL).is_none() {
-            *toast = Toast { previous: unsafe { GetForegroundWindow() }.0 as isize, ..Default::default() };
+            *toast = Toast { previous: popup::foreground(), ..Default::default() };
         }
         for (c, change) in learned {
             toast.items.push(Item { count: count(&c.wrong, &c.right), wrong: c.wrong, right: c.right });
@@ -83,6 +82,8 @@ pub fn show(app: &AppHandle, learned: Vec<(Correction, vocab::Change)>) {
             .resizable(false)
             .focused(false)
             .visible(false)
+            .accept_first_mouse(true)
+            .visible_on_all_workspaces(true)
             .build()
         {
             Ok(w) => {
@@ -104,20 +105,7 @@ pub fn show(app: &AppHandle, learned: Vec<(Correction, vocab::Change)>) {
     crate::refresh_dismiss_key();
 
     // 输入焦点所在屏幕的底部中间
-    let (work, scale) = overlay::focus_work_area();
-    let (w, h) = ((WIDTH * scale).round() as i32, (HEIGHT * scale).round() as i32);
-    let x = work.left + (work.right - work.left - w) / 2;
-    let y = work.bottom - h - (BOTTOM_GAP * scale).round() as i32;
-    let _ = window.set_position(PhysicalPosition::new(x, y));
-    let _ = window.set_size(PhysicalSize::new(w as u32, h as u32));
-    if let Ok(hwnd) = window.hwnd() {
-        unsafe {
-            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-            // tao 的无边框窗口保留着标题栏样式，靠 WM_NCCALCSIZE 把边框算成 0；用原生 ShowWindow 显示时
-            // 边框不会重新计算，系统标题栏会露出来。强制重算一次
-            let _ = SetWindowPos(hwnd, None, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-        }
-    }
+    popup::show(&window, WIDTH, HEIGHT, BOTTOM_GAP);
 }
 
 pub fn items(app: &AppHandle) -> Vec<Item> {
@@ -139,10 +127,7 @@ pub fn close(app: &AppHandle) {
     let previous = std::mem::take(&mut *app.state::<LearnedState>().0.lock().unwrap()).previous;
     // 先还焦点再关窗口：关闭是异步的，若先关，窗口销毁时系统会把激活转给 Z 序里的下一个窗口
     if previous != 0 {
-        unsafe {
-            let ok = SetForegroundWindow(HWND(previous as _)).as_bool();
-            log::info!("Learned card: restore focus to {previous:#x}: {ok}, foreground now {:#x}", GetForegroundWindow().0 as isize);
-        }
+        popup::restore_foreground(previous);
     }
     if let Some(w) = app.get_webview_window(LABEL) {
         let _ = w.close();

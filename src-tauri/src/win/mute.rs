@@ -6,7 +6,7 @@
 //! 恢复时只取消我们静音的那些会话，用户原本就静音的保持原样。
 //! 被静音的会话同时记在文件里：程序被强退来不及恢复时，下次启动按文件恢复。
 
-use crate::com::ComGuard;
+use super::com::ComGuard;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;

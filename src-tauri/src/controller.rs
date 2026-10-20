@@ -257,13 +257,14 @@ impl Controller {
         let (rec, task) = {
             let mut s = self.rec.lock().unwrap();
             if s.recording {
+                // 先恢复声音再播结束音：macOS 静音的是整个输出设备
+                mute::end();
                 sound::play(Cue::Stop);
                 if let Some(r) = &s.recorder {
                     r.stop();
                 }
                 s.recording = false;
                 overlay::set(Mode::Processing);
-                mute::end();
                 return; // 转录由正在等待录音结束的那个线程处理
             }
             s.recording = true;
@@ -290,9 +291,9 @@ impl Controller {
                 s.recording = false;
             }
             drop(s);
+            mute::end();
             sound::play(Cue::Stop);
             overlay::set(Mode::Processing);
-            mute::end();
         }
 
         if task.canceled() {
@@ -505,9 +506,9 @@ impl Controller {
         if let Some(r) = &rec {
             r.stop();
         }
+        mute::end();
         sound::play(Cue::Stop);
         overlay::set(Mode::Processing);
-        mute::end();
 
         let cfg = self.config();
         let Some(audio) = self.take_audio(rec.as_deref(), "Revision recording") else {
