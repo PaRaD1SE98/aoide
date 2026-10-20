@@ -116,6 +116,9 @@
     const $ = (id) => document.getElementById(id);
     const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
     const ramp = (t, start, ms) => clamp((t - start) / ms);
+    // 淡出到 30% 时直接消失：动图的有损 WebP 编码会把很小的逐帧变化当成「没变」跳过，
+    // 低对比度的元素慢慢淡出时，画面会停在半透明的中间状态留下残影；最后一步变化够大才会被刷新
+    const fadeOut = (x) => (x < 0.3 ? 0 : x);
     const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
     const slice = (s, n) => Array.from(s).slice(0, n).join("");
     const len = (s) => Array.from(s).length;
@@ -147,7 +150,7 @@
       const caret = Math.floor(t / 530) % 2 === 0 ? '<span class="caret"></span>' : '<span class="caret" style="opacity:0"></span>';
       let html = caret;
       if (t >= T.out1 && t < T.send1) {
-        const flash = 1 - ramp(t, T.out1, 900);
+        const flash = fadeOut(1 - ramp(t, T.out1, 900));
         html = `<span class="new" style="background:rgba(251,191,36,${0.35 * flash})">${esc(L.out1)}</span>${caret}`;
       } else if (t >= T.type2 && t < T.sel2) {
         html = esc(slice(L.draft, Math.round(len(L.draft) * ramp(t, T.type2, T.typed2 - T.type2)))) + caret;
@@ -156,7 +159,7 @@
         const chars = Array.from(L.draft);
         html = esc(chars.slice(0, len(L.draft) - n).join("")) + `<span class="sel">${esc(chars.slice(len(L.draft) - n).join(""))}</span>`;
       } else if (t >= T.out2 && t < T.send2) {
-        const flash = 1 - ramp(t, T.out2, 900);
+        const flash = fadeOut(1 - ramp(t, T.out2, 900));
         html = `<span class="new" style="background:rgba(251,191,36,${0.35 * flash})">${esc(L.out2)}</span>${caret}`;
       }
       $("input").innerHTML = html;
@@ -169,7 +172,7 @@
       if (said) {
         const n = Math.max(1, Math.round(len(said) * ramp(t, start + 200, stop - start - 500)));
         $("stext").textContent = `“${slice(said, n)}”`;
-        $("stext").style.opacity = Math.min(ramp(t, start, 150), 1 - ramp(t, out, 400));
+        $("stext").style.opacity = Math.min(ramp(t, start, 150), fadeOut(1 - ramp(t, out, 400)));
         speech.classList.toggle("on", t < stop);
         speech.classList.toggle("revise", said === L.said2);
       } else {
@@ -184,7 +187,7 @@
         const down = t < at + 150 ? " down" : "";
         $("kbd").innerHTML = keys.map((k) => `<span class="kbd${down}">${k}</span>`).join('<span class="plus">+</span>');
         $("khint").textContent = hint;
-        $("keys").style.opacity = Math.min(ramp(t, at, 80), 1 - ramp(t, at + 1100, 300));
+        $("keys").style.opacity = Math.min(ramp(t, at, 80), fadeOut(1 - ramp(t, at + 1100, 300)));
       } else {
         $("keys").style.opacity = 0;
       }
@@ -202,7 +205,7 @@
       } else if (last && t < last[1] + 120) {
         const [a, b, name] = last;
         cap.src = frame(name, Math.floor(((b - a) / 1000) * FPS) % FRAMES[name]);
-        cap.style.opacity = 1 - ramp(t, b, 100);
+        cap.style.opacity = fadeOut(1 - ramp(t, b, 100));
       } else {
         cap.style.opacity = 0;
       }

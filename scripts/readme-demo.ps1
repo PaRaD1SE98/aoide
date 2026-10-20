@@ -55,8 +55,10 @@ foreach ($lang in "en", "zh") {
 
     New-Item -ItemType Directory -Force "$out\$lang" | Out-Null
     $webp = "$out\$lang\demo.webp"
+    # 用无损编码：有损的动画 WebP 会把小于容差的逐帧变化当成「没变」跳过，
+    # 淡出的元素会停在半透明状态留下残影（先无损再转有损也一样，转换时会重新走这套逻辑）
     ffmpeg -v error -y -framerate $fps -i "$frames\frame-%05d.png" `
-        -vf "scale=1280:-1:flags=lanczos" -c:v libwebp_anim -quality 82 -compression_level 6 -loop 0 $webp
+        -vf "scale=1280:-1:flags=lanczos" -c:v libwebp_anim -lossless 1 -compression_level 6 -quality 100 -loop 0 $webp
     if ($LASTEXITCODE -ne 0) { throw "webp encoding failed" }
     Write-Host "  $webp ($([math]::Round((Get-Item $webp).Length / 1MB, 2)) MB)"
 
