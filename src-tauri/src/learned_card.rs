@@ -6,6 +6,7 @@
 use crate::learn::Correction;
 use crate::{overlay, vocab};
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 use windows::Win32::Foundation::HWND;
@@ -35,6 +36,13 @@ pub struct Toast {
 
 #[derive(Default)]
 pub struct LearnedState(pub Mutex<Toast>);
+
+/// 提示是否开着（决定 Esc 是否用来关闭小窗）
+static OPEN: AtomicBool = AtomicBool::new(false);
+
+pub fn is_open() -> bool {
+    OPEN.load(Ordering::SeqCst)
+}
 
 pub fn show(app: &AppHandle, learned: Vec<(Correction, vocab::Change)>) {
     let entries = vocab::all();
@@ -77,13 +85,23 @@ pub fn show(app: &AppHandle, learned: Vec<(Correction, vocab::Change)>) {
             .visible(false)
             .build()
         {
-            Ok(w) => w,
+            Ok(w) => {
+                w.on_window_event(|e| {
+                    if let tauri::WindowEvent::Destroyed = e {
+                        OPEN.store(false, Ordering::SeqCst);
+                        crate::refresh_dismiss_key();
+                    }
+                });
+                w
+            }
             Err(e) => {
                 log::error!("Learned card failed: {e}");
                 return;
             }
         },
     };
+    OPEN.store(true, Ordering::SeqCst);
+    crate::refresh_dismiss_key();
 
     // 输入焦点所在屏幕的底部中间
     let (work, scale) = overlay::focus_work_area();

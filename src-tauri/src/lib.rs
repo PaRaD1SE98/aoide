@@ -265,9 +265,12 @@ fn copy_result(state: State<result_card::ResultState>) -> bool {
 
 #[tauri::command]
 fn close_result(app: AppHandle) {
-    if let Some(w) = app.get_webview_window(result_card::LABEL) {
-        let _ = w.close();
-    }
+    result_card::close(&app);
+}
+
+/// 有小窗（结果卡片、词条入库提示）开着时，让键盘钩子用 Esc 关闭它们
+pub(crate) fn refresh_dismiss_key() {
+    hotkeys::set_dismiss_armed(result_card::is_open() || learned_card::is_open());
 }
 
 /// 用默认浏览器打开网址（只允许 https）

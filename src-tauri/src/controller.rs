@@ -7,7 +7,7 @@ use crate::hotkeys::{self, HotkeyEvent};
 use crate::transcriber::Transcriber;
 use crate::tray::{self, TrayState};
 use crate::overlay::{self, Mode};
-use crate::result_card;
+use crate::{learned_card, result_card};
 use crate::mute;
 use crate::i18n::tr;
 use crate::{clipboard, focus, learn, llm, models, trf, vocab};
@@ -190,6 +190,10 @@ impl Controller {
                     }
                     HotkeyEvent::Cancel => {
                         thread::spawn(move || me2.cancel());
+                    }
+                    HotkeyEvent::Dismiss => {
+                        result_card::close(&me.app);
+                        learned_card::close(&me.app);
                     }
                 }
             }

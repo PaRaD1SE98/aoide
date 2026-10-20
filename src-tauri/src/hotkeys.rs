@@ -29,6 +29,8 @@ pub enum HotkeyEvent {
     ReviseStop,
     /// 取消本次任务（只在任务进行中触发）
     Cancel,
+    /// 关闭屏幕底部的小窗（结果卡片、词条入库提示）：小窗不抢焦点、收不到按键，由钩子代为处理 Esc
+    Dismiss,
 }
 
 /// 是否有任务在进行中：只有这时才拦截取消键，平时该键照常传给其他程序
@@ -36,6 +38,13 @@ static CANCEL_ARMED: AtomicBool = AtomicBool::new(false);
 
 pub fn set_cancel_armed(armed: bool) {
     CANCEL_ARMED.store(armed, Ordering::SeqCst);
+}
+
+/// 是否有小窗开着：只有这时才拦截 Esc 用来关闭小窗
+static DISMISS_ARMED: AtomicBool = AtomicBool::new(false);
+
+pub fn set_dismiss_armed(armed: bool) {
+    DISMISS_ARMED.store(armed, Ordering::SeqCst);
 }
 
 #[derive(Default)]
@@ -183,6 +192,21 @@ fn handle(shared: &Shared, vk: u32, down: bool) -> bool {
         if (CANCEL_ARMED.load(Ordering::SeqCst) || !down) && combo(cancel, vk, down, repeat, &mut st) {
             if down && !repeat {
                 send(HotkeyEvent::Cancel);
+            }
+            return true;
+        }
+    }
+
+    // 小窗开着时，单独按 Esc 关闭小窗（取消任务优先，见上）；按下被拦截的，松开也拦截
+    if vk == keys::VK_ESCAPE {
+        if !down {
+            if st.swallowed.remove(&vk) {
+                return true;
+            }
+        } else if DISMISS_ARMED.load(Ordering::SeqCst) && st.pressed.len() == 1 {
+            st.swallowed.insert(vk);
+            if !repeat {
+                send(HotkeyEvent::Dismiss);
             }
             return true;
         }
@@ -354,5 +378,25 @@ mod tests {
         set_cancel_armed(false);
         assert!(handle(sh, ESC, false));
         assert_eq!(events(), ["Cancel"]);
+
+        // 小窗开着：Esc 关闭小窗，按下和松开都拦截；任务进行中时取消优先
+        set_dismiss_armed(true);
+        assert!(handle(sh, ESC, true));
+        assert!(handle(sh, ESC, false));
+        assert_eq!(events(), ["Dismiss"]);
+        set_cancel_armed(true);
+        assert!(handle(sh, ESC, true));
+        assert!(handle(sh, ESC, false));
+        assert_eq!(events(), ["Cancel"]);
+        set_cancel_armed(false);
+        // 和别的键一起按（如 Shift+Esc）不算
+        assert!(!handle(sh, A, true));
+        assert!(!handle(sh, ESC, true));
+        assert!(!handle(sh, ESC, false));
+        assert!(!handle(sh, A, false));
+        set_dismiss_armed(false);
+        assert!(!handle(sh, ESC, true));
+        assert!(!handle(sh, ESC, false));
+        assert!(events().is_empty());
     }
 }

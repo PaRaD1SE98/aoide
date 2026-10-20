@@ -6,6 +6,7 @@
 
 use crate::overlay;
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, ShowWindow, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_SHOWNOACTIVATE};
@@ -25,6 +26,19 @@ pub struct CardContent {
 /// 当前卡片内容，页面加载时通过 get_result 命令读取
 #[derive(Default)]
 pub struct ResultState(pub Mutex<CardContent>);
+
+/// 卡片是否开着（决定 Esc 是否用来关闭小窗）
+static OPEN: AtomicBool = AtomicBool::new(false);
+
+pub fn is_open() -> bool {
+    OPEN.load(Ordering::SeqCst)
+}
+
+pub fn close(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window(LABEL) {
+        let _ = w.close();
+    }
+}
 
 pub fn show(app: &AppHandle, title: &str, text: &str) {
     let content = CardContent { title: title.into(), text: text.into() };
@@ -48,13 +62,23 @@ pub fn show(app: &AppHandle, title: &str, text: &str) {
             .visible(false)
             .build()
         {
-            Ok(w) => w,
+            Ok(w) => {
+                w.on_window_event(|e| {
+                    if let tauri::WindowEvent::Destroyed = e {
+                        OPEN.store(false, Ordering::SeqCst);
+                        crate::refresh_dismiss_key();
+                    }
+                });
+                w
+            }
             Err(e) => {
                 log::error!("Result card failed: {e}");
                 return;
             }
         },
     };
+    OPEN.store(true, Ordering::SeqCst);
+    crate::refresh_dismiss_key();
 
     // 输入焦点所在屏幕的底部中间
     let (work, scale) = overlay::focus_work_area();
