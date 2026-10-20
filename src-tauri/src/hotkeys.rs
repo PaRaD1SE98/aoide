@@ -179,10 +179,11 @@ pub fn capture(timeout: Duration) -> Result<Option<String>, String> {
 unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code == HC_ACTION as i32 {
         let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
-        // 自己（及其他程序）模拟的按键不参与热键判定，比如粘贴用的 Ctrl+V
-        let injected = kb.flags.0 & LLKHF_INJECTED.0 != 0;
+        // Aoide 自己模拟的按键（粘贴用的 Ctrl+V 等）不参与热键判定。其他程序模拟的按键照常处理：
+        // AutoHotkey 重映射、键鼠共享软件转发的按键都带 LLKHF_INJECTED，不能一概忽略
+        let own = kb.flags.0 & LLKHF_INJECTED.0 != 0 && kb.dwExtraInfo == crate::input::AOIDE_INPUT_MARK;
         let down = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
-        if !injected {
+        if !own {
             if !RECEIVING.swap(true, Ordering::Relaxed) {
                 // 写日志可能较慢，放到别的线程，钩子回调要尽快返回
                 std::thread::spawn(|| log::info!("Keyboard hook is receiving key events"));

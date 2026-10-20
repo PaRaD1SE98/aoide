@@ -5,11 +5,16 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     KEYEVENTF_UNICODE, VIRTUAL_KEY, VK_BACK, VK_CONTROL,
 };
 
+/// 写在 Aoide 自己模拟的按键上（dwExtraInfo），键盘钩子据此跳过它们（见 hotkeys.rs）。
+/// 只跳过自己发的，而不是所有模拟按键：AutoHotkey 重映射、键鼠共享软件（Mouse without Borders、
+/// Synergy 等）转发的按键都带「模拟」标记，全部忽略的话这些用户按什么键都不会被识别
+pub const AOIDE_INPUT_MARK: usize = 0x414F_4944; // "AOID"
+
 fn key(vk: VIRTUAL_KEY, scan: u16, flags: KEYBD_EVENT_FLAGS) -> INPUT {
     INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {
-            ki: KEYBDINPUT { wVk: vk, wScan: scan, dwFlags: flags, time: 0, dwExtraInfo: 0 },
+            ki: KEYBDINPUT { wVk: vk, wScan: scan, dwFlags: flags, time: 0, dwExtraInfo: AOIDE_INPUT_MARK },
         },
     }
 }
