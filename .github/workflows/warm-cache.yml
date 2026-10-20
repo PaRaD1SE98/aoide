@@ -1,0 +1,55 @@
+name: Warm build cache
+
+# 在 main 分支上预先编译 sherpa-onnx、下载 Vulkan SDK 并存成缓存，供发版流程（release.yml）使用。
+# GitHub 的缓存只能被同一分支 / 标签或默认分支的运行读取：发版是按标签触发的，
+# 上一个标签存的缓存下一个标签读不到，所以缓存要存在 main 上。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - src-tauri/Cargo.lock
+      - scripts/build-sherpa-onnx.ps1
+      - .github/workflows/warm-cache.yml
+  workflow_dispatch:
+
+jobs:
+  warm:
+    runs-on: windows-latest
+    env:
+      CMAKE_GENERATOR: Ninja
+      CMAKE_MSVC_RUNTIME_LIBRARY: MultiThreaded
+      CMAKE_POLICY_DEFAULT_CMP0091: NEW
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      # 与 release.yml 相同的设置，缓存键才一致
+      - name: Install Vulkan SDK
+        uses: jakoch/install-vulkan-sdk-action@v1
+        with:
+          install_runtime: true
+          cache: true
+          stripdown: true
+
+      # 缓存键必须与 release.yml 中的完全一致
+      - name: sherpa-onnx version
+        id: sherpa-version
+        shell: pwsh
+        run: |
+          $lock = Get-Content src-tauri/Cargo.lock -Raw
+          if ($lock -notmatch 'name = "sherpa-onnx-sys"\s+version = "([^"]+)"') { throw "sherpa-onnx-sys not found in Cargo.lock" }
+          "version=$($Matches[1])" >> $env:GITHUB_OUTPUT
+
+      - name: Cache sherpa-onnx
+        id: sherpa-cache
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/vendor/sherpa-onnx
+          key: sherpa-onnx-${{ steps.sherpa-version.outputs.version }}-${{ hashFiles('scripts/build-sherpa-onnx.ps1') }}
+
+      - name: Build sherpa-onnx without TTS
+        if: steps.sherpa-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: ./scripts/build-sherpa-onnx.ps1

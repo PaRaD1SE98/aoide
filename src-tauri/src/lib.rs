@@ -468,6 +468,8 @@ pub fn run() {
             // 禁止窗口幽灵化：界面线程短暂卡顿时，系统不会用带标题栏的默认外壳替换窗口
             unsafe { windows::Win32::UI::WindowsAndMessaging::DisableProcessWindowsGhosting() };
             overlay::init();
+            // 上次被强退时可能还有程序处于静音
+            mute::recover();
             let cfg = Config::load();
             i18n::set_language(&cfg.ui_language);
             let ctl = Controller::new(app.handle().clone(), cfg.clone());

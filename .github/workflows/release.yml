@@ -39,9 +39,11 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      # 发版按标签触发，标签上存的缓存下一个标签读不到，不必保存
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          save-if: false
 
       - run: pnpm install --frozen-lockfile
 
@@ -53,7 +55,9 @@ jobs:
           Copy-Item "$env:SystemRoot\System32\vulkan-1.dll" src-tauri/vendor/
 
       # 不含 TTS（espeak-ng，GPL-3.0）的 sherpa-onnx 静态库，见 scripts/build-sherpa-onnx.ps1
-      # 缓存只跟 sherpa-onnx-sys 的版本和构建脚本有关，其他依赖变化不必重编
+      # 缓存只跟 sherpa-onnx-sys 的版本和构建脚本有关，其他依赖变化不必重编。
+      # 缓存由 main 上的 warm-cache.yml 保存（标签存的缓存其他标签读不到），这里只读取；
+      # 没命中（缓存还没预热好）时照常现编
       - name: sherpa-onnx version
         id: sherpa-version
         shell: pwsh
@@ -62,9 +66,9 @@ jobs:
           if ($lock -notmatch 'name = "sherpa-onnx-sys"\s+version = "([^"]+)"') { throw "sherpa-onnx-sys not found in Cargo.lock" }
           "version=$($Matches[1])" >> $env:GITHUB_OUTPUT
 
-      - name: Cache sherpa-onnx
+      - name: Restore sherpa-onnx
         id: sherpa-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: src-tauri/vendor/sherpa-onnx
           key: sherpa-onnx-${{ steps.sherpa-version.outputs.version }}-${{ hashFiles('scripts/build-sherpa-onnx.ps1') }}
