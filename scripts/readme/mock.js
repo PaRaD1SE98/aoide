@@ -32,7 +32,7 @@
     default_model_dir: "C:\\Users\\you\\AppData\\Local\\Aoide\\models",
     log_dir: "C:\\Users\\you\\AppData\\Roaming\\Aoide",
     autostart: true,
-    version: "0.2.0",
+    version: "0.3.0",
     system_language: lang,
     defaults: {
       ui_language: "auto", hotkey: "right alt", revise_hotkey: "right alt+space", revise_stop_hotkey: "right alt",
