@@ -300,6 +300,12 @@ kbd {
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
 #toast.error { color: var(--danger); }
 
+/* 更新 */
+.update-progress { height: 4px; margin-top: 8px; border-radius: 2px; background: var(--control-hover); overflow: hidden; }
+#update-bar { height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+#update-status.available { color: var(--accent); }
+#update-status.error { color: var(--danger); }
+
 /* 词库 */
 .vocab-add { gap: 8px; }
 .vocab-add input { flex: 1; min-width: 0; }

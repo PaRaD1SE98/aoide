@@ -52,6 +52,8 @@ pub struct Config {
     pub vocab_enabled: bool,
     /// 用户手动修改识别结果时，自动把纠正的词存入词库
     pub learn_from_edits: bool,
+    /// 定期检查新版本（发现后通知，由用户一键更新）
+    pub auto_check_updates: bool,
     /// 自定义润色提示词，{text} 为转写结果；留空使用内置提示词
     pub polish_prompt: String,
     /// 自定义修订提示词，{original} 为选中原文、{instruction} 为修改意见；留空使用内置提示词
@@ -87,6 +89,7 @@ impl Default for Config {
             insert_min_chars: 12,
             vocab_enabled: true,
             learn_from_edits: true,
+            auto_check_updates: true,
             polish_prompt: String::new(),
             revise_prompt: String::new(),
             insert_prompt: String::new(),

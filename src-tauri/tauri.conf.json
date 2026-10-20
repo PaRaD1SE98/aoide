@@ -20,7 +20,7 @@
     "copyright": "Copyright (c) 2026 PaRaD1SE98",
     "category": "Productivity",
     "shortDescription": "Local push-to-talk voice typing for Windows",
-    "longDescription": "Press a hotkey, speak, and Aoide transcribes your speech locally with whisper.cpp, optionally polishes it with an LLM, and types it into the focused input box.",
+    "longDescription": "Press a hotkey, speak, and Aoide transcribes your speech locally with SenseVoice or whisper.cpp, optionally polishes it with an LLM, and types it into the focused input box.",
     "resources": {
       "vendor/vulkan-1.dll": "vulkan-1.dll",
       "vendor/THIRD_PARTY_LICENSES.html": "THIRD_PARTY_LICENSES.html"
@@ -35,8 +35,15 @@
       "nsis": {
         "installMode": "currentUser",
         "languages": ["SimpChinese", "English"],
-        "displayLanguageSelector": true
+        "displayLanguageSelector": false
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUwODc5MTQ3OEE1RjBFQTIKUldTaURsK0tSNUdINFBBMEFJSnF4U2pLZXpwMlVjNnRKcE8xSTBlM255aG41Y1RCekFWcWhNUnUK",
+      "endpoints": ["https://github.com/PaRaD1SE98/aoide/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
     }
   }
 }

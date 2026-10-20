@@ -136,6 +136,11 @@ impl Controller {
         self.rec.lock().unwrap().recording || self.rev.lock().unwrap().active
     }
 
+    /// 正在录音、识别或润色（自动更新据此推迟安装）
+    pub fn is_busy(&self) -> bool {
+        self.in_flight.load(Ordering::SeqCst) > 0 || self.busy()
+    }
+
     /// 处理结束后收起悬浮条（期间又开始了新的录音则不动）
     fn finish_overlay(&self) {
         if !self.busy() {

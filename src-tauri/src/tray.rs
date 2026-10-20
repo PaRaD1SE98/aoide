@@ -55,10 +55,18 @@ pub fn tooltip(hotkey: &str) -> String {
 fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let open = MenuItem::with_id(app, "settings", tr("打开 Aoide", "Open Aoide"), true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", tr("退出", "Quit"), true, None::<&str>)?;
-    Menu::with_items(app, &[&open, &PredefinedMenuItem::separator(app)?, &quit])
+    let separator = PredefinedMenuItem::separator(app)?;
+    // 有新版本时，菜单最上面加一项「更新到 x.y.z」
+    let update = crate::updater::available(app)
+        .map(|u| MenuItem::with_id(app, "update", crate::trf!("更新到 {}", "Update to {}", u.version), true, None::<&str>))
+        .transpose()?;
+    match &update {
+        Some(update) => Menu::with_items(app, &[update, &open, &separator, &quit]),
+        None => Menu::with_items(app, &[&open, &separator, &quit]),
+    }
 }
 
-/// 切换界面语言后重建菜单
+/// 切换界面语言、发现新版本后重建菜单
 pub fn refresh_menu(app: &AppHandle) {
     if let (Some(tray), Ok(menu)) = (app.tray_by_id(TRAY_ID), build_menu(app)) {
         let _ = tray.set_menu(Some(menu));
@@ -76,6 +84,16 @@ pub fn create(app: &AppHandle, hotkey: &str) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "settings" => crate::open_settings(app),
+            "update" => {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = crate::updater::install(&app).await {
+                        use tauri::Manager;
+                        app.state::<std::sync::Arc<crate::controller::Controller>>()
+                            .notify(&crate::trf!("更新失败：{e}", "Update failed: {e}"));
+                    }
+                });
+            }
             "quit" => {
                 crate::mute::end(); // 退出前恢复被静音的程序
                 log::info!("=== Aoide Ended ===");

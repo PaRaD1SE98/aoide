@@ -105,6 +105,16 @@
           </div>
         </div>
         <div class="card">
+          <span class="ico">&#xE895;</span>
+          <div class="text">
+            <div class="title" data-i18n="autoUpdate.title">自动检查更新</div>
+            <div class="desc" data-i18n="autoUpdate.desc">每天检查一次新版本，发现后通知你，一键即可更新</div>
+          </div>
+          <div class="control">
+            <label class="toggle"><input type="checkbox" data-key="auto_check_updates"><span></span></label>
+          </div>
+        </div>
+        <div class="card">
           <span class="ico">&#xE9F9;</span>
           <div class="text">
             <div class="title" data-i18n="logs.title">配置与日志</div>
@@ -411,6 +421,19 @@
         </div>
       </div>
       <div class="group">
+        <div class="card" id="update-card">
+          <span class="ico">&#xE895;</span>
+          <div class="text">
+            <div class="title" data-i18n="update.title">更新</div>
+            <div class="desc" id="update-status"></div>
+            <div class="update-progress" id="update-progress" hidden><div id="update-bar"></div></div>
+          </div>
+          <div class="control">
+            <button class="btn" id="update-notes" data-i18n="update.notes" hidden>更新说明</button>
+            <button class="btn" id="update-check" data-i18n="update.check">检查更新</button>
+            <button class="btn accent" id="update-install" data-i18n="update.install" hidden>立即更新</button>
+          </div>
+        </div>
         <div class="card">
           <span class="ico">&#xE71B;</span>
           <div class="text">

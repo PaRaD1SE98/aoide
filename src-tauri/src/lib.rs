@@ -19,6 +19,7 @@ mod result_card;
 mod sound;
 mod transcriber;
 mod tray;
+mod updater;
 mod vocab;
 
 use config::Config;
@@ -335,6 +336,24 @@ fn close_learned(app: AppHandle) {
     learned_card::close(&app)
 }
 
+/// 手动检查更新：返回新版本信息，已是最新时返回 None
+#[tauri::command]
+async fn check_update(app: AppHandle) -> Result<Option<updater::UpdateInfo>, String> {
+    updater::check(&app, false).await
+}
+
+/// 已知的新版本（设置页打开时显示）
+#[tauri::command]
+fn get_update(app: AppHandle) -> Option<updater::UpdateInfo> {
+    updater::available(&app)
+}
+
+/// 一键更新：下载、校验、安装并重启
+#[tauri::command]
+async fn install_update(app: AppHandle) -> Result<(), String> {
+    updater::install(&app).await
+}
+
 #[tauri::command]
 fn open_folder(path: String) {
     let path = dir_or_default(&path);
@@ -391,6 +410,8 @@ pub fn run() {
             Some(vec![AUTOSTART_ARG]),
         ))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updater::UpdaterState::default())
         .manage(Downloads::default())
         .manage(result_card::ResultState::default())
         .manage(learned_card::LearnedState::default())
@@ -416,6 +437,9 @@ pub fn run() {
             get_learned,
             undo_learned,
             close_learned,
+            check_update,
+            get_update,
+            install_update,
         ])
         .setup(|app| {
             log::info!("=== Aoide {} Started ===", app.package_info().version);
@@ -430,6 +454,7 @@ pub fn run() {
             app.manage(ctl.clone());
             tray::create(app.handle(), &cfg.hotkey)?;
             ctl.start();
+            updater::start(app.handle().clone());
             // 用户手动启动时打开主窗口；开机自启时只在托盘运行（除非还没下载模型）
             let autostarted = std::env::args().any(|a| a == AUTOSTART_ARG);
             if !autostarted || !ctl.model_downloaded() {

@@ -193,6 +193,7 @@ function applyLanguage() {
   applyI18n(resolveLang(state.config.ui_language));
   renderModels();
   renderVocab();
+  setUpdateStatus(updateStatus.key, updateStatus.vars, updateStatus.cls);
   updateResetButtons();
 }
 
@@ -273,6 +274,53 @@ async function addVocab() {
   }
 }
 
+// === 更新 ===
+let update = null; // 已知的新版本 { version, notes, url }
+let updateStatus = { key: "update.current" };
+
+function setUpdateStatus(key, vars = {}, cls = "") {
+  updateStatus = { key, vars, cls };
+  const el = $("update-status");
+  el.textContent = t(key, { version: $("about-version").textContent, ...vars });
+  el.className = "desc " + cls;
+}
+
+function renderUpdate() {
+  const busy = !$("update-progress").hidden;
+  $("update-install").hidden = !update || busy;
+  $("update-notes").hidden = !update;
+  $("update-check").hidden = !!update || busy;
+  if (update && !busy) setUpdateStatus("update.available", { version: update.version }, "available");
+}
+
+async function checkUpdate() {
+  $("update-check").disabled = true;
+  setUpdateStatus("update.checking");
+  try {
+    update = await invoke("check_update");
+    if (!update) setUpdateStatus("update.upToDate");
+  } catch (e) {
+    setUpdateStatus("update.failed", { error: String(e) }, "error");
+  } finally {
+    $("update-check").disabled = false;
+    renderUpdate();
+  }
+}
+
+async function installUpdate() {
+  $("update-progress").hidden = false;
+  $("update-bar").style.width = "0";
+  setUpdateStatus("update.downloading");
+  renderUpdate();
+  try {
+    await invoke("install_update"); // 成功时安装程序会结束本进程
+  } catch (e) {
+    $("update-progress").hidden = true;
+    setUpdateStatus("update.failed", { error: String(e) }, "error");
+    renderUpdate();
+  }
+}
+
 // === 交互 ===
 let modelDirTimer;
 async function refreshModels() {
@@ -318,6 +366,26 @@ function bind() {
       scheduleSave(TYPING_DELAY);
     });
     el.addEventListener("change", () => save());
+  });
+
+  $("update-check").addEventListener("click", checkUpdate);
+  $("update-install").addEventListener("click", installUpdate);
+  $("update-notes").addEventListener("click", () => update && invoke("open_url", { url: update.url }));
+  listen("update-available", ({ payload }) => {
+    update = payload;
+    renderUpdate();
+  });
+  listen("update-progress", ({ payload }) => {
+    const { done, total } = payload;
+    if (total) {
+      const pct = Math.floor((done / total) * 100);
+      $("update-bar").style.width = `${pct}%`;
+      setUpdateStatus("update.downloadingPct", { pct });
+    }
+  });
+  listen("update-installing", () => {
+    $("update-bar").style.width = "100%";
+    setUpdateStatus("update.installing");
   });
 
   $("vocab-add-btn").addEventListener("click", addVocab);
@@ -441,6 +509,9 @@ async function init() {
   applyI18n(resolveLang(state.config.ui_language));
   render();
   bind();
+  update = await invoke("get_update");
+  setUpdateStatus("update.current");
+  renderUpdate();
   await loadVocab();
 }
 

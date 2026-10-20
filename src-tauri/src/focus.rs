@@ -378,6 +378,9 @@ mod tests {
         TranslateMessage, MSG, WINDOW_STYLE, WM_CLOSE, WM_QUIT, WS_POPUP, WS_VISIBLE,
     };
 
+    /// 这两个测试都在本进程里建控件再用 UIA 读取，并行时 UIA 偶尔取不到窗口；串行执行
+    static UI_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     const EM_SETSEL: u32 = 0x00B1;
     const ES_MULTILINE: u32 = 0x0004;
     const ES_PASSWORD: u32 = 0x0020;
@@ -433,6 +436,7 @@ mod tests {
     /// 学习用户修改时读取输入框全文：经典 Edit 和 RichEdit，改动后能读到新内容；密码框不读
     #[test]
     fn watches_full_text() {
+        let _lock = UI_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         for class in ["EDIT", "RICHEDIT50W"] {
             let h = spawn_control(class, "前文。我用思维到图整理需求", (0, 0), ES_MULTILINE);
             let w = TextWatch::of_window(h).unwrap();
@@ -450,6 +454,7 @@ mod tests {
     /// 用真实的 Windows 输入控件验证光标前后文字的读取
     #[test]
     fn reads_text_around_caret() {
+        let _lock = UI_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         // 普通 Edit：光标在中间
         let h = spawn_control("EDIT", "Hello world. Goodbye.", (6, 6), ES_MULTILINE);
         assert_eq!(read(h), ctx("Hello ", "world. Goodbye."));
