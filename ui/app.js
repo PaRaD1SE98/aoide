@@ -407,7 +407,10 @@ function bind() {
       btn.classList.add("capturing");
       btn.textContent = t("btn.capturing");
       try {
-        const combo = await invoke("capture_hotkey");
+        const combo = await invoke("capture_hotkey").catch((e) => {
+          toast(String(e), true);
+          return null;
+        });
         if (combo) {
           // 冲突等原因保存失败时退回原来的快捷键，界面与实际生效的保持一致
           const before = state.config[key];

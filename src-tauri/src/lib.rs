@@ -182,13 +182,13 @@ fn save_settings(
     Ok(())
 }
 
-/// 录制快捷键：期间所有按键都被拦截（不会触发录音），全部松开时返回组合，Esc 取消
+/// 录制快捷键：期间所有按键都被拦截（不会触发录音），任意一个键松开时返回组合，Esc 取消。
+/// 一个按键都没收到时返回错误（键盘钩子没在工作）
 #[tauri::command]
-async fn capture_hotkey() -> Option<String> {
+async fn capture_hotkey() -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(|| hotkeys::capture(Duration::from_secs(15)))
         .await
-        .ok()
-        .flatten()
+        .map_err(|e| e.to_string())?
 }
 
 #[derive(Default)]

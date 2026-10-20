@@ -16,6 +16,7 @@ use std::sync::{Mutex, OnceLock, RwLock};
 use std::time::Duration;
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_HIGHEST};
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetMessageW, SetWindowsHookExW, HC_ACTION, KBDLLHOOKSTRUCT, LLKHF_INJECTED,
     MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_SYSKEYDOWN,
@@ -32,6 +33,11 @@ pub enum HotkeyEvent {
     /// 关闭屏幕底部的小窗（结果卡片、词条入库提示）：小窗不抢焦点、收不到按键，由钩子代为处理 Esc
     Dismiss,
 }
+
+/// 日文键盘的输入法切换键（かな、漢字、英数、カタカナひらがな、半角/全角等）：在日文输入法下
+/// 往往只有「按下」没有「松开」事件。不把它们记为按住，也不能录成快捷键，
+/// 否则会一直当作按着，录制快捷键永远等不到「松开」
+const NO_KEYUP: &[u32] = &[0x15, 0x19, 0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5];
 
 /// 是否有任务在进行中：只有这时才拦截取消键，平时该键照常传给其他程序
 static CANCEL_ARMED: AtomicBool = AtomicBool::new(false);
@@ -68,10 +74,15 @@ struct HookState {
 }
 
 struct Capture {
-    pressed: HashSet<u32>,
+    /// 按下顺序（修饰键在前，最后一个是触发键）
     order: Vec<u32>,
+    /// 录制期间钩子是否收到过任何按键（一个都没收到说明钩子没在工作）
+    seen: bool,
     tx: Sender<Option<String>>,
 }
+
+/// 钩子是否收到过按键（第一次收到时记一条日志，便于从日志判断钩子是否在工作）
+static RECEIVING: AtomicBool = AtomicBool::new(false);
 
 struct Shared {
     bindings: RwLock<Bindings>,
@@ -93,6 +104,8 @@ pub fn install(tx: Sender<HotkeyEvent>) {
     std::thread::Builder::new()
         .name("keyboard-hook".into())
         .spawn(|| unsafe {
+            // 低层钩子必须及时返回，超时多次会被系统悄悄移除；系统繁忙（如加载模型）时也要优先调度
+            let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
             let hmod = GetModuleHandleW(None).ok();
             match SetWindowsHookExW(WH_KEYBOARD_LL, Some(hook_proc), hmod.map(Into::into), 0) {
                 Ok(_) => log::info!("Keyboard hook installed"),
@@ -141,14 +154,26 @@ pub fn update(hotkey: &str, revise: &str, revise_stop: &str, cancel: &str) -> Ve
     bad
 }
 
-/// 录制一个快捷键（设置页用）：期间拦截所有按键，全部松开时返回组合；Esc 取消
-pub fn capture(timeout: Duration) -> Option<String> {
-    let shared = SHARED.get()?;
+/// 录制一个快捷键（设置页用）：期间拦截所有按键，任意一个键松开时返回组合；Esc 取消（返回 Ok(None)）。
+/// 超时且一个按键都没收到时返回 Err：键盘钩子没在工作（常见原因是被安全软件拦截）
+pub fn capture(timeout: Duration) -> Result<Option<String>, String> {
+    let Some(shared) = SHARED.get() else { return Ok(None) };
     let (tx, rx) = mpsc::channel();
-    *shared.capture.lock().unwrap() = Some(Capture { pressed: HashSet::new(), order: Vec::new(), tx });
-    let result = rx.recv_timeout(timeout).ok().flatten();
-    shared.capture.lock().unwrap().take();
-    result
+    *shared.capture.lock().unwrap() = Some(Capture { order: Vec::new(), seen: false, tx });
+    let result = rx.recv_timeout(timeout).ok();
+    let seen = shared.capture.lock().unwrap().take().is_some_and(|c| c.seen);
+    match result {
+        Some(r) => Ok(r),
+        None if !seen => {
+            log::warn!("Hotkey capture timed out without receiving any key events (keyboard hook not working?)");
+            Err(crate::i18n::tr(
+                "没有收到任何按键：键盘监听可能被安全软件拦截。请把 Aoide 加入信任后，在托盘菜单退出并重新打开 Aoide",
+                "No key presses were received: the keyboard listener may be blocked by security software. Allow Aoide in it, then quit Aoide from the tray menu and start it again",
+            )
+            .into())
+        }
+        None => Ok(None),
+    }
 }
 
 unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -158,6 +183,10 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
         let injected = kb.flags.0 & LLKHF_INJECTED.0 != 0;
         let down = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
         if !injected {
+            if !RECEIVING.swap(true, Ordering::Relaxed) {
+                // 写日志可能较慢，放到别的线程，钩子回调要尽快返回
+                std::thread::spawn(|| log::info!("Keyboard hook is receiving key events"));
+            }
             if let Some(shared) = SHARED.get() {
                 if handle(shared, kb.vkCode, down) {
                     return LRESULT(1);
@@ -173,6 +202,9 @@ fn handle(shared: &Shared, vk: u32, down: bool) -> bool {
     if let Some(cap) = shared.capture.lock().unwrap().as_mut() {
         handle_capture(cap, vk, down);
         return true;
+    }
+    if NO_KEYUP.contains(&vk) {
+        return false;
     }
 
     let mut st = shared.state.lock().unwrap();
@@ -291,31 +323,33 @@ fn combo(hk: &Hotkey, vk: u32, down: bool, _repeat: bool, st: &mut HookState) ->
     mods_held
 }
 
+/// 录制：记下按下的键，其中任意一个松开时就录完（不等全部松开：有些键不发松开事件，见 NO_KEYUP）
 fn handle_capture(cap: &mut Capture, vk: u32, down: bool) {
+    cap.seen = true;
+    if NO_KEYUP.contains(&vk) {
+        return;
+    }
     if down {
         if vk == keys::VK_ESCAPE && cap.order.is_empty() {
             let _ = cap.tx.send(None);
             return;
         }
-        cap.pressed.insert(vk);
         if !cap.order.contains(&vk) {
             cap.order.push(vk);
         }
-    } else {
-        cap.pressed.remove(&vk);
-        if cap.pressed.is_empty() && !cap.order.is_empty() {
-            let n = cap.order.len();
-            let text = cap
-                .order
-                .iter()
-                .enumerate()
-                .map(|(i, &k)| keys::name_of(k, i + 1 < n))
-                .collect::<Vec<_>>()
-                .join("+");
-            let _ = cap.tx.send(Some(text));
-            cap.order.clear();
-        }
+    } else if cap.order.contains(&vk) {
+        let n = cap.order.len();
+        let text = cap
+            .order
+            .iter()
+            .enumerate()
+            .map(|(i, &k)| keys::name_of(k, i + 1 < n))
+            .collect::<Vec<_>>()
+            .join("+");
+        let _ = cap.tx.send(Some(text));
+        cap.order.clear();
     }
+    // 录制开始前就按下的键（比如点「更改」用的回车）松开时不在 order 里，忽略
 }
 
 #[cfg(test)]
@@ -326,6 +360,32 @@ mod tests {
     const SPACE: u32 = 0x20;
     const ESC: u32 = 0x1B;
     const A: u32 = 0x41;
+
+    /// 录制快捷键：任意一个键松开就录完；日文输入法切换键没有松开事件，不能卡住录制
+    #[test]
+    fn captures_hotkeys() {
+        const HANKAKU: u32 = 0xF3; // 半角/全角（只有按下）
+        const NONCONVERT: u32 = 0x1D; // 無変換
+        let run = |events: &[(u32, bool)]| {
+            let (tx, rx) = mpsc::channel();
+            let mut cap = Capture { order: Vec::new(), seen: false, tx };
+            for &(vk, down) in events {
+                handle_capture(&mut cap, vk, down);
+            }
+            rx.try_iter().collect::<Vec<_>>()
+        };
+        assert_eq!(run(&[(RALT, true), (RALT, false)]), [Some("right alt".to_string())]);
+        // 组合键：先松开哪个都一样
+        assert_eq!(run(&[(RALT, true), (SPACE, true), (SPACE, false), (RALT, false)]), [Some("right alt+space".to_string())]);
+        assert_eq!(run(&[(RALT, true), (SPACE, true), (RALT, false), (SPACE, false)]), [Some("right alt+space".to_string())]);
+        // 先按了半角/全角（没有松开事件）：不影响接下来的录制
+        assert_eq!(run(&[(HANKAKU, true), (NONCONVERT, true), (NONCONVERT, false)]), [Some("vk0x1d".to_string())]);
+        // 录制前按下的键（点「更改」用的回车）的松开事件不算
+        assert_eq!(run(&[(0x0D, false), (A, true), (A, false)]), [Some("a".to_string())]);
+        // 一开始就按 Esc：取消
+        assert_eq!(run(&[(ESC, true)]), [None]);
+        assert_eq!(Hotkey::parse("vk0x1d").unwrap().trigger(), [NONCONVERT]);
+    }
 
     #[test]
     fn state_machine() {
@@ -394,6 +454,12 @@ mod tests {
         assert!(!handle(sh, ESC, true));
         assert!(!handle(sh, ESC, false));
         assert!(!handle(sh, A, false));
+        // 半角/全角只有按下事件：不算按住，Esc 关闭小窗不受影响
+        set_dismiss_armed(true);
+        assert!(!handle(sh, 0xF3, true));
+        assert!(handle(sh, ESC, true));
+        assert!(handle(sh, ESC, false));
+        assert_eq!(events(), ["Dismiss"]);
         set_dismiss_armed(false);
         assert!(!handle(sh, ESC, true));
         assert!(!handle(sh, ESC, false));
