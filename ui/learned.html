@@ -14,6 +14,10 @@
     .item .note { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
     footer { justify-content: space-between; align-items: center; gap: 12px; }
     #hint { color: var(--muted); font-size: 12px; }
+    /* 自动关闭倒计时：从满格缩到空，鼠标悬停时暂停 */
+    .countdown { height: 3px; flex: none; background: var(--stroke); }
+    #bar { height: 100%; background: var(--accent); transform-origin: left; animation: countdown linear forwards; }
+    @keyframes countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
   </style>
 </head>
 <body>
@@ -28,6 +32,7 @@
       <span id="hint" data-i18n="learned.hint">下次识别时自动纠正</span>
       <button id="undo" class="btn" data-i18n="learned.undo">撤销</button>
     </footer>
+    <div class="countdown"><div id="bar"></div></div>
   </div>
   <script src="i18n.js"></script>
   <script src="learned.js"></script>
