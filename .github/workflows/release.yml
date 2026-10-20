@@ -125,8 +125,14 @@ jobs:
 
       # 第三方许可声明，随安装包分发
       - uses: taiki-e/install-action@v2
+        if: runner.os != 'macOS' || runner.arch != 'X64'
         with:
           tool: cargo-about
+
+      # cargo-about 没有 Intel Mac 的预编译版本，从源码安装（命令行工具在 cli 特性里）
+      - name: Install cargo-about from source
+        if: runner.os == 'macOS' && runner.arch == 'X64'
+        run: cargo install cargo-about --locked --features cli
 
       - name: Generate third-party licenses
         shell: pwsh
