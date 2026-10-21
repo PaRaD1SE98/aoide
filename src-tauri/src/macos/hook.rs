@@ -77,9 +77,6 @@ pub fn install() {
         .expect("spawn hook thread");
 }
 
-/// 让钩子排到其他程序的钩子前面（Windows 上需要，见 win/hook.rs）；macOS 上没有要做的
-pub fn reinstall() {}
-
 /// 诊断信息（Windows 上有，见 win/hook.rs）
 pub fn diagnose() -> String {
     String::new()

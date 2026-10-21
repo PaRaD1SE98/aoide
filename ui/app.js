@@ -234,32 +234,18 @@ function el(tag, props = {}, ...children) {
   return e;
 }
 
-// === 键盘钩子的后备 ===
-// 有的电脑上设置窗口在前台时，系统不把按键交给 Aoide 的键盘钩子，热键和快捷键录制都没反应。
-// 页面把自己收到的按键也转给后端的热键状态机；钩子正常时它总是先收到同一个按键，后端会忽略页面转来的
-// （见 hotkeys.rs 的 on_page_key）。键码用 Windows 虚拟键码；修饰键要区分左右，按物理位置换算
-const MODIFIER_VK = {
-  ControlLeft: 0xa2, ControlRight: 0xa3, ShiftLeft: 0xa0, ShiftRight: 0xa1,
-  AltLeft: 0xa4, AltRight: 0xa5, MetaLeft: 0x5b, MetaRight: 0x5c,
-};
+// === 设置页里的按键 ===
+// 有的电脑上设置窗口在前台时，键盘钩子收不到按键，由 Raw Input 补上（见 win/hook.rs），但它拦不住按键，
+// 按键照样送到页面：录制快捷键时按的键不应触发页面里的操作；单独按下再松开 Alt（默认的主快捷键是右 Alt）
+// 会让窗口进入菜单模式、吞掉下一个按键。（Alt+空格弹出的窗口菜单页面拦不住，见 win/mod.rs）
 let capturing = false;
 
-function forwardKey(e, down) {
-  const vk = MODIFIER_VK[e.code] ?? e.keyCode;
-  // 229：输入法正在组字
-  if (!vk || vk === 229) return;
-  // 普通键带上实际按住的修饰键：修饰键的松开事件没收到时，后端据此纠正（见 hotkeys.rs forget_released_modifiers）
-  const held = MODIFIER_VK[e.code] ? null : [e.altKey, e.ctrlKey, e.shiftKey, e.metaKey];
-  invoke("page_key", { vk, down, held });
-  // 录制快捷键时按的键不应触发页面里的操作。
-  // 单独按下再松开 Alt（默认的主快捷键是右 Alt）会让窗口进入菜单模式，下一个按键被它吞掉：
-  // 第二次按 Alt 结束录音、按 Esc 取消都要按两次。（Alt+空格弹出的窗口菜单页面拦不住，见 win/mod.rs）
-  const alt = e.code === "AltLeft" || e.code === "AltRight";
-  if (capturing || alt) e.preventDefault();
+function suppressKey(e) {
+  if (capturing || e.code === "AltLeft" || e.code === "AltRight") e.preventDefault();
 }
 
-window.addEventListener("keydown", (e) => forwardKey(e, true), true);
-window.addEventListener("keyup", (e) => forwardKey(e, false), true);
+window.addEventListener("keydown", suppressKey, true);
+window.addEventListener("keyup", suppressKey, true);
 
 // === 系统权限（macOS）：缺少时在页面顶部列出，授权后自动消失 ===
 const PERMISSIONS = [

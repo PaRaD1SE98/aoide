@@ -60,7 +60,7 @@ pub fn main_window_shown(app: &AppHandle) {
 /// 主窗口关闭时调用；Windows 上没有要做的
 pub fn main_window_closed(_app: &AppHandle) {}
 
-/// 有的电脑上设置窗口在前台时，键盘钩子收不到按键（见 hotkeys.rs 的 on_page_key），Alt 照常交给了 Windows：
+/// 有的电脑上设置窗口在前台时，键盘钩子收不到按键（见 hook.rs），Alt 照常交给了 Windows：
 /// 单按 Alt 会让窗口进入菜单模式、吞掉下一个按键；Alt+空格（语音修订的默认快捷键）会弹出窗口菜单。
 /// 这两种都是 Windows 发给外层窗口的 SC_KEYMENU 命令，这里直接丢掉（鼠标打开窗口菜单、Alt+F4 不受影响）
 unsafe extern "system" fn no_key_menu(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM, _id: usize, _data: usize) -> LRESULT {

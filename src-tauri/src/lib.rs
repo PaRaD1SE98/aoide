@@ -64,10 +64,7 @@ pub fn open_settings(app: &AppHandle) {
             w.on_window_event(move |e| match e {
                 tauri::WindowEvent::Destroyed => platform::main_window_closed(&app),
                 // 设置窗口在前台时其他程序的键盘钩子可能先拦下按键，重新安装让 Aoide 的钩子排到前面（见 win/hook.rs）
-                tauri::WindowEvent::Focused(true) => {
-                    platform::hook::reinstall();
-                    log_focus_diagnosis();
-                }
+                tauri::WindowEvent::Focused(true) => log_focus_diagnosis(),
                 _ => {}
             });
         }
@@ -231,13 +228,6 @@ fn save_settings(
     Ok(())
 }
 
-/// 设置页转来它收到的按键（键盘钩子收不到按键时的后备，见 hotkeys::on_page_key）；
-/// held 是非修饰键按下 / 松开时实际按住的修饰键：Alt、Ctrl、Shift、Win
-#[tauri::command]
-fn page_key(vk: u32, down: bool, held: Option<[bool; 4]>) {
-    hotkeys::on_page_key(vk, down, held);
-}
-
 /// 录制快捷键：期间所有按键都被拦截（不会触发录音），任意一个键松开时返回组合，Esc 取消。
 /// 一个按键都没收到时返回错误（键盘钩子没在工作）
 #[tauri::command]
@@ -335,7 +325,7 @@ fn close_notice(app: AppHandle) {
     notice::close(&app)
 }
 
-/// 设置窗口第一次获得焦点时，记下接收键盘输入的进程和权限级别（排查键盘钩子收不到按键的问题，见 win/hook.rs）。
+/// 设置窗口第一次获得焦点时，记下接收键盘输入的进程和权限级别（排查键盘钩子漏掉按键的问题，见 win/hook.rs）。
 /// 等一会儿再记：刚获得焦点时，键盘焦点还没落到页面（WebView2 的进程）上
 fn log_focus_diagnosis() {
     static LOGGED: AtomicBool = AtomicBool::new(false);
@@ -504,7 +494,6 @@ pub fn run() {
             list_models,
             save_settings,
             capture_hotkey,
-            page_key,
             download_model,
             cancel_download,
             open_folder,

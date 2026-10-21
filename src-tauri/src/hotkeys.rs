@@ -11,10 +11,10 @@
 
 use crate::keys::{self, Hotkey};
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Mutex, OnceLock, RwLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[derive(Clone, Copy, Debug)]
 pub enum HotkeyEvent {
@@ -135,7 +135,6 @@ pub fn update(hotkey: &str, revise: &str, revise_stop: &str, cancel: &str) -> Ve
 /// 超时且一个按键都没收到时返回 Err：键盘钩子没在工作（常见原因是被安全软件拦截）
 pub fn capture(timeout: Duration) -> Result<Option<String>, String> {
     let Some(shared) = SHARED.get() else { return Ok(None) };
-    crate::platform::hook::reinstall();
     let (tx, rx) = mpsc::channel();
     *shared.capture.lock().unwrap() = Some(Capture { order: Vec::new(), seen: false, tx });
     let result = rx.recv_timeout(timeout).ok();
@@ -150,21 +149,8 @@ pub fn capture(timeout: Duration) -> Result<Option<String>, String> {
     }
 }
 
-/// 钩子最近一次收到按键的时间（毫秒，见 now_ms；0 表示还没收到过）
-static LAST_HOOK_KEY: AtomicU64 = AtomicU64::new(0);
-/// 设置页转来的按键是否已经用上过（第一次用上时记一条日志）
-static PAGE_KEYS_USED: AtomicBool = AtomicBool::new(false);
-/// 上次因为钩子漏掉按键而重装钩子的时间（毫秒，见 now_ms）
-static LAST_REINSTALL: AtomicU64 = AtomicU64::new(0);
-
-fn now_ms() -> u64 {
-    static EPOCH: OnceLock<Instant> = OnceLock::new();
-    EPOCH.get_or_init(Instant::now).elapsed().as_millis() as u64 + 1
-}
-
 /// 钩子收到一个按键（Aoide 自己模拟的按键已由钩子排除）；返回 true 表示拦截该事件
 pub(crate) fn on_key(vk: u32, down: bool) -> bool {
-    LAST_HOOK_KEY.store(now_ms(), Ordering::Relaxed);
     if !RECEIVING.swap(true, Ordering::Relaxed) {
         // 写日志可能较慢，放到别的线程，钩子回调要尽快返回
         std::thread::spawn(|| log::info!("Keyboard hook is receiving key events"));
@@ -172,50 +158,11 @@ pub(crate) fn on_key(vk: u32, down: bool) -> bool {
     SHARED.get().is_some_and(|shared| handle(shared, vk, down))
 }
 
-/// 设置页自己收到的按键（见 ui/app.js）：键盘钩子收不到按键时的后备。
-/// 有的电脑上设置窗口在前台时，系统不把按键交给键盘钩子，热键和快捷键录制都没反应，而按键照样送到了页面。
-/// 钩子正常时它总比页面先收到同一个按键（页面还要经过一次进程间转发），
-/// 所以钩子最近 1 秒内收到过按键时忽略页面转来的，避免同一个按键处理两次。
-/// held：非修饰键带着当时实际按住的修饰键（Alt、Ctrl、Shift、Win），见 forget_released_modifiers
-pub(crate) fn on_page_key(vk: u32, down: bool, held: Option<[bool; 4]>) {
-    let last = LAST_HOOK_KEY.load(Ordering::Relaxed);
-    if last != 0 && now_ms() - last < 1000 {
-        return;
-    }
-    if !PAGE_KEYS_USED.swap(true, Ordering::Relaxed) {
-        log::warn!(
-            "Keyboard hook is not receiving the keys sent to the settings window; using the keys forwarded by the page. {}",
-            crate::platform::hook::diagnose()
-        );
-    }
-    // 钩子漏掉了按键：可能是别的程序后装了键盘钩子，排在前面把按键截走、再自己交给了窗口。
-    // 这时重装一次，让 Aoide 的钩子排到它前面，之后的按键（包括组合键里页面收不到的那些）都走钩子。最多每 2 秒一次
-    let now = now_ms();
-    if now - LAST_REINSTALL.load(Ordering::Relaxed) >= 2000 {
-        LAST_REINSTALL.store(now, Ordering::Relaxed);
-        log::info!("Keyboard hook missed a key sent to the settings window, reinstalling it");
-        crate::platform::hook::reinstall();
-    }
+/// Raw Input 补上的、钩子漏掉的按键（见 win/hook.rs）。Raw Input 不能拦截按键，所以不需要返回值
+#[cfg(windows)]
+pub(crate) fn on_raw_key(vk: u32, down: bool) {
     if let Some(shared) = SHARED.get() {
-        if let Some(held) = held {
-            forget_released_modifiers(shared, held);
-        }
         handle(shared, vk, down);
-    }
-}
-
-/// 页面没收到修饰键的松开事件时（比如被窗口菜单吞掉、松开前焦点离开了窗口），状态机会以为它一直按着：
-/// 之后单按空格也成了「按住右 Alt 再按空格」。按页面报告的实际状态，清掉已经松开的修饰键（不触发任何热键）
-fn forget_released_modifiers(shared: &Shared, held: [bool; 4]) {
-    const GROUPS: [[u32; 2]; 4] = [[0xA4, 0xA5], [0xA2, 0xA3], [0xA0, 0xA1], [0x5B, 0x5C]]; // Alt、Ctrl、Shift、Win
-    let mut st = shared.state.lock().unwrap();
-    let b = shared.bindings.read().unwrap();
-    for (group, held) in GROUPS.iter().zip(held) {
-        for vk in group.iter().filter(|_| !held) {
-            if st.pressed.remove(vk) && b.main.as_ref().is_some_and(|m| m.is_single() && m.trigger().contains(vk)) {
-                st.tap_down = false;
-            }
-        }
     }
 }
 
@@ -501,30 +448,6 @@ mod tests {
         set_dismiss_armed(false);
         assert!(!handle(sh, ESC, true));
         assert!(!handle(sh, ESC, false));
-        assert!(events().is_empty());
-
-        // 设置页转来的按键：钩子一直没收到按键时照常处理
-        const NONE_HELD: Option<[bool; 4]> = Some([false; 4]);
-        const ALT_HELD: Option<[bool; 4]> = Some([true, false, false, false]);
-        LAST_HOOK_KEY.store(0, Ordering::Relaxed);
-        on_page_key(RALT, true, None);
-        on_page_key(RALT, false, None);
-        assert_eq!(events(), ["Tap"]);
-        // 按住右 Alt 再按空格：修订
-        on_page_key(RALT, true, None);
-        on_page_key(SPACE, true, ALT_HELD);
-        assert_eq!(events(), ["Revise"]);
-        // 两个松开事件都丢了（被窗口菜单吞掉）：之后单按空格不能再当成修订
-        on_page_key(SPACE, true, NONE_HELD);
-        on_page_key(SPACE, false, NONE_HELD);
-        assert!(events().is_empty());
-        on_page_key(RALT, true, None);
-        on_page_key(RALT, false, None);
-        assert_eq!(events(), ["Tap"]);
-        // 钩子刚收到过按键（它总比页面先收到同一个按键）：忽略页面转来的，不重复处理
-        LAST_HOOK_KEY.store(now_ms(), Ordering::Relaxed);
-        on_page_key(RALT, true, None);
-        on_page_key(RALT, false, None);
         assert!(events().is_empty());
     }
 }
