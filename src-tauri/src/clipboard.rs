@@ -46,15 +46,23 @@ fn paste(text: &str, restore: bool) -> bool {
     true
 }
 
-/// 通过 Ctrl+C（macOS 上是 Command+C）获取当前选中的文本，之后恢复原剪贴板。
+/// 获取当前选中的文本：先用辅助功能 API 直接读（macOS），读不到再模拟 Ctrl+C（macOS 上是 Command+C）复制，之后恢复原剪贴板。
 /// 用剪贴板序列号判断复制是否真的复制了东西，没选中文本时不会误把旧剪贴板当成选区。
 pub fn get_selected_text() -> String {
+    if let Some(text) = crate::focus::selected_text() {
+        log::info!("Selection read through accessibility");
+        return text.trim().to_string();
+    }
+    // 还按着修饰键时先等它松开，免得混进模拟的快捷键
+    input::wait_modifiers_released(Duration::from_millis(1500));
     let old = get_text();
     let seq = clipboard_sequence();
     input::shortcut('c');
     let start = Instant::now();
+    // 浏览器经网页进程写剪贴板，比原生程序慢
     while clipboard_sequence() == seq {
-        if start.elapsed() > Duration::from_millis(400) {
+        if start.elapsed() > Duration::from_millis(1000) {
+            log::info!("Copy: clipboard unchanged after {:?}", start.elapsed());
             return String::new();
         }
         std::thread::sleep(Duration::from_millis(20));

@@ -148,6 +148,11 @@ fn try_type_probe(uia: &IUIAutomation) -> bool {
 }
 
 /// 综合判定：UIA 快路径 → 探针实测兜底
+/// 选中的文字：Windows 上用复制获取（见 clipboard.rs），这里不读
+pub fn selected_text() -> Option<String> {
+    None
+}
+
 pub fn can_type_here() -> Typable {
     let _com = ComGuard::new();
     let uia = match uia() {

@@ -5,7 +5,8 @@
 
 use super::cf::{CFTypeRef, CF};
 use super::hook::FIELD_USER_DATA;
-use super::keycode::{self, FLAG_COMMAND};
+use super::keycode::{self, FLAG_COMMAND, FLAG_CONTROL, FLAG_OPTION, FLAG_SHIFT};
+use std::time::{Duration, Instant};
 
 /// 写在 Aoide 自己模拟的按键上（事件的用户数据字段），键盘钩子据此跳过它们（见 hook.rs）
 pub const AOIDE_INPUT_MARK: i64 = 0x414F_4944; // "AOID"
@@ -22,7 +23,11 @@ extern "C" {
     fn CGEventSetFlags(event: CFTypeRef, flags: u64);
     fn CGEventSetIntegerValueField(event: CFTypeRef, field: u32, value: i64);
     fn CGEventPost(tap: u32, event: CFTypeRef);
+    fn CGEventSourceFlagsState(state: i32) -> u64;
 }
+
+/// 硬件键盘的实际状态
+const SOURCE_STATE_HID: i32 = 1;
 
 fn post(code: u16, down: bool, flags: u64, text: &[u16]) {
     unsafe {
@@ -45,6 +50,28 @@ pub fn shortcut(letter: char) {
     post(code, true, FLAG_COMMAND, &[]);
     post(code, false, FLAG_COMMAND, &[]);
     post(keycode::KEY_COMMAND, false, 0, &[]);
+}
+
+/// 等用户松开 Shift / Control / Option / Command（最多 timeout），返回是否都已松开。
+/// 按住右 Option 再按空格触发语音修订时，模拟 Command+C 的那一刻右 Option 往往还按着，
+/// 浏览器可能把它当成 Option+Command+C（检查元素），复制不到选中的文字
+pub fn wait_modifiers_released(timeout: Duration) -> bool {
+    const HELD: u64 = FLAG_SHIFT | FLAG_CONTROL | FLAG_OPTION | FLAG_COMMAND;
+    let start = Instant::now();
+    loop {
+        let held = unsafe { CGEventSourceFlagsState(SOURCE_STATE_HID) } & HELD;
+        if held == 0 {
+            if !start.elapsed().is_zero() {
+                log::info!("Modifiers released after {:?}", start.elapsed());
+            }
+            return true;
+        }
+        if start.elapsed() >= timeout {
+            log::info!("Modifiers still held after {timeout:?} (flags {held:#x})");
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 pub fn backspace() {
