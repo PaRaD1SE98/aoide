@@ -228,10 +228,11 @@ fn save_settings(
     Ok(())
 }
 
-/// 设置页转来它收到的按键（键盘钩子收不到按键时的后备，见 hotkeys::on_page_key）
+/// 设置页转来它收到的按键（键盘钩子收不到按键时的后备，见 hotkeys::on_page_key）；
+/// held 是非修饰键按下 / 松开时实际按住的修饰键：Alt、Ctrl、Shift、Win
 #[tauri::command]
-fn page_key(vk: u32, down: bool) {
-    hotkeys::on_page_key(vk, down);
+fn page_key(vk: u32, down: bool, held: Option<[bool; 4]>) {
+    hotkeys::on_page_key(vk, down, held);
 }
 
 /// 录制快捷键：期间所有按键都被拦截（不会触发录音），任意一个键松开时返回组合，Esc 取消。

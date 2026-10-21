@@ -173,8 +173,9 @@ pub(crate) fn on_key(vk: u32, down: bool) -> bool {
 /// 设置页自己收到的按键（见 ui/app.js）：键盘钩子收不到按键时的后备。
 /// 有的电脑上设置窗口在前台时，系统不把按键交给键盘钩子，热键和快捷键录制都没反应，而按键照样送到了页面。
 /// 钩子正常时它总比页面先收到同一个按键（页面还要经过一次进程间转发），
-/// 所以钩子最近 1 秒内收到过按键时忽略页面转来的，避免同一个按键处理两次
-pub(crate) fn on_page_key(vk: u32, down: bool) {
+/// 所以钩子最近 1 秒内收到过按键时忽略页面转来的，避免同一个按键处理两次。
+/// held：非修饰键带着当时实际按住的修饰键（Alt、Ctrl、Shift、Win），见 forget_released_modifiers
+pub(crate) fn on_page_key(vk: u32, down: bool, held: Option<[bool; 4]>) {
     let last = LAST_HOOK_KEY.load(Ordering::Relaxed);
     if last != 0 && now_ms() - last < 1000 {
         return;
@@ -186,7 +187,25 @@ pub(crate) fn on_page_key(vk: u32, down: bool) {
         );
     }
     if let Some(shared) = SHARED.get() {
+        if let Some(held) = held {
+            forget_released_modifiers(shared, held);
+        }
         handle(shared, vk, down);
+    }
+}
+
+/// 页面没收到修饰键的松开事件时（比如被窗口菜单吞掉、松开前焦点离开了窗口），状态机会以为它一直按着：
+/// 之后单按空格也成了「按住右 Alt 再按空格」。按页面报告的实际状态，清掉已经松开的修饰键（不触发任何热键）
+fn forget_released_modifiers(shared: &Shared, held: [bool; 4]) {
+    const GROUPS: [[u32; 2]; 4] = [[0xA4, 0xA5], [0xA2, 0xA3], [0xA0, 0xA1], [0x5B, 0x5C]]; // Alt、Ctrl、Shift、Win
+    let mut st = shared.state.lock().unwrap();
+    let b = shared.bindings.read().unwrap();
+    for (group, held) in GROUPS.iter().zip(held) {
+        for vk in group.iter().filter(|_| !held) {
+            if st.pressed.remove(vk) && b.main.as_ref().is_some_and(|m| m.is_single() && m.trigger().contains(vk)) {
+                st.tap_down = false;
+            }
+        }
     }
 }
 
@@ -475,14 +494,27 @@ mod tests {
         assert!(events().is_empty());
 
         // 设置页转来的按键：钩子一直没收到按键时照常处理
+        const NONE_HELD: Option<[bool; 4]> = Some([false; 4]);
+        const ALT_HELD: Option<[bool; 4]> = Some([true, false, false, false]);
         LAST_HOOK_KEY.store(0, Ordering::Relaxed);
-        on_page_key(RALT, true);
-        on_page_key(RALT, false);
+        on_page_key(RALT, true, None);
+        on_page_key(RALT, false, None);
+        assert_eq!(events(), ["Tap"]);
+        // 按住右 Alt 再按空格：修订
+        on_page_key(RALT, true, None);
+        on_page_key(SPACE, true, ALT_HELD);
+        assert_eq!(events(), ["Revise"]);
+        // 两个松开事件都丢了（被窗口菜单吞掉）：之后单按空格不能再当成修订
+        on_page_key(SPACE, true, NONE_HELD);
+        on_page_key(SPACE, false, NONE_HELD);
+        assert!(events().is_empty());
+        on_page_key(RALT, true, None);
+        on_page_key(RALT, false, None);
         assert_eq!(events(), ["Tap"]);
         // 钩子刚收到过按键（它总比页面先收到同一个按键）：忽略页面转来的，不重复处理
         LAST_HOOK_KEY.store(now_ms(), Ordering::Relaxed);
-        on_page_key(RALT, true);
-        on_page_key(RALT, false);
+        on_page_key(RALT, true, None);
+        on_page_key(RALT, false, None);
         assert!(events().is_empty());
     }
 }

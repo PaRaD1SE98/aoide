@@ -9,9 +9,12 @@ pub mod overlay;
 pub mod popup;
 pub mod sound;
 
-use tauri::{App, AppHandle};
+use tauri::{App, AppHandle, Manager};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Globalization::GetUserDefaultUILanguage;
 use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
+use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
+use windows::Win32::UI::WindowsAndMessaging::{SC_KEYMENU, WM_SYSCOMMAND};
 
 /// 不加载这些 Vulkan 隐式层：它们会注入所有使用 Vulkan 的程序。Aoide 只用 Vulkan 做计算（whisper.cpp），
 /// 游戏叠加层对它毫无用处，而腾讯 WeGame 的叠加层每次加载都会在当前目录写一个加密的 .log 文件。
@@ -44,9 +47,28 @@ pub mod permissions {
     pub fn request(_kind: &str) {}
 }
 
-/// 主窗口（设置）打开 / 关闭时调用；Windows 上没有要做的
-pub fn main_window_shown(_app: &AppHandle) {}
+/// 主窗口（设置）打开时调用：不让键盘打开窗口菜单（见 no_key_menu）
+pub fn main_window_shown(app: &AppHandle) {
+    let Some(hwnd) = app.get_webview_window("settings").and_then(|w| w.hwnd().ok()) else { return };
+    let hwnd = hwnd.0 as isize;
+    // 子类化必须在窗口所属的线程（主线程）上进行
+    let _ = app.run_on_main_thread(move || unsafe {
+        let _ = SetWindowSubclass(HWND(hwnd as _), Some(no_key_menu), 1, 0);
+    });
+}
+
+/// 主窗口关闭时调用；Windows 上没有要做的
 pub fn main_window_closed(_app: &AppHandle) {}
+
+/// 有的电脑上设置窗口在前台时，键盘钩子收不到按键（见 hotkeys.rs 的 on_page_key），Alt 照常交给了 Windows：
+/// 单按 Alt 会让窗口进入菜单模式、吞掉下一个按键；Alt+空格（语音修订的默认快捷键）会弹出窗口菜单。
+/// 这两种都是 Windows 发给外层窗口的 SC_KEYMENU 命令，这里直接丢掉（鼠标打开窗口菜单、Alt+F4 不受影响）
+unsafe extern "system" fn no_key_menu(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM, _id: usize, _data: usize) -> LRESULT {
+    if msg == WM_SYSCOMMAND && (wparam.0 as u32 & 0xFFF0) == SC_KEYMENU {
+        return LRESULT(0);
+    }
+    DefSubclassProc(hwnd, msg, wparam, lparam)
+}
 
 /// Windows 显示语言是否为中文
 pub fn system_language() -> &'static str {
