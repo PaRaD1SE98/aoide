@@ -154,6 +154,8 @@ pub fn capture(timeout: Duration) -> Result<Option<String>, String> {
 static LAST_HOOK_KEY: AtomicU64 = AtomicU64::new(0);
 /// 设置页转来的按键是否已经用上过（第一次用上时记一条日志）
 static PAGE_KEYS_USED: AtomicBool = AtomicBool::new(false);
+/// 上次因为钩子漏掉按键而重装钩子的时间（毫秒，见 now_ms）
+static LAST_REINSTALL: AtomicU64 = AtomicU64::new(0);
 
 fn now_ms() -> u64 {
     static EPOCH: OnceLock<Instant> = OnceLock::new();
@@ -185,6 +187,14 @@ pub(crate) fn on_page_key(vk: u32, down: bool, held: Option<[bool; 4]>) {
             "Keyboard hook is not receiving the keys sent to the settings window; using the keys forwarded by the page. {}",
             crate::platform::hook::diagnose()
         );
+    }
+    // 钩子漏掉了按键：可能是别的程序后装了键盘钩子，排在前面把按键截走、再自己交给了窗口。
+    // 这时重装一次，让 Aoide 的钩子排到它前面，之后的按键（包括组合键里页面收不到的那些）都走钩子。最多每 2 秒一次
+    let now = now_ms();
+    if now - LAST_REINSTALL.load(Ordering::Relaxed) >= 2000 {
+        LAST_REINSTALL.store(now, Ordering::Relaxed);
+        log::info!("Keyboard hook missed a key sent to the settings window, reinstalling it");
+        crate::platform::hook::reinstall();
     }
     if let Some(shared) = SHARED.get() {
         if let Some(held) = held {
