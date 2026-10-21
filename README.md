@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/download-Windows%20installer-0078D4?logo=windows&logoColor=white" alt="Download"></a>
-  <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/download-macOS%20(preview)-000000?logo=apple&logoColor=white" alt="Download for macOS"></a>
+  <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/download-macOS-000000?logo=apple&logoColor=white" alt="Download for macOS"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ea44f" alt="MIT"></a>
   <img src="https://img.shields.io/badge/built%20with-Tauri%202%20%2B%20Rust-24C8DB?logo=tauri&logoColor=white" alt="Tauri 2 + Rust">
 </p>
@@ -30,7 +30,7 @@
 
 <p align="center"><sub><i>Aoide</i> (pronounced "ay-OY-dee") is named after the Greek Muse of voice and song</sub></p>
 
-Aoide is a voice typing app for Windows and macOS (preview), an open-source alternative to commercial tools such as Typeless and Wispr Flow.
+Aoide is a voice typing app for Windows and macOS, an open-source alternative to commercial tools such as Typeless and Wispr Flow.
 
 Your speech is transcribed on your own machine with [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) (via [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)) or [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (GPU-accelerated through Vulkan on Windows and Metal on macOS), optionally cleaned up by an LLM through any OpenAI-compatible API, and typed straight into whatever input box has focus.
 
@@ -72,7 +72,7 @@ No account, no cloud service, no audio leaves your computer unless you point the
 
 **Requirements:** Windows 10/11 x64. SenseVoice only needs the CPU; Whisper models are much faster with a Vulkan-capable GPU driver (any recent NVIDIA, AMD or Intel driver). The WebView2 runtime is preinstalled on Windows 11 and is installed automatically on Windows 10 if missing.
 
-### macOS (preview)
+### macOS
 
 1. Download `Aoide_x.y.z_aarch64.dmg` (Apple silicon) or `Aoide_x.y.z_x64.dmg` (Intel) from [Releases](https://github.com/PaRaD1SE98/aoide/releases), open it and drag Aoide into *Applications*.
 2. Aoide is not notarized by Apple, so macOS blocks the first launch. Open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
@@ -81,7 +81,7 @@ No account, no cloud service, no audio leaves your computer unless you point the
 
 **Requirements:** macOS 11 or later, on Apple silicon or Intel. Whisper models use the GPU (Metal) only on Apple silicon; on Intel Macs they run on the CPU, so SenseVoice is the better choice there.
 
-Aoide is signed ad hoc rather than with an Apple Developer ID, so macOS may stop honoring the Accessibility permission after an update. If the hotkey stops working after updating, remove Aoide from the Accessibility list with "−" and add it again. *Mute other apps while recording* mutes the output device on macOS, which has no per-app volume control.
+Aoide is signed ad hoc rather than with an Apple Developer ID, so macOS treats each update as a new app and asks for the Accessibility permission again. Aoide removes the outdated entry from the Accessibility list by itself; click **Open System Settings** in the Settings window and turn Aoide on again. *Mute other apps while recording* mutes the output device on macOS, which has no per-app volume control.
 
 Models are downloaded from Hugging Face. Set the `HF_ENDPOINT` environment variable to use a mirror.
 

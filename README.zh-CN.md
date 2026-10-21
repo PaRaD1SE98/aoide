@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Windows%20%E5%AE%89%E8%A3%85%E5%8C%85-0078D4?logo=windows&logoColor=white" alt="Download"></a>
-  <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-macOS%EF%BC%88%E9%A2%84%E8%A7%88%E7%89%88%EF%BC%89-000000?logo=apple&logoColor=white" alt="下载 macOS 版"></a>
+  <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-macOS-000000?logo=apple&logoColor=white" alt="下载 macOS 版"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-MIT-2ea44f" alt="MIT"></a>
   <img src="https://img.shields.io/badge/%E5%9F%BA%E4%BA%8E-Tauri%202%20%2B%20Rust-24C8DB?logo=tauri&logoColor=white" alt="Tauri 2 + Rust">
 </p>
@@ -30,7 +30,7 @@
 
 <p align="center"><sub><i>Aoide</i>（阿俄伊得）得名于希腊神话中掌管歌声与嗓音的缪斯</sub></p>
 
-Aoide 是一款 Windows 和 macOS（预览版）平台的语音输入应用，是 Typeless、Wispr Flow 等商业工具的开源替代实现。
+Aoide 是一款 Windows 和 macOS 平台的语音输入应用，是 Typeless、Wispr Flow 等商业工具的开源替代实现。
 
 语音在本机由 [SenseVoice](https://github.com/FunAudioLLM/SenseVoice)（通过 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 运行）或 [whisper.cpp](https://github.com/ggml-org/whisper.cpp)（Windows 上通过 Vulkan、macOS 上通过 Metal 进行 GPU 加速）识别，可选通过任意 OpenAI 格式 API 交给 LLM 润色，然后直接输出到当前焦点所在的输入框。
 
@@ -72,7 +72,7 @@ Aoide 是一款 Windows 和 macOS（预览版）平台的语音输入应用，�
 
 **环境要求：** Windows 10/11 x64。SenseVoice 只需要 CPU；Whisper 模型在支持 Vulkan 的显卡驱动下会快得多（较新的 NVIDIA、AMD、Intel 驱动均支持）。WebView2 运行时在 Windows 11 上已预装，Windows 10 缺失时安装程序会自动安装。
 
-### macOS（预览版）
+### macOS
 
 1. 从 [Releases](https://github.com/PaRaD1SE98/aoide/releases) 下载 `Aoide_x.y.z_aarch64.dmg`（Apple 芯片）或 `Aoide_x.y.z_x64.dmg`（Intel 芯片），打开后把 Aoide 拖进「应用程序」。
 2. Aoide 没有经过 Apple 公证，首次打开会被系统拦下。打开 **系统设置 → 隐私与安全性**，滚动到下方点击 **仍要打开**。
@@ -81,7 +81,7 @@ Aoide 是一款 Windows 和 macOS（预览版）平台的语音输入应用，�
 
 **环境要求：** macOS 11 或更新版本，Apple 芯片或 Intel 芯片均可。Whisper 模型只在 Apple 芯片上用 GPU（Metal）加速，Intel Mac 上只用 CPU，建议使用 SenseVoice。
 
-Aoide 使用临时签名而不是 Apple 开发者证书签名，更新后 macOS 可能不再认可之前授予的辅助功能权限。如果更新后快捷键没反应，在辅助功能列表里用「−」删除 Aoide 再重新添加即可。macOS 没有按程序调节音量的接口，「录音时静音其他程序」在 macOS 上会静音整个输出设备。
+Aoide 使用临时签名而不是 Apple 开发者证书签名，macOS 会把每次更新后的 Aoide 当成新程序，要求重新授予辅助功能权限。Aoide 会自动清掉辅助功能列表里失效的旧条目，在设置窗口点 **打开系统设置**，重新打开 Aoide 的开关即可。macOS 没有按程序调节音量的接口，「录音时静音其他程序」在 macOS 上会静音整个输出设备。
 
 模型从 Hugging Face 下载，可通过环境变量 `HF_ENDPOINT` 使用镜像站。
 

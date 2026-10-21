@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/%E3%83%80%E3%82%A6%E3%83%B3%E3%83%AD%E3%83%BC%E3%83%89-Windows%20%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%A9%E3%83%BC-0078D4?logo=windows&logoColor=white" alt="ダウンロード"></a>
-  <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/%E3%83%80%E3%82%A6%E3%83%B3%E3%83%AD%E3%83%BC%E3%83%89-macOS%EF%BC%88%E3%83%97%E3%83%AC%E3%83%93%E3%83%A5%E3%83%BC%E7%89%88%EF%BC%89-000000?logo=apple&logoColor=white" alt="macOS 版をダウンロード"></a>
+  <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/%E3%83%80%E3%82%A6%E3%83%B3%E3%83%AD%E3%83%BC%E3%83%89-macOS-000000?logo=apple&logoColor=white" alt="macOS 版をダウンロード"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/%E3%83%A9%E3%82%A4%E3%82%BB%E3%83%B3%E3%82%B9-MIT-2ea44f" alt="MIT"></a>
   <img src="https://img.shields.io/badge/built%20with-Tauri%202%20%2B%20Rust-24C8DB?logo=tauri&logoColor=white" alt="Tauri 2 + Rust">
 </p>
@@ -30,7 +30,7 @@
 
 <p align="center"><sub><i>Aoide</i>（アオイデー）は、ギリシャ神話で声と歌をつかさどるムーサの名前に由来します</sub></p>
 
-Aoide は Windows と macOS（プレビュー版）向けの音声入力アプリで、Typeless や Wispr Flow といった商用ツールのオープンソース版です。
+Aoide は Windows と macOS 向けの音声入力アプリで、Typeless や Wispr Flow といった商用ツールのオープンソース版です。
 
 音声は [SenseVoice](https://github.com/FunAudioLLM/SenseVoice)（[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 経由）または [whisper.cpp](https://github.com/ggml-org/whisper.cpp)（Windows では Vulkan、macOS では Metal で GPU アクセラレーション）を使って手元のパソコン上で文字に起こされます。必要に応じて OpenAI 互換の任意の API で LLM が整形し、そのままフォーカスのある入力欄に入力します。
 
@@ -72,7 +72,7 @@ Aoide は Windows と macOS（プレビュー版）向けの音声入力アプ�
 
 **動作環境：** Windows 10/11 x64。SenseVoice は CPU だけで動作します。Whisper モデルは Vulkan 対応の GPU ドライバー（最近の NVIDIA、AMD、Intel のドライバー）があると大幅に速くなります。WebView2 ランタイムは Windows 11 にはプリインストールされており、Windows 10 でない場合はインストーラーが自動でインストールします。
 
-### macOS（プレビュー版）
+### macOS
 
 1. [Releases](https://github.com/PaRaD1SE98/aoide/releases) から `Aoide_x.y.z_aarch64.dmg`（Apple シリコン）または `Aoide_x.y.z_x64.dmg`（Intel）をダウンロードして開き、Aoide を「アプリケーション」にドラッグします。
 2. Aoide は Apple の公証を受けていないため、初回起動は macOS にブロックされます。**システム設定 → プライバシーとセキュリティ** を開き、下にスクロールして **このまま開く** をクリックします。
@@ -81,7 +81,7 @@ Aoide は Windows と macOS（プレビュー版）向けの音声入力アプ�
 
 **動作環境：** macOS 11 以降、Apple シリコンまたは Intel。Whisper モデルが GPU（Metal）を使えるのは Apple シリコンだけです。Intel Mac では CPU で動作するため、SenseVoice のほうが向いています。
 
-Aoide は Apple Developer ID ではなくアドホック署名なので、アップデート後に macOS がアクセシビリティの許可を認めなくなることがあります。更新後にショートカットキーが効かなくなったら、アクセシビリティの一覧から「−」で Aoide を削除し、追加し直してください。macOS にはアプリごとに音量を調整する仕組みがないため、*録音中はほかの音をミュート* は出力デバイス全体をミュートします。
+Aoide は Apple Developer ID ではなくアドホック署名なので、macOS はアップデートのたびに Aoide を新しいアプリとして扱い、アクセシビリティの許可を改めて求めます。アクセシビリティの一覧に残る古い項目は Aoide が自動で削除します。設定画面の **システム設定を開く** をクリックし、Aoide をもう一度オンにしてください。macOS にはアプリごとに音量を調整する仕組みがないため、*録音中はほかの音をミュート* は出力デバイス全体をミュートします。
 
 モデルは Hugging Face からダウンロードします。ミラーを使う場合は環境変数 `HF_ENDPOINT` を設定してください。
 
