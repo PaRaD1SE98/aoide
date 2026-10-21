@@ -228,6 +228,12 @@ fn save_settings(
     Ok(())
 }
 
+/// 设置页转来它收到的按键（键盘钩子收不到按键时的后备，见 hotkeys::on_page_key）
+#[tauri::command]
+fn page_key(vk: u32, down: bool) {
+    hotkeys::on_page_key(vk, down);
+}
+
 /// 录制快捷键：期间所有按键都被拦截（不会触发录音），任意一个键松开时返回组合，Esc 取消。
 /// 一个按键都没收到时返回错误（键盘钩子没在工作）
 #[tauri::command]
@@ -482,6 +488,7 @@ pub fn run() {
             list_models,
             save_settings,
             capture_hotkey,
+            page_key,
             download_model,
             cancel_download,
             open_folder,

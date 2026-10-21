@@ -7,15 +7,22 @@
 
 use crate::i18n::tr;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+use windows::core::PWSTR;
+use windows::Win32::Foundation::{CloseHandle, HANDLE, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Security::{
+    GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation, TokenIntegrityLevel,
+    TOKEN_MANDATORY_LABEL, TOKEN_QUERY,
+};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::{
-    GetCurrentProcessId, GetCurrentThread, GetCurrentThreadId, SetThreadPriority, THREAD_PRIORITY_HIGHEST,
+    GetCurrentProcessId, GetCurrentThread, GetCurrentThreadId, OpenProcess, OpenProcessToken,
+    QueryFullProcessImageNameW, SetThreadPriority, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    THREAD_PRIORITY_HIGHEST,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, GetForegroundWindow, GetMessageW, GetWindowThreadProcessId, PostThreadMessageW,
-    SetWindowsHookExW, UnhookWindowsHookEx, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, LLKHF_INJECTED, MSG,
-    WH_KEYBOARD_LL, WM_APP, WM_KEYDOWN, WM_SYSKEYDOWN,
+    CallNextHookEx, GetForegroundWindow, GetGUIThreadInfo, GetMessageW, GetWindowThreadProcessId,
+    PostThreadMessageW, SetWindowsHookExW, UnhookWindowsHookEx, GUITHREADINFO, HC_ACTION, HHOOK,
+    KBDLLHOOKSTRUCT, LLKHF_INJECTED, MSG, WH_KEYBOARD_LL, WM_APP, WM_KEYDOWN, WM_SYSKEYDOWN,
 };
 
 const WM_APP_REINSTALL: u32 = WM_APP + 1;
@@ -72,6 +79,54 @@ pub fn reinstall() {
     }
 }
 
+/// 诊断（钩子收不到按键时写进日志）：Aoide 和当前接收键盘输入的窗口所在进程，各自的程序名和完整性级别。
+/// Windows 不把发往完整性级别更高的进程的按键交给低层钩子（UIPI）；设置页里接收按键的是 WebView2 的进程
+pub fn diagnose() -> String {
+    unsafe {
+        let fg = GetForegroundWindow();
+        let tid = GetWindowThreadProcessId(fg, None);
+        let mut gti = GUITHREADINFO { cbSize: std::mem::size_of::<GUITHREADINFO>() as u32, ..Default::default() };
+        let focus = if GetGUIThreadInfo(tid, &mut gti).is_ok() && !gti.hwndFocus.is_invalid() { gti.hwndFocus } else { fg };
+        let mut pid = 0;
+        GetWindowThreadProcessId(focus, Some(&mut pid));
+        format!("Aoide: {}; keyboard focus: {}", describe_process(GetCurrentProcessId()), describe_process(pid))
+    }
+}
+
+unsafe fn describe_process(pid: u32) -> String {
+    let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
+        return format!("pid {pid} (no access)");
+    };
+    let mut buf = [0u16; 260];
+    let mut len = buf.len() as u32;
+    let name = match QueryFullProcessImageNameW(process, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut len) {
+        Ok(()) => String::from_utf16_lossy(&buf[..len as usize]).rsplit('\\').next().unwrap_or_default().to_string(),
+        Err(_) => "?".into(),
+    };
+    let level = integrity_level(process).unwrap_or("unknown");
+    let _ = CloseHandle(process);
+    format!("{name} (pid {pid}, {level} integrity)")
+}
+
+unsafe fn integrity_level(process: HANDLE) -> Option<&'static str> {
+    let mut token = HANDLE::default();
+    OpenProcessToken(process, TOKEN_QUERY, &mut token).ok()?;
+    let mut buf = [0u64; 16]; // TOKEN_MANDATORY_LABEL 加上它指向的 SID
+    let mut len = 0;
+    let ok = GetTokenInformation(token, TokenIntegrityLevel, Some(buf.as_mut_ptr().cast()), std::mem::size_of_val(&buf) as u32, &mut len);
+    let _ = CloseHandle(token);
+    ok.ok()?;
+    let sid = (*(buf.as_ptr() as *const TOKEN_MANDATORY_LABEL)).Label.Sid;
+    let rid = *GetSidSubAuthority(sid, u32::from(*GetSidSubAuthorityCount(sid)) - 1);
+    Some(match rid {
+        0x4000.. => "System",
+        0x3000.. => "High",
+        0x2000.. => "Medium",
+        0x1000.. => "Low",
+        _ => "Untrusted",
+    })
+}
+
 /// 录制快捷键时一个按键都没收到：提示用户可能的原因
 pub fn no_events_hint() -> &'static str {
     tr(
@@ -100,4 +155,19 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
         }
     }
     CallNextHookEx(None, code, wparam, lparam)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 诊断信息能读出本进程的程序名和完整性级别
+    #[test]
+    fn describes_own_process() {
+        let me = unsafe { describe_process(GetCurrentProcessId()) };
+        println!("{me}");
+        assert!(me.contains(".exe (pid "), "{me}");
+        assert!(["Medium integrity", "High integrity", "System integrity"].iter().any(|l| me.contains(l)), "{me}");
+        println!("{}", diagnose());
+    }
 }

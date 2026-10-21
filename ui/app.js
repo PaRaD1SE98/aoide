@@ -234,6 +234,28 @@ function el(tag, props = {}, ...children) {
   return e;
 }
 
+// === 键盘钩子的后备 ===
+// 有的电脑上设置窗口在前台时，系统不把按键交给 Aoide 的键盘钩子，热键和快捷键录制都没反应。
+// 页面把自己收到的按键也转给后端的热键状态机；钩子正常时它总是先收到同一个按键，后端会忽略页面转来的
+// （见 hotkeys.rs 的 on_page_key）。键码用 Windows 虚拟键码；修饰键要区分左右，按物理位置换算
+const MODIFIER_VK = {
+  ControlLeft: 0xa2, ControlRight: 0xa3, ShiftLeft: 0xa0, ShiftRight: 0xa1,
+  AltLeft: 0xa4, AltRight: 0xa5, MetaLeft: 0x5b, MetaRight: 0x5c,
+};
+let capturing = false;
+
+function forwardKey(e, down) {
+  const vk = MODIFIER_VK[e.code] ?? e.keyCode;
+  // 229：输入法正在组字
+  if (!vk || vk === 229) return;
+  invoke("page_key", { vk, down });
+  // 录制快捷键时按的键不应触发页面里的操作；Alt+空格（语音修订的默认快捷键）会弹出窗口的系统菜单
+  if (capturing || (e.altKey && e.code === "Space")) e.preventDefault();
+}
+
+window.addEventListener("keydown", (e) => forwardKey(e, true), true);
+window.addEventListener("keyup", (e) => forwardKey(e, false), true);
+
 // === 系统权限（macOS）：缺少时在页面顶部列出，授权后自动消失 ===
 const PERMISSIONS = [
   { kind: "accessibility", icon: "&#xE765;" },
@@ -443,6 +465,7 @@ function bind() {
       document.querySelectorAll("[data-capture]").forEach((b) => (b.disabled = true));
       btn.classList.add("capturing");
       btn.textContent = t("btn.capturing");
+      capturing = true;
       try {
         const combo = await invoke("capture_hotkey").catch((e) => {
           toast(String(e), true);
@@ -459,6 +482,7 @@ function bind() {
           }
         }
       } finally {
+        capturing = false;
         btn.classList.remove("capturing");
         btn.textContent = t("btn.change");
         document.querySelectorAll("[data-capture]").forEach((b) => (b.disabled = false));

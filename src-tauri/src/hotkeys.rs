@@ -11,10 +11,10 @@
 
 use crate::keys::{self, Hotkey};
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Mutex, OnceLock, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy, Debug)]
 pub enum HotkeyEvent {
@@ -150,13 +150,44 @@ pub fn capture(timeout: Duration) -> Result<Option<String>, String> {
     }
 }
 
+/// 钩子最近一次收到按键的时间（毫秒，见 now_ms；0 表示还没收到过）
+static LAST_HOOK_KEY: AtomicU64 = AtomicU64::new(0);
+/// 设置页转来的按键是否已经用上过（第一次用上时记一条日志）
+static PAGE_KEYS_USED: AtomicBool = AtomicBool::new(false);
+
+fn now_ms() -> u64 {
+    static EPOCH: OnceLock<Instant> = OnceLock::new();
+    EPOCH.get_or_init(Instant::now).elapsed().as_millis() as u64 + 1
+}
+
 /// 钩子收到一个按键（Aoide 自己模拟的按键已由钩子排除）；返回 true 表示拦截该事件
 pub(crate) fn on_key(vk: u32, down: bool) -> bool {
+    LAST_HOOK_KEY.store(now_ms(), Ordering::Relaxed);
     if !RECEIVING.swap(true, Ordering::Relaxed) {
         // 写日志可能较慢，放到别的线程，钩子回调要尽快返回
         std::thread::spawn(|| log::info!("Keyboard hook is receiving key events"));
     }
     SHARED.get().is_some_and(|shared| handle(shared, vk, down))
+}
+
+/// 设置页自己收到的按键（见 ui/app.js）：键盘钩子收不到按键时的后备。
+/// 有的电脑上设置窗口在前台时，系统不把按键交给键盘钩子，热键和快捷键录制都没反应，而按键照样送到了页面。
+/// 钩子正常时它总比页面先收到同一个按键（页面还要经过一次进程间转发），
+/// 所以钩子最近 1 秒内收到过按键时忽略页面转来的，避免同一个按键处理两次
+pub(crate) fn on_page_key(vk: u32, down: bool) {
+    let last = LAST_HOOK_KEY.load(Ordering::Relaxed);
+    if last != 0 && now_ms() - last < 1000 {
+        return;
+    }
+    if !PAGE_KEYS_USED.swap(true, Ordering::Relaxed) {
+        log::warn!(
+            "Keyboard hook is not receiving the keys sent to the settings window; using the keys forwarded by the page. {}",
+            crate::platform::hook::diagnose()
+        );
+    }
+    if let Some(shared) = SHARED.get() {
+        handle(shared, vk, down);
+    }
 }
 
 /// 正被按住的单键主热键（只有它的按下事件被拦截）。macOS 拦截了修饰键的事件，系统仍会把它记为按住，
@@ -441,6 +472,17 @@ mod tests {
         set_dismiss_armed(false);
         assert!(!handle(sh, ESC, true));
         assert!(!handle(sh, ESC, false));
+        assert!(events().is_empty());
+
+        // 设置页转来的按键：钩子一直没收到按键时照常处理
+        LAST_HOOK_KEY.store(0, Ordering::Relaxed);
+        on_page_key(RALT, true);
+        on_page_key(RALT, false);
+        assert_eq!(events(), ["Tap"]);
+        // 钩子刚收到过按键（它总比页面先收到同一个按键）：忽略页面转来的，不重复处理
+        LAST_HOOK_KEY.store(now_ms(), Ordering::Relaxed);
+        on_page_key(RALT, true);
+        on_page_key(RALT, false);
         assert!(events().is_empty());
     }
 }
