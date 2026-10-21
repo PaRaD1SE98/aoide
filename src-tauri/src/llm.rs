@@ -119,7 +119,7 @@ impl<'a> Api<'a> {
     fn from(cfg: &'a Config) -> Result<Self, String> {
         let base = cfg.polish_api.trim().trim_end_matches('/');
         if base.is_empty() {
-            return Err(crate::i18n::tr("未配置 LLM API（在设置中填写 API 地址）", "LLM API is not configured (set the API base in Settings)").into());
+            return Err(crate::i18n::tr("未配置 LLM API（在设置中填写 API 地址）", "LLM API is not configured (set the API base in Settings)", "LLM API が設定されていません（設定で API のアドレスを入力してください）").into());
         }
         Ok(Self { base, key: cfg.polish_api_key.trim(), model: cfg.polish_model.trim(), no_think: cfg.polish_no_think })
     }
@@ -191,6 +191,7 @@ impl<'a> Api<'a> {
             return Err(crate::trf!(
                 "LLM 返回为空（finish_reason={}，可能思考耗尽了 token 额度）",
                 "The LLM returned nothing (finish_reason={}; thinking may have used up the token budget)",
+                "LLM から空の応答が返されました（finish_reason={}。思考でトークンの上限を使い切った可能性があります）",
                 choice["finish_reason"]
             ));
         }

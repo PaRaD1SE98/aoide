@@ -65,12 +65,12 @@ function updateResetButtons() {
 }
 
 /** 界面语言设置（auto / zh / en）→ 实际语言 */
-const resolveLang = (setting) => (setting === "zh" || setting === "en" ? setting : systemLanguage);
+const resolveLang = (setting) => (["zh", "en", "ja"].includes(setting) ? setting : systemLanguage);
 
 // === 快捷键显示 ===
 const KEY_LABELS = {
   ctrl: "Ctrl", alt: "Alt", shift: "Shift", windows: "Win", esc: "Esc", space: "Space",
-  option: "Option", command: "Command", fn: "fn",
+  option: "Option", command: "Command", fn: "fn", convert: "変換", nonconvert: "無変換",
   enter: "Enter", tab: "Tab", backspace: "Backspace", delete: "Delete", insert: "Insert",
   home: "Home", end: "End", "page up": "PgUp", "page down": "PgDn", "caps lock": "Caps Lock",
   "print screen": "PrtSc", "scroll lock": "Scroll Lock", pause: "Pause", menu: "Menu",
@@ -117,7 +117,7 @@ function renderModelStatus() {
   const m = models.find((x) => x.id === state.config.model);
   if (!m) return;
   const parts = [t(m.downloaded ? "model.downloaded" : "model.notDownloaded"), formatSize(m.size_mb)];
-  const note = m.note[LANG === "en" ? 1 : 0];
+  const note = m.note[["zh", "en", "ja"].indexOf(LANG)];
   if (note) parts.push(note);
   $("model-desc").textContent = parts.join(" · ");
   $("download-btn").hidden = m.downloaded || downloading !== null;

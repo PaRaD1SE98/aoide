@@ -71,6 +71,7 @@ pub async fn check(app: &AppHandle, notify: bool) -> Result<Option<UpdateInfo>, 
         app.state::<Arc<Controller>>().notify(&trf!(
             "Aoide {} 可以更新了：点击托盘菜单「更新到 {}」或在设置中更新",
             "Aoide {} is available: choose \"Update to {}\" in the tray menu or update from Settings",
+            "Aoide {} に更新できます。トレイメニューの「{} に更新」か、設定から更新してください",
             found.version,
             found.version
         ));
@@ -97,17 +98,17 @@ pub fn start(app: AppHandle) {
 /// macOS 上替换完程序包后重启
 pub async fn install(app: &AppHandle) -> Result<(), String> {
     if app.state::<Arc<Controller>>().is_busy() {
-        return Err(tr("正在录音或识别，请稍后再更新", "Aoide is recording or transcribing. Update when it is done").into());
+        return Err(tr("正在录音或识别，请稍后再更新", "Aoide is recording or transcribing. Update when it is done", "録音中または認識中です。終わってから更新してください").into());
     }
     let state = app.state::<UpdaterState>();
     if state.installing.swap(true, Ordering::SeqCst) {
-        return Err(tr("正在更新", "An update is already in progress").into());
+        return Err(tr("正在更新", "An update is already in progress", "更新しています").into());
     }
     let result = async {
         // 先按最新的检查结果来（可能刚发布了更新的版本）
         let update = match app.updater().map_err(|e| e.to_string())?.check().await {
             Ok(Some(u)) => u,
-            Ok(None) => return Err(tr("已是最新版本", "Aoide is up to date").to_string()),
+            Ok(None) => return Err(tr("已是最新版本", "Aoide is up to date", "Aoide は最新です").to_string()),
             Err(e) => state.available.lock().unwrap().clone().ok_or_else(|| e.to_string())?,
         };
         log::info!("Updating to {}", update.version);

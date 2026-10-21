@@ -40,7 +40,7 @@ No account, no cloud service, no audio leaves your computer unless you point the
 | **Cancel** | Press `Esc` while recording or transcribing | The task is discarded, nothing is typed |
 | **Voice edit** | Select some text → hold `Right Alt` and press `Space` → say how to change it → tap `Right Alt` | The LLM rewrites the selection according to your instruction and replaces it |
 
-> On macOS the default hotkey is `Right Option`, and the tray icon lives in the menu bar.
+> On macOS the default hotkey is `Right Option`, and the tray icon lives in the menu bar. On Japanese (JIS) keyboards, which often lack these keys, the default is `変換` (Henkan) on Windows and `Right Command` on macOS; voice edit is that key + `Space`.
 
 - **Feedback**: distinct sounds for start, stop and cancel; a floating bar at the bottom of the screen shows what Aoide is doing; the tray icon gets a red badge while recording and a green one when done. Errors and other messages appear in a small notice at the bottom of the screen that closes on its own (Aoide doesn't use system notifications, so they can't be missed when notifications are off).
 
@@ -56,7 +56,7 @@ No account, no cloud service, no audio leaves your computer unless you point the
 - **Automatic updates**: Aoide checks for a new version once a day, lets you know with a notice at the bottom of the screen and a tray menu item, and updates in one click: the signed installer is downloaded, verified and installed, and Aoide restarts on its own. It never updates while you are dictating. You can turn the daily check off and check manually under **Settings → About**.
 - **Two speech engines**: SenseVoice (default) is fast on any CPU, very accurate for Chinese and rarely hallucinates; Whisper models run on the GPU through Vulkan (NVIDIA, AMD or Intel, no CUDA install required) and fall back to CPU automatically. On Apple silicon Macs they run on the GPU through Metal.
 
-> The interface is available in English and Chinese (Settings → *Display language*; follows the system language by default). Transcription supports Chinese, English, Japanese, Korean, Cantonese and more.
+> The interface is available in English, Chinese and Japanese (Settings → *Display language*; follows the system language by default). Transcription supports Chinese, English, Japanese, Korean, Cantonese and more.
 
 ## Installation
 

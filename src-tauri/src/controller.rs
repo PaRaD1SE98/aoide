@@ -247,7 +247,7 @@ impl Controller {
                 sound::play(Cue::Cancel);
                 self.set_tray(TrayState::Idle);
                 self.finish_overlay();
-                self.notify(tr("没有录到声音", "No audio was recorded"));
+                self.notify(tr("没有录到声音", "No audio was recorded", "音声が録音されませんでした"));
                 None
             }
         }
@@ -330,7 +330,7 @@ impl Controller {
             }
             Err(e) => {
                 log::error!("Transcribe error: {e}");
-                self.notify(&trf!("错误：{e}", "Error: {e}"));
+                self.notify(&trf!("错误：{e}", "Error: {e}", "エラー: {e}"));
                 self.set_tray(TrayState::Idle);
             }
         }
@@ -450,7 +450,7 @@ impl Controller {
             return true;
         }
         log::info!("No input focused, showing result card: {text}");
-        result_card::show(&self.app, tr("没有检测到输入框，识别结果如下", "No input box detected. Here is the transcript"), text);
+        result_card::show(&self.app, tr("没有检测到输入框，识别结果如下", "No input box detected. Here is the transcript", "入力欄が見つからないため、認識結果をここに表示します"), text);
         false
     }
 
@@ -482,7 +482,7 @@ impl Controller {
             }
         }
         if selected.is_empty() {
-            self.notify(tr("请先选中要修改的文本", "Select the text you want to edit first"));
+            self.notify(tr("请先选中要修改的文本", "Select the text you want to edit first", "修正したいテキストを先に選択してください"));
             return;
         }
         self.set_tray(TrayState::Recording);
@@ -529,21 +529,21 @@ impl Controller {
                 return Ok(());
             }
             if revised.is_empty() || revised == selected {
-                self.notify(tr("未检测到修改意见", "No edit instruction detected"));
+                self.notify(tr("未检测到修改意见", "No edit instruction detected", "修正の指示が聞き取れませんでした"));
                 return Ok(());
             }
             thread::sleep(Duration::from_millis(100));
             if focus::can_type_here() {
                 let pasted = clipboard::paste_text(&revised); // 粘贴替换选中，之后恢复原剪贴板
                 log::info!("Revised: {revised}");
-                self.notify(tr("已修改", "Text updated"));
+                self.notify(tr("已修改", "Text updated", "テキストを修正しました"));
                 if pasted && cfg.learn_from_edits {
                     learn::watch(self.app.clone(), revised.clone(), cfg.clone());
                 }
             } else {
                 // 选区不可编辑（如网页正文），把修改结果放进卡片，由用户决定复制到哪
                 log::info!("Revised (result card): {revised}");
-                result_card::show(&self.app, tr("选中的内容不可编辑，修改结果如下", "The selection is not editable. Here is the edited text"), &revised);
+                result_card::show(&self.app, tr("选中的内容不可编辑，修改结果如下", "The selection is not editable. Here is the edited text", "選択した内容は編集できないため、修正結果をここに表示します"), &revised);
             }
             Ok(())
         })();
@@ -552,7 +552,7 @@ impl Controller {
         }
         if let Err(e) = result {
             log::error!("Revision error: {e}");
-            self.notify(&trf!("修订失败：{e}", "Edit failed: {e}"));
+            self.notify(&trf!("修订失败：{e}", "Edit failed: {e}", "修正に失敗しました: {e}"));
         }
         self.finish_overlay();
         self.flash_done();

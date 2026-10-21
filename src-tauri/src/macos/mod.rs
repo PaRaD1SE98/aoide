@@ -38,6 +38,12 @@ extern "C" {
     fn CFLocaleCopyPreferredLanguages() -> CFTypeRef;
 }
 
+#[link(name = "Carbon", kind = "framework")]
+extern "C" {
+    fn LMGetKbdType() -> u8;
+    fn KBGetLayoutType(keyboard_type: i16) -> u32;
+}
+
 /// 进程启动时最先调用；macOS 上没有要做的
 pub fn prepare() {}
 
@@ -87,16 +93,25 @@ pub fn accessibility_trusted(prompt: bool) -> bool {
     }
 }
 
-/// 系统首选语言是否为中文
+/// 系统首选语言：中文 zh、日语 ja，其他 en
 pub fn system_language() -> &'static str {
     let first = CF::owned(unsafe { CFLocaleCopyPreferredLanguages() })
         .and_then(|langs| langs.array_item(0))
-        .and_then(|lang| lang.to_string());
-    if first.is_some_and(|l| l.starts_with("zh")) {
+        .and_then(|lang| lang.to_string())
+        .unwrap_or_default();
+    if first.starts_with("zh") {
         "zh"
+    } else if first.starts_with("ja") {
+        "ja"
     } else {
         "en"
     }
+}
+
+/// 是否日文键盘（JIS 布局：空格右侧是「かな」和右 Command，没有右 Option）
+pub fn jis_keyboard() -> bool {
+    const LAYOUT_JIS: u32 = u32::from_be_bytes(*b"JIS ");
+    unsafe { KBGetLayoutType(i16::from(LMGetKbdType())) == LAYOUT_JIS }
 }
 
 /// 剪贴板内容每次改变都会变化的序号
