@@ -211,13 +211,18 @@ impl Controller {
         thread::spawn(focus::warm_up);
     }
 
-    pub fn model_downloaded(&self) -> bool {
+    /// 语音识别能用了：本地模型已下载，或用 API 时已填写 API 地址
+    pub fn speech_ready(&self) -> bool {
         let cfg = self.config();
-        models::is_downloaded(&cfg.model_dir(), &cfg.model)
+        if cfg.speech_via_api() {
+            !cfg.speech_api.trim().is_empty()
+        } else {
+            models::is_downloaded(&cfg.model_dir(), &cfg.model)
+        }
     }
 
     pub fn preload_model(self: &Arc<Self>) {
-        if !self.model_downloaded() {
+        if !self.speech_ready() {
             return;
         }
         let me = self.clone();
@@ -233,7 +238,7 @@ impl Controller {
     pub fn apply_config(self: &Arc<Self>, new: Config) {
         let old = std::mem::replace(&mut *self.config.write().unwrap(), new.clone());
         hotkeys::update(&new.hotkey, &new.revise_hotkey, &new.revise_stop_hotkey, &new.cancel_hotkey);
-        if (&old.model, &old.model_dir, &old.device) != (&new.model, &new.model_dir, &new.device) {
+        if (&old.speech_source, &old.model, &old.model_dir, &old.device) != (&new.speech_source, &new.model, &new.model_dir, &new.device) {
             self.transcriber.reset();
             self.preload_model();
         }

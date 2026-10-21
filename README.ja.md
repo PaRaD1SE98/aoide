@@ -34,7 +34,7 @@ Aoide は Windows と macOS 向けの音声入力アプリで、Typeless や Wis
 
 音声は [SenseVoice](https://github.com/FunAudioLLM/SenseVoice)（[sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 経由）または [whisper.cpp](https://github.com/ggml-org/whisper.cpp)（Windows では Vulkan、macOS では Metal で GPU アクセラレーション）を使って手元のパソコン上で文字に起こされます。必要に応じて OpenAI 互換の任意の API で LLM が整形し、そのままフォーカスのある入力欄に入力します。
 
-アカウントもクラウドサービスも不要です。LLM の処理先をリモートの API にしない限り、音声がパソコンの外に出ることはありません。
+アカウントもクラウドサービスも不要です。ローカルモデルの代わりに音声認識 API を使うよう設定しない限り、音声がパソコンの外に出ることはありません。
 
 ## 機能
 
@@ -93,6 +93,22 @@ macOS では Aoide はメニューバーで動作します。アイコンをク�
 
 ![設定画面](docs/images/ja/settings.png)
 
+### API で音声認識する（任意）
+
+既定ではローカルモデルで認識します。クラウドや自前のサービスを使う場合は、**設定 → 音声認識 → 認識方法** で **API** を選び、API ベース URL、API Key、モデル名を入力します。
+
+Aoide は OpenAI の音声認識形式（`POST {API ベース URL}/audio/transcriptions`）を使います。事実上の標準形式で、多くのサービスが対応しています：
+
+| サービス | API ベース URL | モデル名（例） |
+|---|---|---|
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini-transcribe`、`whisper-1` |
+| Groq | `https://api.groq.com/openai/v1` | `whisper-large-v3-turbo` |
+| SiliconFlow | `https://api.siliconflow.cn/v1` | `FunAudioLLM/SenseVoiceSmall` |
+| Mistral | `https://api.mistral.ai/v1` | `voxtral-mini-latest` |
+| 自前のサーバー（vLLM、LocalAI など） | 例：`http://localhost:8000/v1` | 提供しているモデル |
+
+ほかの形式のサービス（Deepgram、Azure、Gemini、ElevenLabs など）は、[LiteLLM](https://docs.litellm.ai/docs/audio_transcription) でこの形式に変換すれば使えます。認識言語と単語帳（プロンプトとして）も一緒に送信します。ローカルモデルをダウンロード済みの場合は、先にローカルで無音部分を取り除くため、話していない録音はアップロードされません。
+
 ### LLM の設定（整形・音声で修正）
 
 ローカル・リモートを問わず、OpenAI 互換の API なら何でも使えます。設定画面で次の項目を入力します。
@@ -114,6 +130,8 @@ macOS では Aoide はメニューバーで動作します。アイコンをク�
 | `revise_hotkey` | `right alt+space` | 音声で修正を開始。`<メインのキー>+<キー>` は、メインのキーを押したままそのキーを押すことを表します |
 | `revise_stop_hotkey` | `right alt` | 音声で修正を終了（`hotkey` と同じ場合は 1 回押しの動作にまとめます） |
 | `cancel_hotkey` | `esc` | 録音中・認識中の処理をキャンセル。処理中だけこのキーを横取りします |
+| `speech_source` | `local` | 音声認識の方法：`local`（ローカルモデル）/ `api`（OpenAI 互換の音声認識 API） |
+| `speech_api` / `speech_api_key` / `speech_api_model` | *（空）* | `speech_source` が `api` のときに使う API ベース URL、Key、モデル名 |
 | `model` | `sense-voice` | SenseVoice：`sense-voice`（中・英・日・韓・粵）/ `sense-voice-yue`（広東語強化版）。Whisper：`tiny` / `base` / `small` / `medium` / `large-v3-turbo-q5_0` / `large-v3-turbo` / `large-v2` / `large-v3` |
 | `model_dir` | *（空）* | モデルの保存先。空欄 = `%LOCALAPPDATA%\Aoide\models`（macOS：`~/Library/Application Support/Aoide/models`） |
 | `language` | `auto` | 文字起こしの言語。`auto` で自動検出。SenseVoice は `zh` / `en` / `ja` / `ko` / `yue` / `auto` に対応 |

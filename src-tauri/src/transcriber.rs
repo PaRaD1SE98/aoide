@@ -1,4 +1,4 @@
-//! 语音识别：whisper.cpp / SenseVoice（sherpa-onnx）模型加载与转录
+//! 语音识别：whisper.cpp / SenseVoice（sherpa-onnx）模型加载与转录；设置为用 API 时交给 speech_api.rs
 
 use crate::audio::{self, SAMPLE_RATE};
 use crate::config::Config;
@@ -48,6 +48,8 @@ struct Loaded {
 #[derive(Default)]
 pub struct Transcriber {
     inner: Mutex<Option<Loaded>>,
+    /// 用 API 识别时单独加载的 VAD（本地模型的在 Loaded 里）；下载过本地模型才有 VAD 文件
+    api_vad: Mutex<Option<WhisperVadContext>>,
 }
 
 impl Transcriber {
@@ -79,16 +81,24 @@ impl Transcriber {
     }
 
     pub fn preload(&self, cfg: &Config) -> Result<(), String> {
+        if cfg.speech_via_api() {
+            self.api_speech_only(&[], cfg);
+            return Ok(());
+        }
         let mut slot = self.inner.lock().unwrap();
         Self::ensure(&mut slot, cfg).map(|_| ())
     }
 
     pub fn reset(&self) {
         *self.inner.lock().unwrap() = None;
+        *self.api_vad.lock().unwrap() = None;
     }
 
     /// audio: 16 kHz 单声道；返回拼接后的文本
     pub fn transcribe(&self, audio: &[f32], cfg: &Config) -> Result<String, String> {
+        if cfg.speech_via_api() {
+            return self.transcribe_api(audio, cfg);
+        }
         let mut slot = self.inner.lock().unwrap();
         let loaded = Self::ensure(&mut slot, cfg)?;
 
@@ -116,6 +126,37 @@ impl Transcriber {
                 rec.decode(&stream);
                 Ok(stream.get_result().map(|r| drop_final_period(r.text.trim())).unwrap_or_default())
             }
+        }
+    }
+}
+
+impl Transcriber {
+    /// 用语音识别 API 转录：先在本地用 VAD 切掉静音（没有语音就不上传），再发给 API
+    fn transcribe_api(&self, audio: &[f32], cfg: &Config) -> Result<String, String> {
+        let Some(speech) = self.api_speech_only(audio, cfg) else {
+            log::info!("VAD: no speech detected");
+            return Ok(String::new());
+        };
+        let terms = if cfg.vocab_enabled { crate::vocab::prompt_terms() } else { String::new() };
+        let text = crate::speech_api::transcribe(&speech, SAMPLE_RATE, &terms, cfg)?;
+        // 硅基流动等服务也提供 SenseVoice，同样有句末加句号的倾向
+        let sense_voice = cfg.speech_api_model.to_lowercase().replace(['-', '_'], "").contains("sensevoice");
+        Ok(if sense_voice { drop_final_period(&text) } else { text })
+    }
+
+    /// 切掉静音段；没有 VAD 文件时原样返回，完全没有语音返回 None。
+    /// VAD 文件随本地模型一起下载，用 API 时可能没有；之后下载了就加载
+    fn api_speech_only(&self, audio: &[f32], cfg: &Config) -> Option<Vec<f32>> {
+        let mut vad = self.api_vad.lock().unwrap();
+        if vad.is_none() && models::vad_path(&cfg.model_dir()).exists() {
+            *vad = load_vad(cfg);
+        }
+        if audio.is_empty() {
+            return Some(Vec::new());
+        }
+        match vad.as_mut() {
+            Some(vad) => speech_only(vad, audio),
+            None => Some(audio.to_vec()),
         }
     }
 }

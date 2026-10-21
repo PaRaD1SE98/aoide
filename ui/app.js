@@ -137,6 +137,13 @@ function renderModelStatus() {
   $("device-desc").textContent = t(cpuOnly ? "device.cpuOnly" : "device.gpu");
 }
 
+/** 识别方式：只显示本地模型或 API 的设置 */
+function renderSource() {
+  const api = state.config.speech_source === "api";
+  $("pane-speech").dataset.source = api ? "api" : "local";
+  $("source-desc").textContent = t(api ? "source.apiDesc" : "source.localDesc");
+}
+
 function render() {
   const c = state.config;
   document.querySelectorAll("[data-keys]").forEach((el) => renderKeys(el, c[el.dataset.keys]));
@@ -153,6 +160,7 @@ function render() {
   });
   $("model-dir").placeholder = defaultModelDir;
   renderModels();
+  renderSource();
   updateResetButtons();
 }
 
@@ -201,6 +209,7 @@ function toast(msg, isError = false) {
 function applyLanguage() {
   applyI18n(resolveLang(state.config.ui_language));
   renderModels();
+  renderSource();
   renderVocab();
   renderPermissions();
   setUpdateStatus(updateStatus.key, updateStatus.vars, updateStatus.cls);
@@ -521,10 +530,10 @@ function bind() {
     b.addEventListener("click", () => invoke("open_url", { url: b.dataset.url })));
   $("licenses-btn").addEventListener("click", () => invoke("open_licenses").catch((e) => toast(String(e), true)));
 
-  $("reveal-btn").addEventListener("click", () => {
-    const input = $("api-key");
+  document.querySelectorAll(".reveal-btn").forEach((b) => b.addEventListener("click", () => {
+    const input = $(b.dataset.target);
     input.type = input.type === "password" ? "text" : "password";
-  });
+  }));
 
   // 关闭窗口前把还在等待的输入保存掉
   window.__TAURI__.window.getCurrentWindow().onCloseRequested(async () => {

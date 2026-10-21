@@ -138,6 +138,50 @@
       <h1 class="pane-title" data-i18n="sec.speech">语音识别</h1>
       <div class="group">
         <div class="card">
+          <span class="ico">&#xE7F4;</span>
+          <div class="text">
+            <div class="title" data-i18n="source.title">识别方式</div>
+            <div class="desc" id="source-desc"></div>
+          </div>
+          <div class="control">
+            <div class="segmented" data-key="speech_source">
+              <button data-value="local" data-i18n="source.local">本地模型</button>
+              <button data-value="api">API</button>
+            </div>
+          </div>
+        </div>
+        <div class="card api-only">
+          <span class="ico">&#xE71B;</span>
+          <div class="text">
+            <div class="title" data-i18n="api.title">API 地址</div>
+            <div class="desc" data-i18n="speechApi.desc">OpenAI 格式的语音识别接口（/audio/transcriptions）</div>
+          </div>
+          <div class="control wide">
+            <input type="text" data-key="speech_api" placeholder="https://api.openai.com/v1" spellcheck="false">
+          </div>
+        </div>
+        <div class="card api-only">
+          <span class="ico">&#xE192;</span>
+          <div class="text">
+            <div class="title">API Key</div>
+            <div class="desc" data-i18n="apiKey.desc">服务端不需要时留空</div>
+          </div>
+          <div class="control wide">
+            <input type="password" id="speech-api-key" data-key="speech_api_key" spellcheck="false" autocomplete="off">
+            <button class="btn icon-btn reveal-btn" data-target="speech-api-key" data-i18n-title="btn.reveal" title="显示 / 隐藏">&#xE7B3;</button>
+          </div>
+        </div>
+        <div class="card api-only">
+          <span class="ico">&#xE99A;</span>
+          <div class="text">
+            <div class="title" data-i18n="llmModel.title">模型名</div>
+            <div class="desc" data-i18n="speechModel.desc">例如 whisper-1、gpt-4o-mini-transcribe、FunAudioLLM/SenseVoiceSmall</div>
+          </div>
+          <div class="control wide">
+            <input type="text" data-key="speech_api_model" spellcheck="false">
+          </div>
+        </div>
+        <div class="card local-only">
           <span class="ico">&#xE720;</span>
           <div class="text">
             <div class="title" data-i18n="model.title">识别模型</div>
@@ -148,7 +192,7 @@
             <button class="btn accent" id="download-btn" data-i18n="btn.download" hidden>下载</button>
           </div>
         </div>
-        <div class="card sub" id="download-row" hidden>
+        <div class="card sub local-only" id="download-row" hidden>
           <div class="text grow">
             <div class="progress-head">
               <span id="download-text"></span>
@@ -160,7 +204,7 @@
             <button class="btn" id="cancel-btn" data-i18n="btn.cancel">取消</button>
           </div>
         </div>
-        <div class="card">
+        <div class="card local-only">
           <span class="ico">&#xE8B7;</span>
           <div class="text">
             <div class="title" data-i18n="modelDir.title">模型目录</div>
@@ -189,7 +233,7 @@
             </select>
           </div>
         </div>
-        <div class="card">
+        <div class="card local-only">
           <span class="ico">&#xE7F4;</span>
           <div class="text">
             <div class="title" data-i18n="device.title">推理设备</div>
@@ -300,7 +344,7 @@
           </div>
           <div class="control wide">
             <input type="password" id="api-key" data-key="polish_api_key" spellcheck="false" autocomplete="off">
-            <button class="btn icon-btn" id="reveal-btn" data-i18n-title="btn.reveal" title="显示 / 隐藏">&#xE7B3;</button>
+            <button class="btn icon-btn reveal-btn" data-target="api-key" data-i18n-title="btn.reveal" title="显示 / 隐藏">&#xE7B3;</button>
           </div>
         </div>
         <div class="card">

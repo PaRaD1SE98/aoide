@@ -328,6 +328,8 @@ kbd {
 .vocab-empty { font-size: 13px; }
 
 [hidden] { display: none !important; }
+/* 语音识别页：按识别方式只显示本地模型或 API 的设置 */
+#pane-speech[data-source="api"] .local-only, #pane-speech:not([data-source="api"]) .api-only { display: none !important; }
 
 /* 窄窗口：导航只显示图标 */
 @media (max-width: 760px) {
