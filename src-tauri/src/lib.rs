@@ -64,7 +64,10 @@ pub fn open_settings(app: &AppHandle) {
             w.on_window_event(move |e| match e {
                 tauri::WindowEvent::Destroyed => platform::main_window_closed(&app),
                 // 设置窗口在前台时其他程序的键盘钩子可能先拦下按键，重新安装让 Aoide 的钩子排到前面（见 win/hook.rs）
-                tauri::WindowEvent::Focused(true) => platform::hook::reinstall(),
+                tauri::WindowEvent::Focused(true) => {
+                    platform::hook::reinstall();
+                    log_focus_diagnosis();
+                }
                 _ => {}
             });
         }
@@ -332,6 +335,18 @@ fn close_notice(app: AppHandle) {
     notice::close(&app)
 }
 
+/// 设置窗口第一次获得焦点时，记下接收键盘输入的进程和权限级别（排查键盘钩子收不到按键的问题，见 win/hook.rs）。
+/// 等一会儿再记：刚获得焦点时，键盘焦点还没落到页面（WebView2 的进程）上
+fn log_focus_diagnosis() {
+    static LOGGED: AtomicBool = AtomicBool::new(false);
+    if !LOGGED.swap(true, Ordering::SeqCst) {
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(800));
+            log::info!("Settings window focused. {}", platform::hook::diagnose());
+        });
+    }
+}
+
 /// 有小窗（结果卡片、词条入库提示、提示小窗）开着时，让键盘钩子用 Esc 关闭它们
 pub(crate) fn refresh_dismiss_key() {
     hotkeys::set_dismiss_armed(result_card::is_open() || learned_card::is_open() || notice::is_open());
@@ -517,6 +532,7 @@ pub fn run() {
         ])
         .setup(|app| {
             log::info!("=== Aoide {} Started ===", app.package_info().version);
+            log::info!("WebView version: {}", tauri::webview_version().unwrap_or_default());
             // whisper.cpp 默认把每个 token 的调试信息打到 stderr，这里统一屏蔽
             whisper_rs::install_logging_hooks();
             platform::setup(app);

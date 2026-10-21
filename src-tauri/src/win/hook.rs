@@ -103,12 +103,13 @@ unsafe fn describe_process(pid: u32) -> String {
         Ok(()) => String::from_utf16_lossy(&buf[..len as usize]).rsplit('\\').next().unwrap_or_default().to_string(),
         Err(_) => "?".into(),
     };
-    let level = integrity_level(process).unwrap_or("unknown");
+    let level = integrity_level(process).map_or("unknown".into(), |(name, rid)| format!("{name} {rid:#x}"));
     let _ = CloseHandle(process);
     format!("{name} (pid {pid}, {level} integrity)")
 }
 
-unsafe fn integrity_level(process: HANDLE) -> Option<&'static str> {
+/// 完整性级别的名字和确切数值（同一档里还有细分，如 Medium Plus = 0x2100）
+unsafe fn integrity_level(process: HANDLE) -> Option<(&'static str, u32)> {
     let mut token = HANDLE::default();
     OpenProcessToken(process, TOKEN_QUERY, &mut token).ok()?;
     let mut buf = [0u64; 16]; // TOKEN_MANDATORY_LABEL 加上它指向的 SID
@@ -118,13 +119,14 @@ unsafe fn integrity_level(process: HANDLE) -> Option<&'static str> {
     ok.ok()?;
     let sid = (*(buf.as_ptr() as *const TOKEN_MANDATORY_LABEL)).Label.Sid;
     let rid = *GetSidSubAuthority(sid, u32::from(*GetSidSubAuthorityCount(sid)) - 1);
-    Some(match rid {
+    let name = match rid {
         0x4000.. => "System",
         0x3000.. => "High",
         0x2000.. => "Medium",
         0x1000.. => "Low",
         _ => "Untrusted",
-    })
+    };
+    Some((name, rid))
 }
 
 /// 录制快捷键时一个按键都没收到：提示用户可能的原因
@@ -167,7 +169,7 @@ mod tests {
         let me = unsafe { describe_process(GetCurrentProcessId()) };
         println!("{me}");
         assert!(me.contains(".exe (pid "), "{me}");
-        assert!(["Medium integrity", "High integrity", "System integrity"].iter().any(|l| me.contains(l)), "{me}");
+        assert!(["Medium 0x", "High 0x", "System 0x"].iter().any(|l| me.contains(l)), "{me}");
         println!("{}", diagnose());
     }
 }
