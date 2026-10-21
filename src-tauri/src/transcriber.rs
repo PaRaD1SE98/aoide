@@ -114,7 +114,7 @@ impl Transcriber {
                 let stream = rec.create_stream();
                 stream.accept_waveform(SAMPLE_RATE as i32, &speech);
                 rec.decode(&stream);
-                Ok(stream.get_result().map(|r| r.text.trim().to_string()).unwrap_or_default())
+                Ok(stream.get_result().map(|r| drop_final_period(r.text.trim())).unwrap_or_default())
             }
         }
     }
@@ -220,14 +220,81 @@ fn decode(ctx: &WhisperContext, audio: &[f32], cfg: &Config) -> Result<String, S
         .filter_map(|seg| seg.to_str_lossy().ok().map(|s| s.trim().to_string()))
         .filter(|s| !s.is_empty())
         .collect();
-    // 中日韩文本片段之间不需要空格
-    let sep = if matches!(cfg.language.as_str(), "zh" | "ja" | "ko" | "yue") { "" } else { " " };
-    Ok(parts.join(sep))
+    Ok(join_segments(&parts))
+}
+
+/// 拼接 whisper 的各段结果：西文之间加空格，中日韩文字之间不加（按交界处的字符判断，识别语言可能是自动检测）
+fn join_segments(parts: &[String]) -> String {
+    let cjk = |c: Option<char>| {
+        c.is_some_and(|c| {
+            matches!(c,
+                '\u{3000}'..='\u{30FF}' // 中日韩标点、平假名、片假名
+                | '\u{3400}'..='\u{4DBF}' | '\u{4E00}'..='\u{9FFF}' | '\u{F900}'..='\u{FAFF}' // 汉字
+                | '\u{1100}'..='\u{11FF}' | '\u{3130}'..='\u{318F}' | '\u{AC00}'..='\u{D7AF}' // 韩文
+                | '\u{FF00}'..='\u{FFEF}') // 全角符号
+        })
+    };
+    let mut out = String::new();
+    for part in parts {
+        if !out.is_empty() && !cjk(out.chars().last()) && !cjk(part.chars().next()) {
+            out.push(' ');
+        }
+        out.push_str(part);
+    }
+    out
+}
+
+/// SenseVoice 的倾向：不管说得多短，结果末尾几乎总带一个句号，可短语、短句常常是要补进前面已有的句子里的。
+/// 只处理一句话的结果（中间还有句号、问号等说明是好几句，保留）；问号、感叹号表达语气，保留；省略号保留
+fn drop_final_period(text: &str) -> String {
+    let trimmed = text.trim_end();
+    let Some(last) = trimmed.chars().last().filter(|c| matches!(c, '。' | '．' | '.' | '，' | ',' | '、' | '；' | ';')) else {
+        return text.to_string();
+    };
+    let body = &trimmed[..trimmed.len() - last.len_utf8()];
+    if body.ends_with(['。', '.', '．', '…']) {
+        return text.to_string(); // 省略号
+    }
+    // 西文句点后面跟空白才算句末（3.5、e.g 里的不算）
+    let mut chars = body.chars().peekable();
+    while let Some(c) = chars.next() {
+        let ends_sentence = matches!(c, '。' | '．' | '！' | '？' | '!' | '?' | '\n') || c == '.' && chars.peek().is_some_and(|n| n.is_whitespace());
+        if ends_sentence {
+            return text.to_string();
+        }
+    }
+    body.to_string()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drops_period_of_single_sentence() {
+        assert_eq!(drop_final_period("思维导图。"), "思维导图");
+        assert_eq!(drop_final_period("下周三之前"), "下周三之前");
+        assert_eq!(drop_final_period("and the release notes."), "and the release notes");
+        assert_eq!(drop_final_period("版本 3.5 的说明。"), "版本 3.5 的说明");
+        // 问号、感叹号、省略号保留
+        assert_eq!(drop_final_period("真的吗？"), "真的吗？");
+        assert_eq!(drop_final_period("太好了！"), "太好了！");
+        assert_eq!(drop_final_period("然后……"), "然后……");
+        assert_eq!(drop_final_period("wait..."), "wait...");
+        // 好几句话：保留
+        assert_eq!(drop_final_period("先开会。再讨论。"), "先开会。再讨论。");
+        assert_eq!(drop_final_period("Done. See you."), "Done. See you.");
+        assert_eq!(drop_final_period(""), "");
+    }
+
+    #[test]
+    fn joins_segments_by_script() {
+        let join = |parts: &[&str]| join_segments(&parts.iter().map(|p| p.to_string()).collect::<Vec<_>>());
+        assert_eq!(join(&["今天开会，", "明天出差。"]), "今天开会，明天出差。");
+        assert_eq!(join(&["Hello world.", "See you."]), "Hello world. See you.");
+        assert_eq!(join(&["这个 API", "很好用。"]), "这个 API很好用。");
+        assert_eq!(join(&["今日は", "いい天気。"]), "今日はいい天気。");
+    }
 
     /// 读取 16 kHz 单声道 16 位 PCM wav
     fn read_wav(path: &str) -> Vec<f32> {

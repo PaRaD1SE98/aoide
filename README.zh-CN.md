@@ -112,8 +112,8 @@ macOS 上 Aoide 在菜单栏中运行：单击图标打开窗口，右键图标�
 | `cancel_hotkey` | `esc` | 取消本次录音或识别；只在任务进行中拦截该键 |
 | `model` | `sense-voice` | SenseVoice：`sense-voice`（中英日韩粤）/ `sense-voice-yue`（粤语增强）。Whisper：`tiny` / `base` / `small` / `medium` / `large-v3-turbo-q5_0` / `large-v3-turbo` / `large-v2` / `large-v3` |
 | `model_dir` | *（空）* | 模型存放目录，留空 = `%LOCALAPPDATA%\Aoide\models`（macOS：`~/Library/Application Support/Aoide/models`） |
-| `language` | `zh` | 转录语言，`auto` 为自动检测。SenseVoice 支持 `zh` / `en` / `ja` / `ko` / `yue` / `auto` |
-| `max_duration` | `60` | 单次录音最长秒数，超时自动停止 |
+| `language` | `auto` | 转录语言，`auto` 为自动检测。SenseVoice 支持 `zh` / `en` / `ja` / `ko` / `yue` / `auto` |
+| `max_duration` | `90` | 单次录音最长秒数，超时自动停止 |
 | `min_duration` | `3` | 短于此秒数的录音用静音补齐到该长度再识别；设 `0` 关闭 |
 | `mute_while_recording` | `true` | 录音期间静音其他正在播放声音的程序，结束后恢复；Aoide 自己的提示音不受影响。macOS 上静音的是输出设备 |
 | `device` | `gpu` | `gpu`（Vulkan；Apple 芯片的 Mac 上为 Metal，Intel Mac 上为 CPU）/ `cpu`。仅对 Whisper 生效，SenseVoice 固定使用 CPU |
@@ -126,7 +126,6 @@ macOS 上 Aoide 在菜单栏中运行：单击图标打开窗口，右键图标�
 | `polish_min_chars` | `12` | 转录结果短于此字符数（去空格）时不润色直接输出；语音修订不受影响 |
 | `insert_smart` | `true` | 光标前后有文字时按上下文插入 |
 | `insert_min_seconds` / `insert_min_chars` | `10` / `12` | 录音 / 转写结果短于此值时直接插入，不调用 LLM |
-| `drop_final_period` | `true` | 没经过 LLM 润色、只有一句话的识别结果，去掉末尾的句号，方便把短语补进已有的句子里（问号、感叹号保留） |
 | `vocab_enabled` | `true` | 用词库纠正识别结果：反复出现的误识别直接替换，其余连同相关词条交给 LLM |
 | `learn_from_edits` | `true` | 识别结果输入后你手动改正的词，自动加入词库（并弹出可撤销的提示） |
 | `auto_check_updates` | `true` | 每天检查一次新版本并通知你；是否更新始终由你决定 |

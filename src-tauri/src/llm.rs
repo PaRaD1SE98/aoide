@@ -291,28 +291,6 @@ pub fn fit_spacing(text: &str, before: &str, after: &str) -> String {
     out
 }
 
-/// 去掉单句末尾的句号：识别模型总给短语、短句加上句号，可它们常常是要补进前面已有的句子里的。
-/// 只处理一句话的结果（中间还有句号、问号等说明是好几句，保留）；问号、感叹号表达语气，保留；省略号保留
-pub fn drop_final_period(text: &str) -> String {
-    let trimmed = text.trim_end();
-    let Some(last) = trimmed.chars().last().filter(|c| matches!(c, '。' | '．' | '.' | '，' | ',' | '、' | '；' | ';')) else {
-        return text.to_string();
-    };
-    let body = &trimmed[..trimmed.len() - last.len_utf8()];
-    if body.ends_with(['。', '.', '．', '…']) {
-        return text.to_string(); // 省略号
-    }
-    // 西文句点后面跟空白才算句末（3.5、e.g 里的不算）
-    let mut chars = body.chars().peekable();
-    while let Some(c) = chars.next() {
-        let ends_sentence = matches!(c, '。' | '．' | '！' | '？' | '!' | '?' | '\n') || c == '.' && chars.peek().is_some_and(|n| n.is_whitespace());
-        if ends_sentence {
-            return text.to_string();
-        }
-    }
-    body.to_string()
-}
-
 /// 润色转录文本；调用失败返回 Err，由调用方决定回退
 pub fn polish_text(text: &str, glossary: Option<&str>, cfg: &Config) -> Result<String, String> {
     if text.trim().is_empty() {
@@ -353,25 +331,6 @@ pub fn judge_correction(wrong: &str, right: &str, old: &str, new: &str, cfg: &Co
 
 #[cfg(test)]
 mod tests {
-    use super::drop_final_period;
-
-    #[test]
-    fn drops_period_of_single_sentence() {
-        assert_eq!(drop_final_period("思维导图。"), "思维导图");
-        assert_eq!(drop_final_period("下周三之前"), "下周三之前");
-        assert_eq!(drop_final_period("and the release notes."), "and the release notes");
-        assert_eq!(drop_final_period("版本 3.5 的说明。"), "版本 3.5 的说明");
-        // 问号、感叹号、省略号保留
-        assert_eq!(drop_final_period("真的吗？"), "真的吗？");
-        assert_eq!(drop_final_period("太好了！"), "太好了！");
-        assert_eq!(drop_final_period("然后……"), "然后……");
-        assert_eq!(drop_final_period("wait..."), "wait...");
-        // 好几句话：保留
-        assert_eq!(drop_final_period("先开会。再讨论。"), "先开会。再讨论。");
-        assert_eq!(drop_final_period("Done. See you."), "Done. See you.");
-        assert_eq!(drop_final_period(""), "");
-    }
-
     use super::*;
 
     /// 手动运行（会用本机配置里的 LLM API 发几条示例请求）：

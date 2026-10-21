@@ -48,8 +48,6 @@ pub struct Config {
     pub insert_min_seconds: u32,
     /// 转写结果短于此字符数（去空格）时不走 LLM 插入，直接粘贴
     pub insert_min_chars: usize,
-    /// 没经过 LLM 润色、只有一句话的识别结果，去掉末尾的句号（方便把短语补进已有的句子里）
-    pub drop_final_period: bool,
     /// 用词库纠正识别结果：高置信度的误识别直接替换，其余相关词条交给 LLM
     pub vocab_enabled: bool,
     /// 用户手动修改识别结果时，自动把纠正的词存入词库
@@ -77,8 +75,8 @@ impl Default for Config {
             cancel_hotkey: "esc".into(),
             model: "sense-voice".into(),
             model_dir: String::new(),
-            language: "zh".into(),
-            max_duration: 60,
+            language: "auto".into(),
+            max_duration: 90,
             min_duration: 3,
             device: "gpu".into(),
             mute_while_recording: true,
@@ -92,7 +90,6 @@ impl Default for Config {
             insert_smart: true,
             insert_min_seconds: 10,
             insert_min_chars: 12,
-            drop_final_period: true,
             vocab_enabled: true,
             learn_from_edits: true,
             auto_check_updates: true,
