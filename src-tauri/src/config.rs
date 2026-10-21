@@ -140,12 +140,10 @@ pub fn data_dir() -> PathBuf {
     return library_dir("Application Support");
 }
 
-/// 日志：%APPDATA%\Aoide\logs；macOS：~/Library/Logs/Aoide
+/// 日志：数据目录下的 logs（%APPDATA%\Aoide\logs；macOS：~/Library/Application Support/Aoide/logs）。
+/// 设置页「配置与日志」打开的是数据目录，日志放在里面才找得到
 pub fn log_dir() -> PathBuf {
-    #[cfg(windows)]
-    return data_dir().join("logs");
-    #[cfg(target_os = "macos")]
-    return library_dir("Logs");
+    data_dir().join("logs")
 }
 
 /// 启动时准备日志目录：把旧版本放在数据目录根下的日志搬进来，并把进程的工作目录设到这里。
@@ -156,7 +154,13 @@ pub fn prepare_log_dir() {
     if std::fs::create_dir_all(&dir).is_err() {
         return;
     }
-    if let Ok(entries) = std::fs::read_dir(data_dir()) {
+    // 旧版本的日志：Windows 放在数据目录根下，macOS 放在 ~/Library/Logs/Aoide
+    #[cfg(target_os = "macos")]
+    let old_dirs = [data_dir(), library_dir("Logs")];
+    #[cfg(not(target_os = "macos"))]
+    let old_dirs = [data_dir()];
+    for old in &old_dirs {
+        let Ok(entries) = std::fs::read_dir(old) else { continue };
         for e in entries.flatten() {
             let path = e.path();
             if path.is_file() && path.extension().is_some_and(|x| x == "log") {
@@ -164,6 +168,8 @@ pub fn prepare_log_dir() {
             }
         }
     }
+    #[cfg(target_os = "macos")]
+    let _ = std::fs::remove_dir(library_dir("Logs")); // 只在空目录时删除
     let _ = std::env::set_current_dir(&dir);
 }
 
