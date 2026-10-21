@@ -153,7 +153,7 @@ Aoide は OpenAI の音声認識形式（`POST {API ベース URL}/audio/transcr
 | `auto_check_updates` | `true` | 1 日 1 回新しいバージョンを確認して知らせる。更新するかどうかは常にユーザーが決めます |
 | `polish_prompt` / `revise_prompt` / `insert_prompt` | *（空）* | 整形（`{text}`）、音声で修正（`{original}`、`{instruction}`）、文脈に合わせた挿入（`{before}`、`{after}`、`{text}`）用のカスタム LLM プロンプト。空欄 = 内蔵のプロンプト。設定画面で編集できます |
 
-辞書は `%APPDATA%\Aoide\vocabulary.json` に保存されます。ログファイルは `%APPDATA%\Aoide\logs\app.log`（1 MB を超えるとローテーション）です。macOS ではそれぞれ `~/Library/Application Support/Aoide/vocabulary.json` と `~/Library/Logs/Aoide/app.log` です。ログには文字起こしの内容が含まれ、手元のパソコンにだけ保存されます。
+辞書は `%APPDATA%\Aoide\vocabulary.json` に保存されます。ログファイルは `%APPDATA%\Aoide\logs\app.log`（1 MB を超えるとローテーション）です。macOS ではそれぞれ `~/Library/Application Support/Aoide/vocabulary.json` と `~/Library/Application Support/Aoide/logs/app.log` です。ログには文字起こしの内容が含まれ、手元のパソコンにだけ保存されます。
 
 ## ソースからのビルド
 
