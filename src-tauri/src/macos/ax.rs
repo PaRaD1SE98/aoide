@@ -5,9 +5,10 @@
 //! - 读取程序元素的 AXRole：Apple 建议程序以此判断有辅助工具在用。Firefox 121 起据此打开
 //!   （Mozilla bug 1845364）；Chrome 据此打开基本模式，但 macOS 14 起可能不含网页内容
 //! - Electron 程序认 AXManualAccessibility，设置后立即生效
-//! - Chrome 的完整模式只认 VoiceOver 用的 AXEnhancedUserInterface，而且要等 2 秒才生效
-//!   （Chromium 的 chrome_browser_application_mac.mm）；Firefox 也认这个开关。
-//!   这个开关在别的程序上有副作用（窗口动画、窗口管理工具），所以只对已知的浏览器设置
+//!
+//! 不设置 VoiceOver 用的 AXEnhancedUserInterface（Chrome 的完整模式只认它）：它让程序一直处于读屏模式，
+//! 在 claude.ai 等网页上会让输入框失去焦点，之后的粘贴都落空（OpenWhispr #1116）。
+//! 所以浏览器的网页内容可能始终读不到，判断不了时由调用方按「不确定」处理（见 focus.rs）
 
 use super::cf::{CFRange, CFTypeRef, CF};
 use super::CGPoint;
@@ -25,9 +26,9 @@ const VALUE_CFRANGE: u32 = 4;
 const TIMEOUT: f32 = 0.3;
 /// 每隔多久重新给浏览器设置一次开关（以防浏览器自己关掉了辅助功能）
 const BROWSER_REASSERT: Duration = Duration::from_secs(30);
-/// 浏览器的焦点停在网页本身（AXWebArea）时，网页里的内容可能还没准备好：每隔多久再读一次、最多等多久
-const WEB_AREA_POLL: Duration = Duration::from_millis(150);
-const WEB_AREA_WAIT: Duration = Duration::from_millis(600);
+/// 浏览器的焦点停在网页本身或整个窗口时，网页里的内容可能还没准备好：每隔多久再读一次、最多等多久
+const WEB_AREA_POLL: Duration = Duration::from_millis(100);
+const WEB_AREA_WAIT: Duration = Duration::from_millis(300);
 
 /// Chromium 系浏览器的 bundle id（前缀）
 const CHROMIUM_BROWSERS: &[&str] = &[
@@ -53,7 +54,7 @@ const GECKO_BROWSERS: &[&str] = &[
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Kind {
+pub enum Kind {
     Chromium,
     Gecko,
     Other,
@@ -71,11 +72,14 @@ impl Kind {
         }
     }
 
-    /// 第一次打开辅助功能树后要等多久才能读到：Chromium 收到开关 2 秒后才打开，Firefox 打开后要建树；
-    /// 都再留一点余量
+    pub fn is_browser(self) -> bool {
+        self != Kind::Other
+    }
+
+    /// 第一次读取后要等多久辅助功能树才准备好（浏览器按需建树）
     fn delay(self) -> Duration {
         match self {
-            Kind::Chromium => Duration::from_millis(2500),
+            Kind::Chromium => Duration::from_millis(500),
             Kind::Gecko => Duration::from_millis(1000),
             Kind::Other => Duration::ZERO,
         }
@@ -230,8 +234,7 @@ fn enable_tree(app: &Element, pid: i32) -> (Kind, Duration) {
             let role = app.string("AXRole");
             // Electron 的开关；其他程序不认这个属性，设置失败也无妨
             let manual = app.set_bool("AXManualAccessibility", true);
-            let enhanced = kind != Kind::Other && app.set_bool("AXEnhancedUserInterface", true);
-            log::info!("AX: enable accessibility tree of pid {pid} ({kind:?}): role={role:?}, manual={manual}, enhanced={enhanced}");
+            log::info!("AX: enable accessibility tree of pid {pid} ({kind:?}): role={role:?}, manual={manual}");
             let now = Instant::now();
             enabled.push(Enabled { pid, kind, first_request: now, last_request: now });
             return (kind, kind.delay());
@@ -240,12 +243,10 @@ fn enable_tree(app: &Element, pid: i32) -> (Kind, Duration) {
     if e.kind == Kind::Other {
         return (Kind::Other, Duration::ZERO);
     }
-    // 每次设置都会让 Chrome 重新开始 2 秒倒计时，所以不能每次读取都设置，隔一段时间重申一次
+    // 隔一段时间再读一次角色，浏览器关掉了辅助功能树也能重新打开
     if e.last_request.elapsed() >= BROWSER_REASSERT {
-        let role = app.string("AXRole").is_some();
-        let ok = app.set_bool("AXEnhancedUserInterface", true);
+        app.string("AXRole");
         e.last_request = Instant::now();
-        log::info!("AX: re-enable accessibility tree of pid {pid}: role={role}, enhanced={ok}");
     }
     (e.kind, e.kind.delay().saturating_sub(e.first_request.elapsed()))
 }
@@ -279,22 +280,29 @@ fn focused_application() -> Option<Element> {
     focused_application_and_delay().map(|(app, ..)| app)
 }
 
-/// 当前的键盘焦点元素。刚打开浏览器的辅助功能树时，先等它生效
-/// （录音开始时显示悬浮条就会打开，通常等到转写完已经生效，不用再等）
+/// 当前的键盘焦点元素
 pub fn focused_element() -> Option<Element> {
-    let (app, kind, delay) = focused_application_and_delay()?;
+    focused_element_and_kind().0
+}
+
+/// 当前的键盘焦点元素，以及焦点程序的类别。刚打开浏览器的辅助功能树时，先等它生效
+/// （录音开始时显示悬浮条就会打开，通常等到转写完已经生效，不用再等）
+pub fn focused_element_and_kind() -> (Option<Element>, Kind) {
+    let Some((app, kind, delay)) = focused_application_and_delay() else {
+        return (None, Kind::Other);
+    };
     if !delay.is_zero() {
         log::info!("AX: waiting {} ms for the accessibility tree", delay.as_millis());
         std::thread::sleep(delay);
     }
     let read = || app.element("AXFocusedUIElement").or_else(|| Element::system_wide()?.element("AXFocusedUIElement"));
     let mut elem = read();
-    if kind == Kind::Other {
-        return elem;
+    if !kind.is_browser() {
+        return (elem, kind);
     }
-    // 浏览器：焦点停在网页本身，可能是网页内容还没对外提供（浏览器按需构建），稍等再读
+    // 浏览器：焦点停在网页本身或整个窗口，可能是网页内容还没对外提供（浏览器按需构建），稍等再读
     let mut waited = Duration::ZERO;
-    while waited < WEB_AREA_WAIT && elem.as_ref().is_none_or(|e| e.string("AXRole").as_deref() == Some("AXWebArea")) {
+    while waited < WEB_AREA_WAIT && elem.as_ref().is_none_or(is_page_level) {
         std::thread::sleep(WEB_AREA_POLL);
         waited += WEB_AREA_POLL;
         elem = read();
@@ -303,7 +311,12 @@ pub fn focused_element() -> Option<Element> {
         let role = elem.as_ref().and_then(|e| e.string("AXRole"));
         log::info!("AX: browser focus after waiting {} ms: {role:?}", waited.as_millis());
     }
-    elem
+    (elem, kind)
+}
+
+/// 焦点只停在网页本身或整个窗口上：看不到网页里具体是哪个元素
+pub fn is_page_level(elem: &Element) -> bool {
+    matches!(elem.string("AXRole").as_deref(), Some("AXWebArea" | "AXWindow"))
 }
 
 /// 输入焦点大致所在的位置（左上角为原点的屏幕坐标）：焦点窗口的中心，读不到时用鼠标位置

@@ -11,6 +11,7 @@ use crate::{learned_card, notice, result_card};
 use crate::mute;
 use crate::i18n::tr;
 use crate::{clipboard, focus, learn, llm, models, trf, vocab};
+use crate::focus::Typable;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex, RwLock};
 use std::thread;
@@ -449,10 +450,16 @@ impl Controller {
         }
     }
 
-    /// 聚焦在输入框时粘贴输出（粘完恢复原剪贴板），返回 true；无处可粘贴时弹出结果卡片，由用户决定复制
+    /// 聚焦在输入框时粘贴输出（粘完恢复原剪贴板），返回 true；无处可粘贴时弹出结果卡片，由用户决定复制。
+    /// 判断不了时（macOS 浏览器的网页内容读不到）照样粘贴，文字留在剪贴板里，没粘上的话用户可以自己粘贴
     fn output_text(&self, text: &str) -> bool {
         thread::sleep(Duration::from_millis(200));
-        if focus::can_type_here() && clipboard::paste_text(text) {
+        let pasted = match focus::can_type_here() {
+            Typable::Yes => clipboard::paste_text(text),
+            Typable::Unknown => clipboard::paste_text_keep(text),
+            Typable::No => false,
+        };
+        if pasted {
             return true;
         }
         log::info!("No input focused, showing result card: {text}");
@@ -539,8 +546,10 @@ impl Controller {
                 return Ok(());
             }
             thread::sleep(Duration::from_millis(100));
-            if focus::can_type_here() {
-                let pasted = clipboard::paste_text(&revised); // 粘贴替换选中，之后恢复原剪贴板
+            let typable = focus::can_type_here();
+            if typable != Typable::No {
+                // 粘贴替换选中，之后恢复原剪贴板；判断不了能否输入时不恢复，没替换成功的话用户可以自己粘贴
+                let pasted = if typable == Typable::Yes { clipboard::paste_text(&revised) } else { clipboard::paste_text_keep(&revised) };
                 log::info!("Revised: {revised}");
                 self.notify(tr("已修改", "Text updated", "テキストを修正しました"));
                 if pasted && cfg.learn_from_edits {
