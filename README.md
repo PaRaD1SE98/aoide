@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <b>English</b> · <a href="README.zh-CN.md">简体中文</a>
+  <b>English</b> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.ja.md">日本語</a>
 </p>
 
 <p align="center">
@@ -105,8 +105,8 @@ Settings are stored in `%APPDATA%\Aoide\config.json` (macOS: `~/Library/Applicat
 
 | Key | Default | Description |
 |---|---|---|
-| `ui_language` | `auto` | Display language: `auto` (follow the system) / `zh` / `en` |
-| `hotkey` | `right alt` | Start/stop recording (triggered on tap). The macOS default is `right option` |
+| `ui_language` | `auto` | Display language: `auto` (follow the system) / `zh` / `en` / `ja` |
+| `hotkey` | `right alt` | Start/stop recording (triggered on tap). The macOS default is `right option`; on Japanese (JIS) keyboards it is `convert` (変換) on Windows and `right command` on macOS |
 | `revise_hotkey` | `right alt+space` | Start a voice edit. `<main hotkey>+<key>` means: hold the main hotkey, then press the key |
 | `revise_stop_hotkey` | `right alt` | Stop a voice edit (merged into the tap logic when equal to `hotkey`) |
 | `cancel_hotkey` | `esc` | Cancel the current recording or transcription. Only intercepted while a task is in progress |

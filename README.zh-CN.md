@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="README.md">English</a> · <b>简体中文</b>
+  <a href="README.md">English</a> · <b>简体中文</b> · <a href="README.ja.md">日本語</a>
 </p>
 
 <p align="center">
@@ -105,8 +105,8 @@ macOS 上 Aoide 在菜单栏中运行：单击图标打开窗口，右键图标�
 
 | 键 | 默认值 | 说明 |
 |---|---|---|
-| `ui_language` | `auto` | 显示语言：`auto`（跟随系统）/ `zh` / `en` |
-| `hotkey` | `right alt` | 开始/停止录音（单击触发）。macOS 上默认为 `right option` |
+| `ui_language` | `auto` | 显示语言：`auto`（跟随系统）/ `zh` / `en` / `ja` |
+| `hotkey` | `right alt` | 开始/停止录音（单击触发）。macOS 上默认为 `right option`；日文（JIS）键盘上 Windows 默认为 `convert`（変換），macOS 默认为 `right command` |
 | `revise_hotkey` | `right alt+space` | 开始语音修订。`<主快捷键>+<某键>` 表示按住主快捷键再按该键 |
 | `revise_stop_hotkey` | `right alt` | 停止语音修订（与 `hotkey` 相同时合并为单击逻辑） |
 | `cancel_hotkey` | `esc` | 取消本次录音或识别；只在任务进行中拦截该键 |
