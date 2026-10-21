@@ -15,15 +15,18 @@ pub enum Cue {
     Stop,
     /// 取消 / 没有录到声音
     Cancel,
+    /// 出错（和提示小窗里的错误消息一起播放）
+    Error,
 }
 
 static START: &[u8] = include_bytes!("../sounds/drop_004.wav");
 static REVISE_START: &[u8] = include_bytes!("../sounds/drop_003.wav");
 static STOP: &[u8] = include_bytes!("../sounds/confirmation_001.wav");
 static CANCEL: &[u8] = include_bytes!("../sounds/minimize_008.wav");
+static ERROR: &[u8] = include_bytes!("../sounds/error_008.wav");
 
 /// 按 VOLUME 缩放后的 WAV 数据（首次使用时生成，之后常驻，异步播放时一直有效）
-static SCALED: OnceLock<[Vec<u8>; 4]> = OnceLock::new();
+static SCALED: OnceLock<[Vec<u8>; 5]> = OnceLock::new();
 
 /// 缩放 16 位 PCM WAV 的采样；格式不符时原样返回
 fn scale_wav(wav: &[u8], volume: f32) -> Vec<u8> {
@@ -53,13 +56,14 @@ fn scale_wav(wav: &[u8], volume: f32) -> Vec<u8> {
 
 fn bytes(cue: Cue) -> &'static [u8] {
     let scaled = SCALED.get_or_init(|| {
-        [START, REVISE_START, STOP, CANCEL].map(|wav| scale_wav(wav, VOLUME))
+        [START, REVISE_START, STOP, CANCEL, ERROR].map(|wav| scale_wav(wav, VOLUME))
     });
     match cue {
         Cue::Start => &scaled[0],
         Cue::ReviseStart => &scaled[1],
         Cue::Stop => &scaled[2],
         Cue::Cancel => &scaled[3],
+        Cue::Error => &scaled[4],
     }
 }
 

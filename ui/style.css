@@ -341,3 +341,7 @@ kbd {
   .card { flex-wrap: wrap; }
   .control, .control.wide { flex: 1 1 100%; justify-content: flex-end; }
 }
+
+/* 日文界面：汉字要用日文字体显示（中文字体里的汉字字形和日本的写法不同） */
+html:lang(ja), html:lang(ja) body { font-family: "Segoe UI Variable Text", "Segoe UI", "Yu Gothic UI", "Meiryo UI", system-ui, sans-serif; }
+html:lang(ja) textarea { font-family: "Cascadia Mono", Consolas, "BIZ UDGothic", "MS Gothic", monospace; }
