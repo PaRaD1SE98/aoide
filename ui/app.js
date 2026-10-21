@@ -75,6 +75,13 @@ const KEY_LABELS = {
   home: "Home", end: "End", "page up": "PgUp", "page down": "PgDn", "caps lock": "Caps Lock",
   "print screen": "PrtSc", "scroll lock": "Scroll Lock", pause: "Pause", menu: "Menu",
   up: "↑", down: "↓", left: "←", right: "→",
+  // 日文键盘上没有通用名字的键（快捷键里存的是键码）：
+  // Windows 识别为日文键盘时的「英数」「ひらがな」「半角/全角」
+  vk0xf0: "英数", vk0xf2: "ひらがな", vk0xf3: "半角/全角", vk0xf4: "半角/全角",
+  // 日文键盘被 Windows 当成英文键盘（101/102 键）时，「無変換」和 Apple 键盘的「英数」变成这两个键码
+  vk0xeb: "無変換", vk0xe9: "英数",
+  // macOS 的 JIS 键盘（见 macos/keycode.rs：没有对应虚拟键码的键是 0x1000 + 键码）
+  vk0x1066: "英数", vk0x1068: "かな",
 };
 
 function keyLabel(k) {
