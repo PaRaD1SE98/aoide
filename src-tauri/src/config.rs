@@ -16,7 +16,13 @@ pub struct Config {
     pub revise_stop_hotkey: String,
     /// 取消本次任务（录音或识别中）；只在任务进行中拦截该键
     pub cancel_hotkey: String,
-    /// whisper 模型 id，见 models::MODELS
+    /// 语音识别方式：local（本地模型）/ api（OpenAI 格式的语音识别 API，见 speech_api.rs）
+    pub speech_source: String,
+    /// 语音识别 API 的地址，如 https://api.openai.com/v1
+    pub speech_api: String,
+    pub speech_api_key: String,
+    pub speech_api_model: String,
+    /// 本地模型 id，见 models::MODELS
     pub model: String,
     /// 模型目录；留空用默认目录
     pub model_dir: String,
@@ -83,6 +89,10 @@ impl Default for Config {
             revise_hotkey: format!("{}+space", default_hotkey()),
             revise_stop_hotkey: default_hotkey().into(),
             cancel_hotkey: "esc".into(),
+            speech_source: "local".into(),
+            speech_api: String::new(),
+            speech_api_key: String::new(),
+            speech_api_model: String::new(),
             model: "sense-voice".into(),
             model_dir: String::new(),
             language: "auto".into(),
@@ -199,5 +209,10 @@ impl Config {
 
     pub fn use_gpu(&self) -> bool {
         self.device != "cpu"
+    }
+
+    /// 用语音识别 API 而不是本地模型
+    pub fn speech_via_api(&self) -> bool {
+        self.speech_source == "api"
     }
 }

@@ -15,6 +15,7 @@ mod overlay;
 mod phonetic;
 mod result_card;
 mod sound;
+mod speech_api;
 mod transcriber;
 mod tray;
 mod updater;
@@ -538,9 +539,9 @@ pub fn run() {
             tray::create(app.handle(), &cfg.hotkey)?;
             ctl.start();
             updater::start(app.handle().clone());
-            // 用户手动启动时打开主窗口；开机自启时只在托盘运行（除非还没下载模型、缺少系统权限）
+            // 用户手动启动时打开主窗口；开机自启时只在托盘运行（除非语音识别还不能用、缺少系统权限）
             let autostarted = std::env::args().any(|a| a == AUTOSTART_ARG);
-            if !autostarted || !ctl.model_downloaded() || !platform::permissions::status().all_granted() {
+            if !autostarted || !ctl.speech_ready() || !platform::permissions::status().all_granted() {
                 // macOS：首次打开时先请求麦克风权限，用户回答后再打开窗口，免得窗口盖住系统的对话框
                 #[cfg(target_os = "macos")]
                 {
@@ -553,8 +554,12 @@ pub fn run() {
                 #[cfg(not(target_os = "macos"))]
                 open_settings(app.handle());
             }
-            if !ctl.model_downloaded() {
-                ctl.notify(i18n::tr("请先下载语音识别模型", "Download a speech recognition model first", "先に音声認識モデルをダウンロードしてください"));
+            if !ctl.speech_ready() {
+                ctl.notify(if cfg.speech_via_api() {
+                    i18n::tr("请先在设置中填写语音识别 API", "Set up the speech recognition API in Settings first", "先に設定で音声認識 API を入力してください")
+                } else {
+                    i18n::tr("请先下载语音识别模型", "Download a speech recognition model first", "先に音声認識モデルをダウンロードしてください")
+                });
             }
             Ok(())
         })
