@@ -108,6 +108,16 @@ pub fn can_type_here() -> Typable {
     }
 }
 
+/// 焦点控件里选中的文字（辅助功能 API）；密码框、读不到或没有选中时返回 None，由调用方改用复制
+pub fn selected_text() -> Option<String> {
+    let elem = ax::focused_element()?;
+    if is_secure(&elem) {
+        return None;
+    }
+    let text = elem.string("AXSelectedText")?;
+    (!text.trim().is_empty()).then_some(text)
+}
+
 /// 文字的总长度（UTF-16）
 fn length(elem: &Element) -> Option<isize> {
     elem.number("AXNumberOfCharacters")

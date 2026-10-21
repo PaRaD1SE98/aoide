@@ -36,6 +36,11 @@ pub fn shortcut(letter: char) {
     ]);
 }
 
+/// 等用户松开修饰键：Windows 上不需要（钩子吞掉了热键，模拟的 Ctrl+C 不受影响）
+pub fn wait_modifiers_released(_timeout: std::time::Duration) -> bool {
+    true
+}
+
 pub fn backspace() {
     send(&[key(VK_BACK, 0, KEYBD_EVENT_FLAGS(0)), key(VK_BACK, 0, KEYEVENTF_KEYUP)]);
 }
