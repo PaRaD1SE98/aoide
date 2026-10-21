@@ -14,15 +14,17 @@
     }
     figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; }
     img { width: 120px; height: 36px; }
+    html:lang(ja) body { font-family: "Segoe UI Variable Text", "Segoe UI", "Yu Gothic UI", "Meiryo UI", system-ui, sans-serif; }
   </style>
 </head>
 <body>
-  <figure><img src="img/capsule-recording.png" alt=""><figcaption data-zh="录音中" data-en="Recording"></figcaption></figure>
-  <figure><img src="img/capsule-revising.png" alt=""><figcaption data-zh="语音修订" data-en="Voice edit"></figcaption></figure>
-  <figure><img src="img/capsule-transcribing.png" alt=""><figcaption data-zh="转写中" data-en="Transcribing"></figcaption></figure>
-  <figure><img src="img/capsule-polishing.png" alt=""><figcaption data-zh="LLM 润色中" data-en="LLM polishing"></figcaption></figure>
+  <figure><img src="img/capsule-recording.png" alt=""><figcaption data-zh="录音中" data-en="Recording" data-ja="録音中"></figcaption></figure>
+  <figure><img src="img/capsule-revising.png" alt=""><figcaption data-zh="语音修订" data-en="Voice edit" data-ja="音声で修正"></figcaption></figure>
+  <figure><img src="img/capsule-transcribing.png" alt=""><figcaption data-zh="转写中" data-en="Transcribing" data-ja="文字起こし中"></figcaption></figure>
+  <figure><img src="img/capsule-polishing.png" alt=""><figcaption data-zh="LLM 润色中" data-en="LLM polishing" data-ja="LLM で整形中"></figcaption></figure>
   <script>
-    const lang = new URLSearchParams(location.search).get("lang") === "zh" ? "zh" : "en";
+    const lang = ["zh", "en", "ja"].includes(new URLSearchParams(location.search).get("lang")) ? new URLSearchParams(location.search).get("lang") : "en";
+    document.documentElement.lang = lang;
     document.querySelectorAll("figcaption").forEach((el) => (el.textContent = el.dataset[lang]));
   </script>
 </body>

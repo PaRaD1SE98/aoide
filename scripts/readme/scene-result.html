@@ -25,8 +25,10 @@
   <iframe class="result" id="card"></iframe>
   <div class="taskbar"><span>&#xE8FC;</span><span class="on">&#xE774;</span><span>&#xE8B7;</span><span>&#xE8BD;</span></div>
   <script>
-    const lang = new URLSearchParams(location.search).get("lang") === "zh" ? "zh" : "en";
-    const text = lang === "zh" ? { app: "浏览器", heading: "项目周报" } : { app: "Browser", heading: "Weekly report" };
+    const lang = ["zh", "en", "ja"].includes(new URLSearchParams(location.search).get("lang")) ? new URLSearchParams(location.search).get("lang") : "en";
+    document.documentElement.lang = lang;
+    const text = { zh: { app: "浏览器", heading: "项目周报" }, en: { app: "Browser", heading: "Weekly report" },
+                   ja: { app: "ブラウザー", heading: "週次レポート" } }[lang];
     for (const [id, s] of Object.entries(text)) document.getElementById(id).textContent = s;
     document.getElementById("card").src = `ui/result.html?lang=${lang}`;
   </script>

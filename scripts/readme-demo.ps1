@@ -1,4 +1,4 @@
-﻿# 生成 README 演示动图（docs/images/{en,zh}/demo.webp）
+﻿# 生成 README 演示动图（docs/images/{en,zh,ja}/demo.webp）
 #
 # 与 readme-images.ps1 一样全部在内存中渲染，不录真实屏幕：
 #   - 悬浮条：程序自身的绘制代码按 30 fps 导出逐帧图片（src-tauri/src/overlay.rs 的 export_capsule_frames）
@@ -6,10 +6,11 @@
 #   - 录制：scripts/readme/record-demo.mjs 通过 DevTools 协议驱动无头浏览器逐帧截图
 #   - 编码：ffmpeg（winget install Gyan.FFmpeg）
 #
-# 用法（PowerShell，项目根目录）：.\scripts\readme-demo.ps1 [-Mp4]
+# 用法（PowerShell，项目根目录）：.\scripts\readme-demo.ps1 [-Mp4] [-Langs ja]
 #   -Mp4：另外输出 MP4（docs 之外的临时目录），方便发到视频网站或社交平台
+#   -Langs：只生成这些语言（默认 en、zh、ja 全部）
 
-param([switch]$Mp4)
+param([switch]$Mp4, [string[]]$Langs = @("en", "zh", "ja"))
 
 # 不用 "Stop"：PowerShell 5.1 会把 cargo / ffmpeg 写到 stderr 的普通输出当成错误；原生命令一律检查退出码
 $ErrorActionPreference = "Continue"
@@ -46,7 +47,7 @@ Copy-Item (Join-Path $PSScriptRoot "readme\*") $tmp
 # 3. 逐帧录制（逻辑尺寸 960x612：540 的屏幕 + 72 的字幕栏，2 倍分辨率）并编码
 $durationMs = 19500
 $fps = 30
-foreach ($lang in "en", "zh") {
+foreach ($lang in $Langs) {
     $frames = "$tmp\frames-$lang"
     $url = "file:///" + ("$tmp\scene-demo.html" -replace '\\', '/') + "?lang=$lang&record=1"
     Write-Host "Recording $lang..."

@@ -80,7 +80,12 @@ async function openBrowser() {
       try { process.kill(pid); } catch {}
     }
     await sleep(300);
-    rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+    // 浏览器的子进程有时退出得更晚，还占着用户数据目录里的文件：删不掉就留下，不能因此中断录制
+    try {
+      rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 });
+    } catch (e) {
+      console.log(`  could not remove ${profile} (${e.code}), leaving it`);
+    }
   };
 
   try {

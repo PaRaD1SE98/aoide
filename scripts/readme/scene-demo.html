@@ -67,8 +67,10 @@
   <div class="speech" id="speech"><span class="label"><span class="ico">&#xE720;</span><span id="slabel"></span></span><span id="stext"></span></div>
   <script>
     // 由 scripts/readme/record-demo.mjs 逐帧调用 render(t)（t 为毫秒），画面完全由 t 决定
-    const zh = new URLSearchParams(location.search).get("lang") === "zh";
-    const L = zh ? {
+    const lang = ["zh", "en", "ja"].includes(new URLSearchParams(location.search).get("lang")) ? new URLSearchParams(location.search).get("lang") : "en";
+    document.documentElement.lang = lang;
+    const L = {
+    zh: {
       app: "团队聊天",
       s1t: "① 语音输入", s1d: "LLM 自动润色", s2t: "② 语音修订", s2d: "说出怎么改",
       tap: "单击", hold: "按住 Right Alt 再按 Space", mic: "你对麦克风说",
@@ -79,7 +81,7 @@
       draft: "还行吧，就是有时候有点慢",
       said2: "改得正式一点，再补充一句识别很准",
       out2: "整体体验不错，识别非常准确，只是偶尔响应稍慢。",
-    } : {
+    }, en: {
       app: "Team chat",
       s1t: "① Dictate", s1d: "polished by an LLM", s2t: "② Voice edit", s2d: "say how to change it",
       tap: "Tap", hold: "Hold Right Alt, press Space", mic: "You say into the mic",
@@ -90,7 +92,18 @@
       draft: "its ok i guess but kinda slow sometimes",
       said2: "make it more formal and add that the accuracy is great",
       out2: "Overall it works well and the accuracy is excellent, though it can be a little slow at times.",
-    };
+    }, ja: {
+      app: "チームチャット",
+      s1t: "① 音声入力", s1d: "LLM が自動で整形", s2t: "② 音声で修正", s2d: "直し方を話す",
+      tap: "1 回押す", hold: "Right Alt を押したまま Space", mic: "マイクに話した内容",
+      q1: "明日の発表会って何時から？",
+      said1: "えーと、明日の発表会は午後3時に変わって、あの、デモ用のパソコンも持ってきてください",
+      out1: "明日の発表会は午後 3 時に変更になりました。デモ用のパソコンを持ってきてください。",
+      q2: "新しい音声入力、使ってみてどう？",
+      draft: "まあまあかな、たまにちょっと遅いけど",
+      said2: "もっと丁寧にして、認識がすごく正確なことも付け足して",
+      out2: "全体的に使いやすく、認識もとても正確です。ただ、ときどき反応が少し遅くなります。",
+    } }[lang];
     for (const id of ["app", "s1t", "s1d", "s2t", "s2d"]) document.getElementById(id).textContent = L[id];
     document.getElementById("slabel").textContent = L.mic;
 
@@ -171,7 +184,8 @@
       if (t >= T.rev2 && t < T.out2 + 400) [said, start, stop, out] = [L.said2, T.rev2, T.stop2, T.out2];
       if (said) {
         const n = Math.max(1, Math.round(len(said) * ramp(t, start + 200, stop - start - 500)));
-        $("stext").textContent = `“${slice(said, n)}”`;
+        const [open, close] = lang === "ja" ? ["「", "」"] : ["“", "”"];
+        $("stext").textContent = `${open}${slice(said, n)}${close}`;
         $("stext").style.opacity = Math.min(ramp(t, start, 150), fadeOut(1 - ramp(t, out, 400)));
         speech.classList.toggle("on", t < stop);
         speech.classList.toggle("revise", said === L.said2);

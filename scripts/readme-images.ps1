@@ -1,4 +1,4 @@
-﻿# 生成 README 配图（docs/images/{en,zh}/*.png）
+﻿# 生成 README 配图（docs/images/{en,zh,ja}/*.png）
 #
 # 全部在内存中渲染，不截取真实屏幕：
 #   - 录音悬浮条：调用程序自身的绘制代码输出 PNG（src-tauri/src/overlay.rs 的 export_capsule_images）
@@ -60,7 +60,7 @@ function Render($page, $w, $h, $png) {
     Start-Process -FilePath $browser -ArgumentList $browserArgs -Wait -WindowStyle Hidden
 }
 
-foreach ($lang in "en", "zh") {
+foreach ($lang in "en", "zh", "ja") {
     New-Item -ItemType Directory -Force "$out\$lang" | Out-Null
     # 设置页单独渲染，再由 scene-settings.html 套上窗口外框
     Render "$tmp\ui\index.html?lang=$lang&section=speech" 980 608 "$tmp\settings-page-$lang.png"

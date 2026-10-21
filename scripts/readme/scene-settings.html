@@ -17,7 +17,8 @@
     <img class="page" id="page" alt="">
   </div>
   <script>
-    const lang = new URLSearchParams(location.search).get("lang") === "zh" ? "zh" : "en";
+    const lang = ["zh", "en", "ja"].includes(new URLSearchParams(location.search).get("lang")) ? new URLSearchParams(location.search).get("lang") : "en";
+    document.documentElement.lang = lang;
     document.getElementById("page").src = `settings-page-${lang}.png`;
   </script>
 </body>
