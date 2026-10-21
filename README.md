@@ -34,7 +34,7 @@ Aoide is a voice typing app for Windows and macOS, an open-source alternative to
 
 Your speech is transcribed on your own machine with [SenseVoice](https://github.com/FunAudioLLM/SenseVoice) (via [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)) or [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (GPU-accelerated through Vulkan on Windows and Metal on macOS), optionally cleaned up by an LLM through any OpenAI-compatible API, and typed straight into whatever input box has focus.
 
-No account, no cloud service, no audio leaves your computer unless you point the LLM step at a remote API.
+No account and no cloud service needed. Audio only leaves your computer if you choose to use a speech recognition API instead of the local model.
 
 ## Features
 
@@ -93,6 +93,22 @@ On macOS Aoide lives in the menu bar: click its icon to open the window, right-c
 
 ![Settings window](docs/images/en/settings.png)
 
+### Speech recognition through an API (optional)
+
+Recognition runs on a local model by default. To use a cloud or self-hosted service instead, choose **API** under **Settings → Speech recognition → Recognition** and fill in the API base, API key and model name.
+
+Aoide speaks the OpenAI speech-to-text format (`POST {API base}/audio/transcriptions`), the de facto standard that many services offer:
+
+| Service | API base | Model name (examples) |
+|---|---|---|
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini-transcribe`, `whisper-1` |
+| Groq | `https://api.groq.com/openai/v1` | `whisper-large-v3-turbo` |
+| SiliconFlow | `https://api.siliconflow.cn/v1` | `FunAudioLLM/SenseVoiceSmall` |
+| Mistral | `https://api.mistral.ai/v1` | `voxtral-mini-latest` |
+| Self-hosted (vLLM, LocalAI, …) | e.g. `http://localhost:8000/v1` | the model you serve |
+
+Services with their own format (Deepgram, Azure, Gemini, ElevenLabs…) can be used through [LiteLLM](https://docs.litellm.ai/docs/audio_transcription), which exposes them in this format. The recognition language and your vocabulary (as a prompt) are sent along. Silence is still trimmed locally first when a local model has been downloaded, so recordings without speech are not uploaded.
+
 ### LLM setup (polishing / voice edit)
 
 Any OpenAI-compatible API works, local or remote. In Settings, fill in:
@@ -114,6 +130,8 @@ Settings are stored in `%APPDATA%\Aoide\config.json` (macOS: `~/Library/Applicat
 | `revise_hotkey` | `right alt+space` | Start a voice edit. `<main hotkey>+<key>` means: hold the main hotkey, then press the key |
 | `revise_stop_hotkey` | `right alt` | Stop a voice edit (merged into the tap logic when equal to `hotkey`) |
 | `cancel_hotkey` | `esc` | Cancel the current recording or transcription. Only intercepted while a task is in progress |
+| `speech_source` | `local` | Speech recognition: `local` (local model) / `api` (OpenAI-compatible speech-to-text API) |
+| `speech_api` / `speech_api_key` / `speech_api_model` | *(empty)* | API base, key and model name used when `speech_source` is `api` |
 | `model` | `sense-voice` | SenseVoice: `sense-voice` (zh/en/ja/ko/yue) / `sense-voice-yue` (Cantonese-tuned). Whisper: `tiny` / `base` / `small` / `medium` / `large-v3-turbo-q5_0` / `large-v3-turbo` / `large-v2` / `large-v3` |
 | `model_dir` | *(empty)* | Where models are stored. Empty = `%LOCALAPPDATA%\Aoide\models` (macOS: `~/Library/Application Support/Aoide/models`) |
 | `language` | `auto` | Transcription language; `auto` to auto-detect. SenseVoice supports `zh` / `en` / `ja` / `ko` / `yue` / `auto` |

@@ -34,7 +34,7 @@ Aoide 是一款 Windows 和 macOS 平台的语音输入应用，是 Typeless、W
 
 语音在本机由 [SenseVoice](https://github.com/FunAudioLLM/SenseVoice)（通过 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 运行）或 [whisper.cpp](https://github.com/ggml-org/whisper.cpp)（Windows 上通过 Vulkan、macOS 上通过 Metal 进行 GPU 加速）识别，可选通过任意 OpenAI 格式 API 交给 LLM 润色，然后直接输出到当前焦点所在的输入框。
 
-不需要账号、不依赖云服务，除非你把 LLM 指向远程 API，否则音频不会离开你的电脑。
+不需要账号、不依赖云服务。只有当你选择用语音识别 API 代替本地模型时，音频才会离开你的电脑。
 
 ## 功能
 
@@ -93,6 +93,22 @@ macOS 上 Aoide 在菜单栏中运行：单击图标打开窗口，右键图标�
 
 ![设置窗口](docs/images/zh/settings.png)
 
+### 用 API 识别语音（可选）
+
+默认用本地模型识别。想改用云端或自建的服务时，在 **设置 → 语音识别 → 识别方式** 选择 **API**，再填写 API 地址、API Key 和模型名。
+
+Aoide 使用 OpenAI 的语音识别格式（`POST {API 地址}/audio/transcriptions`），这是事实上的通用格式，很多服务都提供：
+
+| 服务 | API 地址 | 模型名（示例） |
+|---|---|---|
+| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini-transcribe`、`whisper-1` |
+| Groq | `https://api.groq.com/openai/v1` | `whisper-large-v3-turbo` |
+| 硅基流动 | `https://api.siliconflow.cn/v1` | `FunAudioLLM/SenseVoiceSmall` |
+| Mistral | `https://api.mistral.ai/v1` | `voxtral-mini-latest` |
+| 自建（vLLM、LocalAI 等） | 如 `http://localhost:8000/v1` | 你部署的模型 |
+
+使用其他格式的服务（Deepgram、Azure、Gemini、ElevenLabs 等）可以经 [LiteLLM](https://docs.litellm.ai/docs/audio_transcription) 转成这个格式再接入。识别语言和词库（作为提示词）会一起发送。下载过本地模型时，仍会先在本地切掉静音，没有说话的录音不会上传。
+
 ### 配置 LLM（润色 / 语音修订）
 
 支持任意 OpenAI 格式 API，本地或远程均可。在设置中填写：
@@ -114,6 +130,8 @@ macOS 上 Aoide 在菜单栏中运行：单击图标打开窗口，右键图标�
 | `revise_hotkey` | `right alt+space` | 开始语音修订。`<主快捷键>+<某键>` 表示按住主快捷键再按该键 |
 | `revise_stop_hotkey` | `right alt` | 停止语音修订（与 `hotkey` 相同时合并为单击逻辑） |
 | `cancel_hotkey` | `esc` | 取消本次录音或识别；只在任务进行中拦截该键 |
+| `speech_source` | `local` | 语音识别方式：`local`（本地模型）/ `api`（OpenAI 格式的语音识别 API） |
+| `speech_api` / `speech_api_key` / `speech_api_model` | *（空）* | `speech_source` 为 `api` 时使用的 API 地址、Key 和模型名 |
 | `model` | `sense-voice` | SenseVoice：`sense-voice`（中英日韩粤）/ `sense-voice-yue`（粤语增强）。Whisper：`tiny` / `base` / `small` / `medium` / `large-v3-turbo-q5_0` / `large-v3-turbo` / `large-v2` / `large-v3` |
 | `model_dir` | *（空）* | 模型存放目录，留空 = `%LOCALAPPDATA%\Aoide\models`（macOS：`~/Library/Application Support/Aoide/models`） |
 | `language` | `auto` | 转录语言，`auto` 为自动检测。SenseVoice 支持 `zh` / `en` / `ja` / `ko` / `yue` / `auto` |
