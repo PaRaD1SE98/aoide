@@ -25,6 +25,9 @@ const VALUE_CFRANGE: u32 = 4;
 const TIMEOUT: f32 = 0.3;
 /// 每隔多久重新给浏览器设置一次开关（以防浏览器自己关掉了辅助功能）
 const BROWSER_REASSERT: Duration = Duration::from_secs(30);
+/// 浏览器的焦点停在网页本身（AXWebArea）时，网页里的内容可能还没准备好：每隔多久再读一次、最多等多久
+const WEB_AREA_POLL: Duration = Duration::from_millis(150);
+const WEB_AREA_WAIT: Duration = Duration::from_millis(600);
 
 /// Chromium 系浏览器的 bundle id（前缀）
 const CHROMIUM_BROWSERS: &[&str] = &[
@@ -217,8 +220,8 @@ struct Enabled {
 
 static ENABLED: Mutex<Vec<Enabled>> = Mutex::new(Vec::new());
 
-/// 打开程序的辅助功能树，返回还要等多久才能读到（只有刚打开浏览器的辅助功能树时需要等）
-fn enable_tree(app: &Element, pid: i32) -> Duration {
+/// 打开程序的辅助功能树，返回程序类别和还要等多久才能读到（只有刚打开浏览器的辅助功能树时需要等）
+fn enable_tree(app: &Element, pid: i32) -> (Kind, Duration) {
     let mut enabled = ENABLED.lock().unwrap();
     let e = match enabled.iter().position(|e| e.pid == pid) {
         Some(i) => &mut enabled[i],
@@ -231,11 +234,11 @@ fn enable_tree(app: &Element, pid: i32) -> Duration {
             log::info!("AX: enable accessibility tree of pid {pid} ({kind:?}): role={role:?}, manual={manual}, enhanced={enhanced}");
             let now = Instant::now();
             enabled.push(Enabled { pid, kind, first_request: now, last_request: now });
-            return kind.delay();
+            return (kind, kind.delay());
         }
     };
     if e.kind == Kind::Other {
-        return Duration::ZERO;
+        return (Kind::Other, Duration::ZERO);
     }
     // 每次设置都会让 Chrome 重新开始 2 秒倒计时，所以不能每次读取都设置，隔一段时间重申一次
     if e.last_request.elapsed() >= BROWSER_REASSERT {
@@ -244,7 +247,7 @@ fn enable_tree(app: &Element, pid: i32) -> Duration {
         e.last_request = Instant::now();
         log::info!("AX: re-enable accessibility tree of pid {pid}: role={role}, enhanced={ok}");
     }
-    e.kind.delay().saturating_sub(e.first_request.elapsed())
+    (e.kind, e.kind.delay().saturating_sub(e.first_request.elapsed()))
 }
 
 /// 程序的 bundle id
@@ -260,32 +263,47 @@ fn bundle_id(pid: i32) -> Option<String> {
     })
 }
 
-/// 当前焦点所在的程序，以及还要等多久才能读到它的辅助功能树
-fn focused_application_and_delay() -> Option<(Element, Duration)> {
+/// 当前焦点所在的程序、它的类别，以及还要等多久才能读到它的辅助功能树
+fn focused_application_and_delay() -> Option<(Element, Kind, Duration)> {
     let app = Element::system_wide()?.element("AXFocusedApplication")?;
     let Some(pid) = app.pid() else {
-        return Some((app, Duration::ZERO));
+        return Some((app, Kind::Other, Duration::ZERO));
     };
-    let delay = enable_tree(&app, pid);
+    let (kind, delay) = enable_tree(&app, pid);
     // 用按进程号创建的元素：系统级元素上设置的超时也对它生效
-    Some((Element::application(pid).unwrap_or(app), delay))
+    Some((Element::application(pid).unwrap_or(app), kind, delay))
 }
 
 /// 当前焦点所在的程序
 fn focused_application() -> Option<Element> {
-    focused_application_and_delay().map(|(app, _)| app)
+    focused_application_and_delay().map(|(app, ..)| app)
 }
 
 /// 当前的键盘焦点元素。刚打开浏览器的辅助功能树时，先等它生效
 /// （录音开始时显示悬浮条就会打开，通常等到转写完已经生效，不用再等）
 pub fn focused_element() -> Option<Element> {
-    let (app, delay) = focused_application_and_delay()?;
+    let (app, kind, delay) = focused_application_and_delay()?;
     if !delay.is_zero() {
         log::info!("AX: waiting {} ms for the accessibility tree", delay.as_millis());
         std::thread::sleep(delay);
     }
-    app.element("AXFocusedUIElement")
-        .or_else(|| Element::system_wide()?.element("AXFocusedUIElement"))
+    let read = || app.element("AXFocusedUIElement").or_else(|| Element::system_wide()?.element("AXFocusedUIElement"));
+    let mut elem = read();
+    if kind == Kind::Other {
+        return elem;
+    }
+    // 浏览器：焦点停在网页本身，可能是网页内容还没对外提供（浏览器按需构建），稍等再读
+    let mut waited = Duration::ZERO;
+    while waited < WEB_AREA_WAIT && elem.as_ref().is_none_or(|e| e.string("AXRole").as_deref() == Some("AXWebArea")) {
+        std::thread::sleep(WEB_AREA_POLL);
+        waited += WEB_AREA_POLL;
+        elem = read();
+    }
+    if !waited.is_zero() {
+        let role = elem.as_ref().and_then(|e| e.string("AXRole"));
+        log::info!("AX: browser focus after waiting {} ms: {role:?}", waited.as_millis());
+    }
+    elem
 }
 
 /// 输入焦点大致所在的位置（左上角为原点的屏幕坐标）：焦点窗口的中心，读不到时用鼠标位置
