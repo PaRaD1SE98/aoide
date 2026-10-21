@@ -10,7 +10,7 @@
 //!    探针选无键位映射的 Unicode 字符，注入走 VK_PACKET，不会触发应用快捷键。
 
 use super::com::ComGuard;
-use crate::focus::CaretContext;
+use crate::focus::{CaretContext, Typable};
 use crate::input;
 use std::time::Duration;
 use windows::core::Interface;
@@ -148,16 +148,16 @@ fn try_type_probe(uia: &IUIAutomation) -> bool {
 }
 
 /// 综合判定：UIA 快路径 → 探针实测兜底
-pub fn can_type_here() -> bool {
+pub fn can_type_here() -> Typable {
     let _com = ComGuard::new();
     let uia = match uia() {
         Ok(uia) => uia,
         Err(e) => {
             log::error!("can_type_here error: {e} (assume editable)");
-            return true;
+            return Typable::Yes;
         }
     };
-    is_focused_editable(&uia) || try_type_probe(&uia)
+    (is_focused_editable(&uia) || try_type_probe(&uia)).into()
 }
 
 /// 最多读取光标前 / 后多少个字符（只取光标附近，长文档也不会慢）

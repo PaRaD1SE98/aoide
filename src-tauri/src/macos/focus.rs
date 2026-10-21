@@ -6,15 +6,20 @@
 //!    没有任何插入迹象 → 判定不可输入。Windows 还能看系统光标有没有移动，macOS 没有这个信号，
 //!    文字和选区都读不到的控件不打探针，直接判定不可输入（结果显示在卡片里）
 //!
+//! 例外：Chrome、Firefox 的网页内容可能始终读不到（见 ax.rs），焦点只停在网页或窗口上、
+//! 或读不到焦点元素时，判定为「不确定」：照样粘贴，文字留在剪贴板里（与 OpenWhispr 等同类工具一致）
+//!
 //! 文字的位置、长度都按 UTF-16 计（辅助功能 API 的约定）
 
 use super::ax::{self, Element};
 use super::cf::CFRange;
-use crate::focus::CaretContext;
+use crate::focus::{CaretContext, Typable};
 use crate::input;
 use std::time::Duration;
 
 const PROBE_CHAR: char = '∙';
+const PROBE_POLL: Duration = Duration::from_millis(50);
+const PROBE_WAIT: Duration = Duration::from_millis(500);
 
 /// 最多读取光标前 / 后多少个字符（只取光标附近，长文档也不会慢）
 const CONTEXT_BEFORE: isize = 600;
@@ -59,10 +64,18 @@ fn try_type_probe(elem: Option<&Element>) -> bool {
         return false;
     }
     input::unicode_char(PROBE_CHAR);
-    std::thread::sleep(Duration::from_millis(150));
-    let (after_text, after_sel) = snapshot(elem);
-
-    let inserted = (before_text.is_some() && after_text != before_text) || (before_sel.is_some() && after_sel != before_sel);
+    // 浏览器把网页里的变化同步给辅助功能树要一会儿：最多等 PROBE_WAIT，看到变化就停
+    let mut waited = Duration::ZERO;
+    let (mut after_text, mut after_sel);
+    let inserted = loop {
+        std::thread::sleep(PROBE_POLL);
+        waited += PROBE_POLL;
+        (after_text, after_sel) = snapshot(elem);
+        let changed = (before_text.is_some() && after_text != before_text) || (before_sel.is_some() && after_sel != before_sel);
+        if changed || waited >= PROBE_WAIT {
+            break changed;
+        }
+    };
     if inserted {
         input::backspace();
         std::thread::sleep(Duration::from_millis(50));
@@ -75,13 +88,24 @@ fn try_type_probe(elem: Option<&Element>) -> bool {
     inserted
 }
 
-/// 综合判定：角色快路径 → 探针实测兜底
-pub fn can_type_here() -> bool {
-    let elem = ax::focused_element();
+/// 综合判定：角色快路径 → 浏览器里读不到网页内容时判为不确定 → 探针实测兜底
+pub fn can_type_here() -> Typable {
+    let (elem, kind) = ax::focused_element_and_kind();
     if elem.is_none() {
         log::info!("Focus AX: no focused element");
     }
-    elem.as_ref().is_some_and(is_editable) || try_type_probe(elem.as_ref())
+    if elem.as_ref().is_some_and(is_editable) {
+        return Typable::Yes;
+    }
+    if kind.is_browser() && elem.as_ref().is_none_or(ax::is_page_level) {
+        log::info!("Focus AX: {kind:?} page content is not readable -> unknown");
+        return Typable::Unknown;
+    }
+    if try_type_probe(elem.as_ref()) {
+        Typable::Yes
+    } else {
+        Typable::No
+    }
 }
 
 /// 文字的总长度（UTF-16）

@@ -21,6 +21,15 @@ pub fn set_text(text: &str) -> bool {
 /// 替换逻辑，事件洪流会和缓冲区改写互相踩踏，导致标点多打、文字少打；
 /// 粘贴是一次原子写入，没有逐键处理。（原剪贴板是图片等非文本时无法恢复）
 pub fn paste_text(text: &str) -> bool {
+    paste(text, true)
+}
+
+/// 粘贴文字，但不恢复原剪贴板：不确定粘贴有没有落到输入框里时，用户还能自己再粘贴一次
+pub fn paste_text_keep(text: &str) -> bool {
+    paste(text, false)
+}
+
+fn paste(text: &str, restore: bool) -> bool {
     let old = get_text();
     if !set_text(text) {
         return false;
@@ -28,7 +37,7 @@ pub fn paste_text(text: &str) -> bool {
     std::thread::sleep(Duration::from_millis(50));
     input::shortcut('v');
     log::info!("Pasted: {text}");
-    if let Some(old) = old.filter(|o| o != text) {
+    if let Some(old) = old.filter(|o| restore && o != text) {
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_secs(1));
             set_text(&old);
