@@ -55,19 +55,45 @@ pub fn setup(app: &mut App) {
     // 键盘钩子会一直等到授权（见 hook.rs）
     if !accessibility_trusted(false) {
         log::warn!("Accessibility permission not granted yet");
+        remove_stale_accessibility_entry();
     }
 }
 
-/// 是否作为打包好的 .app 运行（开发模式下的裸程序没有 bundle）
-fn in_app_bundle() -> bool {
+/// 清掉系统设置「辅助功能」列表里 Aoide 失效的旧条目。
+///
+/// 程序是临时签名（ad hoc）的，每个版本的签名都不同，而系统按签名认授权：更新后旧条目还在列表里、
+/// 开关也开着，却对新版本无效，用户会看到「明明开着却还要授权」。没有授权时先删掉旧条目，
+/// 用户在设置页点授权时系统会为新版本重新加一条（见 permissions.rs）。
+/// 没有授权时列表里 Aoide 的条目都是无效的，删掉没有损失
+fn remove_stale_accessibility_entry() {
+    let Some(id) = bundle_identifier() else { return };
+    match std::process::Command::new("/usr/bin/tccutil")
+        .args(["reset", "Accessibility", &id])
+        .stdin(std::process::Stdio::null())
+        .output()
+    {
+        Ok(out) if out.status.success() => log::info!("Reset Accessibility entry for {id}"),
+        Ok(out) => log::warn!("tccutil reset failed: {}", String::from_utf8_lossy(&out.stderr).trim()),
+        Err(e) => log::warn!("tccutil reset failed: {e}"),
+    }
+}
+
+/// 打包好的 .app 的标识；开发模式下的裸程序没有 bundle，返回 None
+fn bundle_identifier() -> Option<String> {
     unsafe {
         let bundle: *mut AnyObject = msg_send![class!(NSBundle), mainBundle];
         if bundle.is_null() {
-            return false;
+            return None;
         }
+        // NSString 与 CFString 可以互相转换
         let id: *mut AnyObject = msg_send![bundle, bundleIdentifier];
-        !id.is_null()
+        CF::retained(id as CFTypeRef)?.to_string()
     }
+}
+
+/// 是否作为打包好的 .app 运行
+fn in_app_bundle() -> bool {
+    bundle_identifier().is_some()
 }
 
 /// 主窗口（设置）打开：显示程序坞图标和菜单栏，窗口能正常切换、复制粘贴
