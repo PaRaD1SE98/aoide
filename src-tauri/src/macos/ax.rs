@@ -128,12 +128,17 @@ impl Element {
     }
 
     pub fn attr(&self, name: &str) -> Option<CF> {
+        self.attr_or_error(name).ok()
+    }
+
+    /// 读属性；失败时返回辅助功能 API 的错误码（写日志用）
+    fn attr_or_error(&self, name: &str) -> Result<CF, i32> {
         let mut value: CFTypeRef = std::ptr::null();
         let err = unsafe { AXUIElementCopyAttributeValue(self.0.as_ptr(), CF::string(name).as_ptr(), &mut value) };
         if err == AX_SUCCESS {
-            CF::owned(value)
+            CF::owned(value).ok_or(err)
         } else {
-            None
+            Err(err)
         }
     }
 
@@ -264,15 +269,38 @@ fn bundle_id(pid: i32) -> Option<String> {
     })
 }
 
-/// 当前焦点所在的程序、它的类别，以及还要等多久才能读到它的辅助功能树
+/// 前台程序的进程号，由系统（NSWorkspace）记录，不用问前台程序本身
+fn frontmost_pid() -> Option<i32> {
+    objc2::rc::autoreleasepool(|_| unsafe {
+        let workspace: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
+        if workspace.is_null() {
+            return None;
+        }
+        let app: *mut AnyObject = msg_send![workspace, frontmostApplication];
+        if app.is_null() {
+            return None;
+        }
+        let pid: i32 = msg_send![app, processIdentifier];
+        (pid > 0).then_some(pid)
+    })
+}
+
+/// 当前焦点所在的程序、它的类别，以及还要等多久才能读到它的辅助功能树。
+/// 前台程序用 NSWorkspace 判断：系统级元素的 AXFocusedApplication 要前台程序自己回答，
+/// 辅助功能树没打开的 Chrome、Firefox 不回答，就连是哪个程序都不知道了
 fn focused_application_and_delay() -> Option<(Element, Kind, Duration)> {
-    let app = Element::system_wide()?.element("AXFocusedApplication")?;
-    let Some(pid) = app.pid() else {
-        return Some((app, Kind::Other, Duration::ZERO));
-    };
+    // 系统级元素上设置的超时对所有元素生效，所以先创建它
+    let system = Element::system_wide()?;
+    let pid = frontmost_pid().or_else(|| match system.attr_or_error("AXFocusedApplication") {
+        Ok(app) => Element(app).pid(),
+        Err(err) => {
+            log::info!("AX: no focused application (error {err})");
+            None
+        }
+    })?;
+    let app = Element::application(pid)?;
     let (kind, delay) = enable_tree(&app, pid);
-    // 用按进程号创建的元素：系统级元素上设置的超时也对它生效
-    Some((Element::application(pid).unwrap_or(app), kind, delay))
+    Some((app, kind, delay))
 }
 
 /// 当前焦点所在的程序
@@ -297,6 +325,10 @@ pub fn focused_element_and_kind() -> (Option<Element>, Kind) {
     }
     let read = || app.element("AXFocusedUIElement").or_else(|| Element::system_wide()?.element("AXFocusedUIElement"));
     let mut elem = read();
+    if elem.is_none() {
+        let err = app.attr_or_error("AXFocusedUIElement").err();
+        log::info!("AX: {kind:?} app has no focused element (error {err:?})");
+    }
     if !kind.is_browser() {
         return (elem, kind);
     }
