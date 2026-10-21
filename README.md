@@ -126,6 +126,7 @@ Settings are stored in `%APPDATA%\Aoide\config.json` (macOS: `~/Library/Applicat
 | `polish_min_chars` | `12` | Transcripts shorter than this (ignoring spaces) are output as-is without polishing. Doesn't apply to voice edits |
 | `insert_smart` | `true` | Context-aware insertion when there is text around the cursor |
 | `insert_min_seconds` / `insert_min_chars` | `10` / `12` | Shorter recordings / transcripts are inserted as-is without calling the LLM |
+| `drop_final_period` | `true` | When the transcript isn't polished by the LLM and is a single sentence, drop the final period so short phrases fit into existing sentences (question and exclamation marks are kept) |
 | `vocab_enabled` | `true` | Correct transcripts with your vocabulary: repeated misrecognitions are replaced directly, others go to the LLM with the related entries |
 | `learn_from_edits` | `true` | When you correct a word after it is typed, add the correction to the vocabulary (with an Undo notice) |
 | `auto_check_updates` | `true` | Check for a new version once a day and notify you; updating is always your choice |

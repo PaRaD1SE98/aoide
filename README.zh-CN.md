@@ -126,6 +126,7 @@ macOS 上 Aoide 在菜单栏中运行：单击图标打开窗口，右键图标�
 | `polish_min_chars` | `12` | 转录结果短于此字符数（去空格）时不润色直接输出；语音修订不受影响 |
 | `insert_smart` | `true` | 光标前后有文字时按上下文插入 |
 | `insert_min_seconds` / `insert_min_chars` | `10` / `12` | 录音 / 转写结果短于此值时直接插入，不调用 LLM |
+| `drop_final_period` | `true` | 没经过 LLM 润色、只有一句话的识别结果，去掉末尾的句号，方便把短语补进已有的句子里（问号、感叹号保留） |
 | `vocab_enabled` | `true` | 用词库纠正识别结果：反复出现的误识别直接替换，其余连同相关词条交给 LLM |
 | `learn_from_edits` | `true` | 识别结果输入后你手动改正的词，自动加入词库（并弹出可撤销的提示） |
 | `auto_check_updates` | `true` | 每天检查一次新版本并通知你；是否更新始终由你决定 |

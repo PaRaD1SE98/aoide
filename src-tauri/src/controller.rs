@@ -374,6 +374,16 @@ impl Controller {
         }
     }
 
+    /// 不经过 LLM 润色直接输出的结果：按词库修正，再按设置去掉单句末尾的句号
+    fn unpolished(&self, text: String, glossary: Option<&str>, cfg: &Config) -> String {
+        let text = self.correct_terms(text, glossary, cfg);
+        if cfg.drop_final_period {
+            llm::drop_final_period(&text)
+        } else {
+            text
+        }
+    }
+
     /// 开启「按上下文插入」且已配置 LLM 时读取光标前后的文字；光标前后都没有内容时返回 None（按普通润色处理）
     fn caret_context(&self, cfg: &Config) -> Option<focus::CaretContext> {
         if !cfg.insert_smart || cfg.polish_api.trim().is_empty() {
@@ -399,7 +409,7 @@ impl Controller {
                 cfg.insert_min_chars
             );
             // 不走 LLM 插入（命中词库时仍按词库修正），西文单词之间的空格按前后文补上
-            let text = self.correct_terms(text, glossary, cfg);
+            let text = self.unpolished(text, glossary, cfg);
             return llm::fit_spacing(text.trim(), &ctx.before, &ctx.after);
         }
         overlay::set(Mode::Polishing);
@@ -418,16 +428,16 @@ impl Controller {
     /// LLM 润色（如果启用且已配置 API）；录音太短或文字太少都不值得润色，此时只按词库修正（有相关词条时）
     fn maybe_polish(&self, text: String, seconds: f32, glossary: Option<&str>, cfg: &Config) -> String {
         if !cfg.polish || cfg.polish_api.trim().is_empty() {
-            return self.correct_terms(text, glossary, cfg);
+            return self.unpolished(text, glossary, cfg);
         }
         if seconds < cfg.polish_min_seconds as f32 {
             log::info!("Polish skipped (short recording: {seconds:.1}s < {}s)", cfg.polish_min_seconds);
-            return self.correct_terms(text, glossary, cfg);
+            return self.unpolished(text, glossary, cfg);
         }
         let plain = text.chars().filter(|c| !c.is_whitespace()).count();
         if plain < cfg.polish_min_chars {
             log::info!("Polish skipped (short text: {plain} < {} chars)", cfg.polish_min_chars);
-            return self.correct_terms(text, glossary, cfg);
+            return self.unpolished(text, glossary, cfg);
         }
         overlay::set(Mode::Polishing);
         match llm::polish_text(&text, glossary, cfg) {
