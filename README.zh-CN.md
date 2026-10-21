@@ -72,7 +72,7 @@ Aoide 是一款 Windows 和 macOS（预览版）平台的语音输入应用，�
 
 1. 从 [Releases](https://github.com/PaRaD1SE98/aoide/releases) 下载 `Aoide_x.y.z_aarch64.dmg`（Apple 芯片）或 `Aoide_x.y.z_x64.dmg`（Intel 芯片），打开后把 Aoide 拖进「应用程序」。
 2. Aoide 没有经过 Apple 公证，首次打开会被系统拦下。打开 **系统设置 → 隐私与安全性**，滚动到下方点击 **仍要打开**。
-3. 在 **系统设置 → 隐私与安全性 → 辅助功能** 中允许 Aoide（用于监听快捷键和粘贴文字），并在提示时允许使用麦克风。辅助功能一打开快捷键就生效，不用重启。
+3. Aoide 会先请求使用麦克风。之后设置窗口顶部会列出还缺少的权限：点 *辅助功能*（用于监听快捷键和粘贴文字）旁的 **打开系统设置**，在那里打开 Aoide 的开关。列表会自动更新，快捷键随即生效，不用重启。
 4. 在设置窗口下载模型，然后在任意位置单击 `右Option` 开始说话。
 
 **环境要求：** macOS 11 或更新版本，Apple 芯片或 Intel 芯片均可。Whisper 模型只在 Apple 芯片上用 GPU（Metal）加速，Intel Mac 上只用 CPU，建议使用 SenseVoice。

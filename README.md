@@ -72,7 +72,7 @@ No account, no cloud service, no audio leaves your computer unless you point the
 
 1. Download `Aoide_x.y.z_aarch64.dmg` (Apple silicon) or `Aoide_x.y.z_x64.dmg` (Intel) from [Releases](https://github.com/PaRaD1SE98/aoide/releases), open it and drag Aoide into *Applications*.
 2. Aoide is not notarized by Apple, so macOS blocks the first launch. Open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
-3. Allow Aoide under **System Settings → Privacy & Security → Accessibility** (needed to listen for the hotkey and to paste text) and allow microphone access when asked. The hotkey starts working as soon as Accessibility is allowed, no restart needed.
+3. Aoide first asks for the microphone. Then the Settings window lists any permission still missing: click **Open System Settings** next to *Accessibility* (needed to listen for the hotkey and to paste text) and turn on Aoide there. The list updates by itself and the hotkey starts working right away, no restart needed.
 4. Download a model in the Settings window, then tap `Right Option` anywhere and start talking.
 
 **Requirements:** macOS 11 or later, on Apple silicon or Intel. Whisper models use the GPU (Metal) only on Apple silicon; on Intel Macs they run on the CPU, so SenseVoice is the better choice there.

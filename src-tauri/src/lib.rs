@@ -99,6 +99,31 @@ fn dir_or_default(model_dir: &str) -> PathBuf {
     Config { model_dir: model_dir.to_string(), ..Config::default() }.model_dir()
 }
 
+/// 系统权限（macOS 需要用户授权；Windows 上总是齐全的）
+#[derive(Serialize)]
+pub(crate) struct Permissions {
+    /// granted / denied / undetermined（还没问过）
+    pub microphone: &'static str,
+    pub accessibility: bool,
+}
+
+impl Permissions {
+    fn all_granted(&self) -> bool {
+        self.microphone == "granted" && self.accessibility
+    }
+}
+
+#[tauri::command]
+fn get_permissions() -> Permissions {
+    platform::permissions::status()
+}
+
+/// 设置页上点了授权按钮：弹出系统对话框或打开系统设置的对应页面（麦克风对话框会等到用户回答）
+#[tauri::command]
+async fn request_permission(kind: String) {
+    let _ = tauri::async_runtime::spawn_blocking(move || platform::permissions::request(&kind)).await;
+}
+
 #[derive(Serialize)]
 struct SettingsPayload {
     config: Config,
@@ -476,6 +501,8 @@ pub fn run() {
             close_learned,
             get_notice,
             close_notice,
+            get_permissions,
+            request_permission,
             check_update,
             get_update,
             install_update,
@@ -495,9 +522,19 @@ pub fn run() {
             tray::create(app.handle(), &cfg.hotkey)?;
             ctl.start();
             updater::start(app.handle().clone());
-            // 用户手动启动时打开主窗口；开机自启时只在托盘运行（除非还没下载模型）
+            // 用户手动启动时打开主窗口；开机自启时只在托盘运行（除非还没下载模型、缺少系统权限）
             let autostarted = std::env::args().any(|a| a == AUTOSTART_ARG);
-            if !autostarted || !ctl.model_downloaded() {
+            if !autostarted || !ctl.model_downloaded() || !platform::permissions::status().all_granted() {
+                // macOS：首次打开时先请求麦克风权限，用户回答后再打开窗口，免得窗口盖住系统的对话框
+                #[cfg(target_os = "macos")]
+                {
+                    let app = app.handle().clone();
+                    std::thread::spawn(move || {
+                        platform::permissions::request_microphone();
+                        open_settings(&app);
+                    });
+                }
+                #[cfg(not(target_os = "macos"))]
                 open_settings(app.handle());
             }
             if !ctl.model_downloaded() {

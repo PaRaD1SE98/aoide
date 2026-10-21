@@ -33,6 +33,17 @@ pub fn setup(_app: &mut App) {
     unsafe { windows::Win32::UI::WindowsAndMessaging::DisableProcessWindowsGhosting() };
 }
 
+/// 系统权限：Windows 上录音和键盘钩子都不需要用户授权
+pub mod permissions {
+    use crate::Permissions;
+
+    pub fn status() -> Permissions {
+        Permissions { microphone: "granted", accessibility: true }
+    }
+
+    pub fn request(_kind: &str) {}
+}
+
 /// 主窗口（设置）打开 / 关闭时调用；Windows 上没有要做的
 pub fn main_window_shown(_app: &AppHandle) {}
 pub fn main_window_closed(_app: &AppHandle) {}

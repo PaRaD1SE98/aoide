@@ -195,6 +195,7 @@ function applyLanguage() {
   applyI18n(resolveLang(state.config.ui_language));
   renderModels();
   renderVocab();
+  renderPermissions();
   setUpdateStatus(updateStatus.key, updateStatus.vars, updateStatus.cls);
   updateResetButtons();
 }
@@ -231,6 +232,40 @@ function el(tag, props = {}, ...children) {
   const e = Object.assign(document.createElement(tag), props);
   e.append(...children);
   return e;
+}
+
+// === 系统权限（macOS）：缺少时在页面顶部列出，授权后自动消失 ===
+const PERMISSIONS = [
+  { kind: "accessibility", icon: "&#xE765;" },
+  { kind: "microphone", icon: "&#xE720;" },
+];
+let permissions = null;
+
+function renderPermissions() {
+  if (!permissions) return;
+  const granted = (kind) => (kind === "microphone" ? permissions.microphone === "granted" : permissions.accessibility);
+  const missing = PERMISSIONS.filter(({ kind }) => !granted(kind));
+  $("perm").hidden = missing.length === 0;
+  $("perm-list").replaceChildren(...missing.map(({ kind, icon }) => {
+    // 麦克风还没问过：点按钮弹出系统对话框；其余情况只能去系统设置里打开
+    const ask = kind === "microphone" && permissions.microphone === "undetermined";
+    const desc = kind === "microphone" && permissions.microphone === "denied" ? "perm.microphone.denied" : `perm.${kind}.desc`;
+    const btn = el("button", { className: "btn accent", textContent: t(ask ? "perm.allow" : "perm.openSettings") });
+    btn.addEventListener("click", () => invoke("request_permission", { kind }).then(refreshPermissions));
+    return el("div", { className: "card" },
+      el("span", { className: "ico", innerHTML: icon }),
+      el("div", { className: "text" },
+        el("div", { className: "title", textContent: t(`perm.${kind}.title`) }),
+        el("div", { className: "desc", textContent: t(desc) })),
+      el("div", { className: "control" }, btn));
+  }));
+}
+
+async function refreshPermissions() {
+  const p = await invoke("get_permissions");
+  if (JSON.stringify(p) === JSON.stringify(permissions)) return;
+  permissions = p;
+  renderPermissions();
 }
 
 function renderVocab() {
@@ -518,6 +553,9 @@ async function init() {
   update = await invoke("get_update");
   setUpdateStatus("update.current");
   renderUpdate();
+  await refreshPermissions();
+  // 用户去系统设置里授权后，这里自动更新
+  if (PLATFORM === "macos") setInterval(refreshPermissions, 1500);
   await loadVocab();
 }
 

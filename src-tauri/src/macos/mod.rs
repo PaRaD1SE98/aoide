@@ -12,6 +12,7 @@ pub mod input;
 mod keycode;
 pub mod mute;
 pub mod overlay;
+pub mod permissions;
 pub mod popup;
 pub mod sound;
 
@@ -44,9 +45,22 @@ pub fn prepare() {}
 pub fn setup(app: &mut App) {
     // 菜单栏程序：平时不在程序坞显示图标，打开设置窗口时才显示（见 main_window_shown）
     app.set_activation_policy(ActivationPolicy::Accessory);
-    // 没有辅助功能权限时弹出系统的授权提示；键盘钩子会一直等到授权（见 hook.rs）
-    if !accessibility_trusted(true) {
+    // 这里不弹系统的授权提示（会被随后打开的设置窗口盖住），由设置页引导用户授权（见 permissions.rs）；
+    // 键盘钩子会一直等到授权（见 hook.rs）
+    if !accessibility_trusted(false) {
         log::warn!("Accessibility permission not granted yet");
+    }
+}
+
+/// 是否作为打包好的 .app 运行（开发模式下的裸程序没有 bundle）
+fn in_app_bundle() -> bool {
+    unsafe {
+        let bundle: *mut AnyObject = msg_send![class!(NSBundle), mainBundle];
+        if bundle.is_null() {
+            return false;
+        }
+        let id: *mut AnyObject = msg_send![bundle, bundleIdentifier];
+        !id.is_null()
     }
 }
 
