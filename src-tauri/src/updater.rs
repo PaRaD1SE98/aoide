@@ -130,7 +130,13 @@ pub async fn install(app: &AppHandle) -> Result<(), String> {
         let installed = update.install(bytes).map_err(|e| e.to_string());
         #[cfg(target_os = "macos")]
         if installed.is_ok() {
-            app.restart();
+            crate::platform::relaunch_after_exit();
+            // 万一退出流程卡住，3 秒后直接结束进程，新版本照样会被打开
+            std::thread::spawn(|| {
+                std::thread::sleep(Duration::from_secs(3));
+                std::process::exit(0);
+            });
+            app.exit(0);
         }
         installed
     }

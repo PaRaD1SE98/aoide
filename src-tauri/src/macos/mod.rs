@@ -126,6 +126,36 @@ pub fn clipboard_sequence() -> u64 {
     }
 }
 
+/// 更新装好后调用：等本进程退出后，再重新打开 Aoide.app（调用方随后退出）。
+/// 不用 Tauri 的 restart：它在本进程退出前就启动新实例，新实例的单实例检查会把自己交给还没退出的旧进程，
+/// 结果更新装好了却没有重新打开
+pub fn relaunch_after_exit() {
+    use std::os::unix::process::CommandExt;
+    let bundle = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.ancestors().nth(3).map(std::path::Path::to_path_buf)) // Aoide.app/Contents/MacOS/aoide
+        .filter(|b| b.extension().is_some_and(|e| e == "app"));
+    let Some(bundle) = bundle else {
+        log::warn!("Relaunch skipped: not running from an app bundle");
+        return;
+    };
+    // 程序包路径作为 $0 传给脚本，不用处理引号；放进单独的进程组，本进程退出时不受影响
+    let script = format!("while kill -0 {} 2>/dev/null; do sleep 0.2; done; /usr/bin/open \"$0\"", std::process::id());
+    let spawned = std::process::Command::new("/bin/sh")
+        .arg("-c")
+        .arg(script)
+        .arg(&bundle)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .process_group(0)
+        .spawn();
+    match spawned {
+        Ok(_) => log::info!("Will reopen {} after exiting", bundle.display()),
+        Err(e) => log::error!("Relaunch failed: {e}"),
+    }
+}
+
 /// 用默认程序打开文件、文件夹或网址
 pub fn open(target: impl AsRef<std::ffi::OsStr>) -> std::io::Result<()> {
     std::process::Command::new("open").arg(target).spawn().map(|_| ())
