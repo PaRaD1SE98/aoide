@@ -249,8 +249,11 @@ function forwardKey(e, down) {
   // 229：输入法正在组字
   if (!vk || vk === 229) return;
   invoke("page_key", { vk, down });
-  // 录制快捷键时按的键不应触发页面里的操作；Alt+空格（语音修订的默认快捷键）会弹出窗口的系统菜单
-  if (capturing || (e.altKey && e.code === "Space")) e.preventDefault();
+  // 录制快捷键时按的键不应触发页面里的操作。
+  // 单独按下再松开 Alt（默认的主快捷键是右 Alt）会让窗口进入菜单模式，下一个按键被它吞掉：
+  // 第二次按 Alt 结束录音、按 Esc 取消都要按两次。Alt+空格（语音修订的默认快捷键）会弹出窗口的系统菜单
+  const alt = e.code === "AltLeft" || e.code === "AltRight";
+  if (capturing || alt || (e.altKey && e.code === "Space")) e.preventDefault();
 }
 
 window.addEventListener("keydown", (e) => forwardKey(e, true), true);
