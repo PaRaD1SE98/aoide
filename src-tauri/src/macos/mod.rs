@@ -1,6 +1,6 @@
 //! macOS 平台实现。与 win/mod.rs 提供相同的接口，其他模块统一通过 crate::platform 调用
 //!
-//! 需要两项系统权限：辅助功能（监听和拦截热键、模拟粘贴、读取焦点输入框）和麦克风。
+//! 需要两项系统权限：辅助功能（监听和拦截热键、模拟粘贴、读取焦点输入框）和麦克风；另外申请通知权限。
 //! 系统 API 大多直接声明 C 函数调用（CoreFoundation / CoreGraphics / 辅助功能 / CoreAudio），
 //! AppKit 对象用 objc2 的 msg_send! 收发消息
 
@@ -11,6 +11,7 @@ pub mod hook;
 pub mod input;
 mod keycode;
 pub mod mute;
+pub mod notify;
 pub mod overlay;
 pub mod popup;
 pub mod sound;
@@ -48,6 +49,7 @@ pub fn setup(app: &mut App) {
     if !accessibility_trusted(true) {
         log::warn!("Accessibility permission not granted yet");
     }
+    notify::request_permission();
 }
 
 /// 主窗口（设置）打开：显示程序坞图标和菜单栏，窗口能正常切换、复制粘贴

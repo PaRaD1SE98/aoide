@@ -125,6 +125,11 @@ impl Controller {
     }
 
     pub fn notify(&self, msg: &str) {
+        // macOS 打包运行时用系统的 UserNotifications，Tauri 插件的通知在 Aoide 位于前台时会被丢掉（见 macos/notify.rs）
+        #[cfg(target_os = "macos")]
+        if crate::platform::notify::show("Aoide", msg) {
+            return;
+        }
         let _ = self.app.notification().builder().title("Aoide").body(msg).show();
     }
 
