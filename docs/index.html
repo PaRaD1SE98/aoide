@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aoide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Local push-to-talk voice typing for Windows and macOS. Press a hotkey, speak, and your words are typed where your cursor is. Free and open source.">
+<meta property="og:title" content="Aoide">
+<meta property="og:description" content="Local push-to-talk voice typing for Windows and macOS. Free and open source.">
+<meta property="og:image" content="https://parad1se98.github.io/aoide/images/en/result.png">
+<meta property="og:type" content="website">
+<link rel="icon" href="images/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: one narrow reading column, left-aligned; only the demo runs wider. Each section answers one question: what is it, how do I use it, why this one, how do I start. */
+:root {
+  --bg: #f5f6fa;
+  --surface: #ffffff;
+  --ink: #16171d;
+  --muted: #5a5e6d;
+  --line: #dfe1ea;
+  --accent: #4b5cf0;
+  --accent-ink: #ffffff;
+  --accent-soft: #e8eaff;
+  --key-face: #ffffff;
+  --key-edge: #c9ccd8;
+  --pill: #232329;
+  --pill-ink: #f2f2f5;
+  --rec: #ff5a5f;
+  --asr: #5ec8f2;
+  --llm: #f0c24f;
+
+  --font-display: "Bricolage Grotesque", "PingFang SC", "Hiragino Sans", "Microsoft YaHei UI", "Yu Gothic UI", system-ui, sans-serif;
+  --font-body: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Hiragino Sans", "Microsoft YaHei UI", "Yu Gothic UI", sans-serif;
+  --font-key: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+
+  --step--1: 0.875rem;
+  --step-0: 1rem;
+  --step-1: 1.25rem;
+  --step-2: 1.75rem;
+  --step-3: clamp(2.25rem, 1.6rem + 3vw, 3.5rem);
+  --col: 40rem;
+  --wide: 66rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111217; --surface: #1a1b22; --ink: #eceef5; --muted: #a2a6b6; --line: #2b2d38;
+    --accent: #8e9bff; --accent-ink: #0d0f1c; --accent-soft: #23264a;
+    --key-face: #262833; --key-edge: #3c3f4e; --pill: #2a2a31; --pill-ink: #f2f2f5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111217; --surface: #1a1b22; --ink: #eceef5; --muted: #a2a6b6; --line: #2b2d38;
+  --accent: #8e9bff; --accent-ink: #0d0f1c; --accent-soft: #23264a;
+  --key-face: #262833; --key-edge: #3c3f4e; --pill: #2a2a31; --pill-ink: #f2f2f5;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: var(--step-0)/1.65 var(--font-body);
+}
+img { max-width: 100%; height: auto; display: block; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h2 { font-size: var(--step-2); font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: var(--step-1); font-weight: 600; }
+p { margin: 0; }
+
+.wrap {
+  max-width: var(--wide);
+  margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.col { max-width: var(--col); }
+section { padding-block: clamp(3rem, 8vw, 5.5rem); border-top: 1px solid var(--line); }
+.section-head { display: grid; gap: 0.5rem; margin-bottom: 2rem; }
+.section-head p { color: var(--muted); }
+
+/* Header */
+header .wrap { display: flex; align-items: center; gap: 1rem; padding-block: 1rem; }
+.brand { display: flex; align-items: center; gap: 0.6rem; font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; color: var(--ink); text-decoration: none; margin-right: auto; }
+.brand img { width: 28px; height: 28px; }
+.langs { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 999px; }
+.langs button {
+  font: 500 var(--step--1)/1 var(--font-body); color: var(--muted); background: none; border: 0;
+  padding: 0.4rem 0.65rem; border-radius: 999px; cursor: pointer;
+}
+.langs button[aria-pressed="true"] { background: var(--accent-soft); color: var(--ink); }
+.gh { display: flex; align-items: center; gap: 0.4rem; color: var(--ink); text-decoration: none; font-size: var(--step--1); }
+.gh svg { width: 20px; height: 20px; fill: currentColor; }
+
+/* Hero */
+.hero { padding-block: clamp(2rem, 6vw, 4.5rem) clamp(2.5rem, 6vw, 4rem); display: grid; gap: 1.5rem; }
+.pill {
+  display: inline-flex; align-items: center; gap: 0.7rem; align-self: start; justify-self: start;
+  background: var(--pill); color: var(--pill-ink); border-radius: 999px; padding: 0.45rem 1rem 0.45rem 0.8rem;
+  font-size: var(--step--1); box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+}
+.pill .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--rec); transition: background 0.3s; }
+.pill .bars { display: flex; align-items: center; gap: 3px; height: 18px; }
+.pill .bars i { width: 3px; height: 100%; border-radius: 2px; background: currentColor; opacity: 0.85; transform: scaleY(0.3); animation: talk 0.9s ease-in-out infinite; }
+.pill[data-state="asr"] .dot { background: var(--asr); }
+.pill[data-state="asr"] .bars i { color: var(--asr); animation-name: scan; animation-duration: 1.2s; }
+.pill[data-state="llm"] .dot { background: var(--llm); }
+.pill[data-state="llm"] .bars i { color: var(--llm); animation-name: scan; animation-duration: 1.2s; }
+/* All labels share one grid cell; script sets the width to the current label and the pill eases to it */
+.pill .label { display: grid; justify-items: start; overflow: hidden; transition: width 0.35s ease; }
+.pill .label span { grid-area: 1 / 1; white-space: nowrap; opacity: 0; visibility: hidden; transition: opacity 0.25s ease; }
+.pill .label span.on { opacity: 1; visibility: visible; }
+@keyframes talk { 0%, 100% { transform: scaleY(0.25); } 50% { transform: scaleY(1); } }
+@keyframes scan { 0%, 100% { transform: scaleY(0.3); opacity: 0.4; } 50% { transform: scaleY(0.55); opacity: 1; } }
+
+.hero h1 { font-size: var(--step-3); font-weight: 700; letter-spacing: -0.02em; max-width: 14em; }
+.lede { font-size: var(--step-1); line-height: 1.55; color: var(--muted); max-width: 32em; }
+.cta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; }
+.btn {
+  display: inline-flex; align-items: center; gap: 0.6rem;
+  background: var(--accent); color: var(--accent-ink); text-decoration: none;
+  font: 600 var(--step-0)/1 var(--font-body); padding: 0.95rem 1.4rem; border-radius: 10px;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn svg { width: 18px; height: 18px; fill: currentColor; }
+.cta-meta { display: grid; gap: 0.15rem; font-size: var(--step--1); color: var(--muted); }
+.cta-meta a { color: var(--muted); }
+.demo {
+  margin-top: 1rem; border-radius: 14px; overflow: hidden; border: 1px solid var(--line);
+  background: var(--surface); box-shadow: 0 24px 60px -30px rgb(30 34 80 / 0.35);
+}
+
+/* Keys */
+kbd {
+  display: inline-block; font: 500 0.85em/1 var(--font-key); white-space: nowrap;
+  padding: 0.38em 0.6em 0.42em; border-radius: 7px; color: var(--ink);
+  background: var(--key-face); border: 1px solid var(--key-edge); box-shadow: 0 2px 0 var(--key-edge);
+}
+.moves { display: grid; gap: 0; margin: 0; }
+.move {
+  display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: 0.4rem 1.5rem;
+  padding-block: 1.25rem; border-top: 1px solid var(--line);
+}
+.move:first-child { border-top: 0; padding-top: 0; }
+.move dt { font-family: var(--font-display); font-weight: 600; font-size: var(--step-1); }
+.move dd { margin: 0; display: grid; gap: 0.5rem; min-width: 0; }
+.seq { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; line-height: 2; }
+.seq .arrow { color: var(--muted); }
+.seq .say { color: var(--muted); font-style: italic; }
+.move .result { color: var(--muted); }
+
+/* Reasons */
+.reasons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2.5rem 3rem; }
+.reason { display: grid; gap: 0.5rem; align-content: start; }
+.reason p { color: var(--muted); }
+.principle {
+  margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--line);
+  font-family: var(--font-display); font-size: var(--step-1); line-height: 1.5; max-width: 30em;
+}
+
+/* Install */
+.tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); margin-bottom: 1.75rem; }
+.tabs button {
+  font: 500 var(--step-0)/1 var(--font-body); color: var(--muted); background: none; border: 0;
+  padding: 0.6rem 1rem; border-radius: 7px; cursor: pointer;
+}
+.tabs button[aria-selected="true"] { background: var(--accent-soft); color: var(--ink); }
+.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: 1.25rem; }
+.steps li { counter-increment: step; display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: 0.75rem; }
+.steps li::before {
+  content: counter(step); font: 600 var(--step--1)/2rem var(--font-key); text-align: center;
+  width: 2rem; height: 2rem; border-radius: 50%; background: var(--accent-soft); color: var(--ink);
+}
+.steps li > div { padding-top: 0.2rem; }
+.req { margin-top: 1.75rem; font-size: var(--step--1); color: var(--muted); }
+
+footer { border-top: 1px solid var(--line); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; padding-block: 2rem 2.5rem; font-size: var(--step--1); color: var(--muted); }
+footer a { color: var(--muted); }
+footer .muse { flex-basis: 100%; font-style: italic; }
+
+@media (max-width: 640px) {
+  .move { grid-template-columns: minmax(0, 1fr); }
+  .reasons { grid-template-columns: minmax(0, 1fr); gap: 2rem; }
+  .gh span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pill .bars i { animation: none; transform: scaleY(0.6); }
+  .pill .label, .pill .label span { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="images/logo.png" alt="" width="28" height="28">Aoide</a>
+    <div class="langs" role="group" aria-label="Language">
+      <button type="button" data-lang="zh" lang="zh-CN">中文</button>
+      <button type="button" data-lang="en" lang="en">EN</button>
+      <button type="button" data-lang="ja" lang="ja">日本語</button>
+    </div>
+    <a class="gh" href="https://github.com/PaRaD1SE98/aoide">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      <span>GitHub</span>
+    </a>
+  </div>
+</header>
+
+<main id="top">
+  <div class="wrap hero">
+    <div class="pill" data-state="rec" aria-hidden="true">
+      <span class="dot"></span>
+      <span class="bars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      <span class="label" id="pill-label"></span>
+    </div>
+    <h1 data-t="h1"></h1>
+    <p class="lede" data-t="lede"></p>
+    <div class="cta">
+      <a class="btn" id="dl-main" href="https://github.com/PaRaD1SE98/aoide/releases/latest">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 3h2v10.17l3.59-3.58L18 11l-6 6-6-6 1.41-1.41L11 13.17V3zM5 19h14v2H5z"/></svg>
+        <span id="dl-main-label"></span>
+      </a>
+      <div class="cta-meta">
+        <span id="dl-meta"></span>
+        <span id="dl-other"></span>
+      </div>
+    </div>
+    <img class="demo" id="demo" src="images/en/demo.webp" alt="" width="1280" height="816">
+  </div>
+
+  <section id="use">
+    <div class="wrap">
+      <div class="section-head col">
+        <h2 data-t="useTitle"></h2>
+        <p data-t="useSub"></p>
+      </div>
+      <dl class="moves col" id="moves"></dl>
+    </div>
+  </section>
+
+  <section id="why">
+    <div class="wrap">
+      <div class="section-head col">
+        <h2 data-t="whyTitle"></h2>
+      </div>
+      <div class="reasons" id="reasons"></div>
+      <p class="principle" data-t="principle"></p>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <div class="section-head col">
+        <h2 data-t="installTitle"></h2>
+      </div>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-win" data-os="win" aria-controls="steps">Windows</button>
+        <button type="button" role="tab" id="tab-mac" data-os="mac" aria-controls="steps">macOS</button>
+      </div>
+      <div class="col" id="steps" role="tabpanel">
+        <ol class="steps" id="steps-list"></ol>
+        <p class="req" id="req"></p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span data-t="license"></span>
+    <a href="https://github.com/PaRaD1SE98/aoide" data-t="source"></a>
+    <a href="https://github.com/PaRaD1SE98/aoide/issues" data-t="issues"></a>
+    <a href="https://github.com/PaRaD1SE98/aoide/releases" data-t="releases"></a>
+    <span class="muse" data-t="muse"></span>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const REPO = "PaRaD1SE98/aoide";
+  const RELEASES = `https://github.com/${REPO}/releases/latest`;
+  const ua = navigator.userAgent;
+  const userOS = /Macintosh|Mac OS X|iPhone|iPad/.test(ua) ? "mac" : "win";
+
+  // Direct download links; replaced with exact asset URLs once the GitHub API answers.
+  const dl = { win: RELEASES, macArm: RELEASES, macIntel: RELEASES, version: "" };
+
+  const T = {
+    zh: {
+      htmlLang: "zh-CN",
+      title: "Aoide · 本地语音输入",
+      pill: ["录音中", "转写中", "润色中"],
+      h1: "按一下，说话，字就打好了。",
+      lede: "Aoide 是 Windows 和 macOS 上的语音输入工具。在任何输入框里按一下快捷键开始说话，再按一下，整理好的文字就出现在光标处。识别在你自己的电脑上完成，免费、开源。",
+      dlWin: "下载 Windows 版", dlMac: "下载 macOS 版",
+      metaWin: v => `${v ? v + " · " : ""}Windows 10 / 11 · 不需要管理员权限`,
+      metaMac: v => `${v ? v + " · " : ""}Apple 芯片 · 预览版`,
+      otherWin: (a, b) => `也有 macOS 版：${a}  ·  ${b}`,
+      otherMac: (a, w) => `Intel 芯片的 Mac：${a}  ·  ${w}`,
+      armLabel: "Apple 芯片", intelLabel: "Intel 芯片", intelOnly: "下载 Intel 版", winLabel: "Windows 版",
+      demoAlt: "演示：在聊天软件里语音输入，LLM 整理口语；再选中一段回复，用语音改写",
+      useTitle: "要记的只有三个键",
+      useSub: "不用切换窗口，也不用学新界面。在你正在用的软件里直接说。",
+      moves: [
+        { name: "说话输入", seq: "{hk} → {say} → {hk}", say: "说话", result: "文字转好、整理好，填进当前输入框。" },
+        { name: "用语音改写", seq: "{sel} → {hold} + {space} → {say} → {hk}", say: "说怎么改", sel: "选中文字", hold: "按住 {hk}", result: "选中的文字按你说的改写，直接替换。" },
+        { name: "取消", seq: "{esc}", result: "放弃这一次，什么都不输出。" }
+      ],
+      whyTitle: "为了好用，它多做了这些",
+      reasons: [
+        ["声音不出你的电脑", "语音识别在本机完成（SenseVoice 或 Whisper），不用注册账号，也不依赖云服务。只有你自己接上远程的 LLM，文字才会发出去。"],
+        ["说得乱也没关系", "接上任意 OpenAI 兼容的 LLM，自动去掉「嗯」「那个」，把断开的句子理顺，几个要点排成列表。不会添你没说的话。"],
+        ["认错的词，改一次就记住", "人名、产品名、术语被认错时，直接在输入框里改对。Aoide 会记下这组纠正，下次就不会再错。"],
+        ["一个字都不会丢", "当前没有能输入的地方时，结果显示在一张小卡片上，一键复制。粘贴完会恢复你原来的剪贴板。"]
+      ],
+      principle: "Aoide 不轻易加功能。每次更新只想让同一件事更顺手：说话，然后字就在那里。",
+      installTitle: "三分钟开始用",
+      steps: {
+        win: [
+          `下载并运行 <a href="{win}">Windows 安装包</a>。只装给当前用户，不需要管理员权限。`,
+          "第一次打开时会弹出设置窗口，点「下载」获取默认的识别模型（239 MB）。",
+          "在任意输入框里按一下 {hk}，开始说话。"
+        ],
+        mac: [
+          `下载 <a href="{arm}">Apple 芯片版</a> 或 <a href="{intel}">Intel 版</a>，打开后把 Aoide 拖进「应用程序」。`,
+          "Aoide 没有经过 Apple 公证，第一次打开会被拦下。到「系统设置 → 隐私与安全性」，往下找到 Aoide，点「仍要打开」。",
+          "允许麦克风；再在设置窗口里点「辅助功能」旁的「打开系统设置」，打开 Aoide 的开关。不需要重启。",
+          "在设置窗口里下载一个模型，然后在任意输入框里按一下 {hk}，开始说话。"
+        ]
+      },
+      req: {
+        win: "SenseVoice 模型只用 CPU；Whisper 模型有支持 Vulkan 的显卡会快很多（NVIDIA、AMD、Intel 均可，无需 CUDA）。",
+        mac: "需要 macOS 11 或更高版本。Intel 芯片的 Mac 建议用默认的 SenseVoice 模型。"
+      },
+      license: "MIT 许可证 · 免费开源",
+      source: "源代码", issues: "反馈问题", releases: "所有版本",
+      muse: "Aoide 得名于希腊神话中掌管歌声与嗓音的缪斯。",
+      keys: { win: "右 Alt", mac: "右 Option" }
+    },
+    en: {
+      htmlLang: "en",
+      title: "Aoide · Local voice typing",
+      pill: ["Recording", "Transcribing", "Polishing"],
+      h1: "Tap, talk, and it's typed.",
+      lede: "Aoide is voice typing for Windows and macOS. In any text box, tap a hotkey and speak, tap it again, and clean text appears at your cursor. Speech is recognized on your own computer. Free and open source.",
+      dlWin: "Download for Windows", dlMac: "Download for macOS",
+      metaWin: v => `${v ? v + " · " : ""}Windows 10 / 11 · No admin rights needed`,
+      metaMac: v => `${v ? v + " · " : ""}Apple silicon · Preview`,
+      otherWin: (a, b) => `Also for macOS: ${a}  ·  ${b}`,
+      otherMac: (a, w) => `Intel Mac: ${a}  ·  ${w}`,
+      armLabel: "Apple silicon", intelLabel: "Intel", intelOnly: "Download Intel build", winLabel: "Windows",
+      demoAlt: "Demo: dictating into a chat app, the LLM cleans up the speech; then selecting a reply and rewriting it by voice",
+      useTitle: "Three keys are all you need to know",
+      useSub: "No window to switch to and nothing new to learn. Speak right inside the app you're already using.",
+      moves: [
+        { name: "Dictate", seq: "{hk} → {say} → {hk}", say: "speak", result: "Transcribed, cleaned up and typed into the focused text box." },
+        { name: "Edit by voice", seq: "{sel} → {hold} + {space} → {say} → {hk}", say: "say what to change", sel: "select text", hold: "hold {hk}", result: "The selection is rewritten the way you asked and replaced in place." },
+        { name: "Cancel", seq: "{esc}", result: "Drop this one. Nothing is typed." }
+      ],
+      whyTitle: "The small things it does for you",
+      reasons: [
+        ["Your voice stays on your computer", "Speech is recognized locally with SenseVoice or Whisper. No account, no cloud service. Text only leaves your machine if you connect a remote LLM yourself."],
+        ["Ramble all you like", "Connect any OpenAI-compatible LLM and Aoide removes the “um”s, joins broken sentences and turns lists of points into numbered lists. It never adds things you didn't say."],
+        ["Fix a word once", "When a name or term comes out wrong, correct it in the text box. Aoide remembers the correction and gets it right next time."],
+        ["Nothing gets lost", "If there's nowhere to type, the result appears on a small card with a Copy button. After pasting, your previous clipboard is put back."]
+      ],
+      principle: "Aoide doesn't add features lightly. Every update tries to make the same thing smoother: you speak, and the words are there.",
+      installTitle: "Up and running in three minutes",
+      steps: {
+        win: [
+          `Download and run the <a href="{win}">Windows installer</a>. It installs for the current user, no admin rights needed.`,
+          "Settings opens on first launch. Click <b>Download</b> to fetch the default speech model (239 MB).",
+          "Tap {hk} in any text box and start talking."
+        ],
+        mac: [
+          `Download the <a href="{arm}">Apple silicon</a> or <a href="{intel}">Intel</a> build, open it and drag Aoide into Applications.`,
+          "Aoide isn't notarized by Apple, so macOS blocks the first launch. Open <b>System Settings → Privacy & Security</b>, scroll down and click <b>Open Anyway</b>.",
+          "Allow the microphone. Then in Settings, click <b>Open System Settings</b> next to Accessibility and turn Aoide on. No restart needed.",
+          "Download a model in Settings, then tap {hk} in any text box and start talking."
+        ]
+      },
+      req: {
+        win: "SenseVoice runs on any CPU. Whisper models are much faster with a Vulkan-capable GPU (NVIDIA, AMD or Intel, no CUDA needed).",
+        mac: "Requires macOS 11 or later. On Intel Macs, the default SenseVoice model is the better choice."
+      },
+      license: "MIT licensed · Free and open source",
+      source: "Source code", issues: "Report an issue", releases: "All releases",
+      muse: "Aoide (“ay-OY-dee”) is named after the Greek Muse of voice and song.",
+      keys: { win: "Right Alt", mac: "Right Option" }
+    },
+    ja: {
+      htmlLang: "ja",
+      title: "Aoide · ローカル音声入力",
+      pill: ["録音中", "文字起こし中", "整形中"],
+      h1: "押して、話せば、もう入力されている。",
+      lede: "Aoide は Windows と macOS 向けの音声入力ツールです。どの入力欄でもショートカットキーを押して話し、もう一度押すと、整えられた文字がカーソル位置に入ります。音声認識は手元のパソコン上で行われます。無料・オープンソースです。",
+      dlWin: "Windows 版をダウンロード", dlMac: "macOS 版をダウンロード",
+      metaWin: v => `${v ? v + " · " : ""}Windows 10 / 11 · 管理者権限は不要`,
+      metaMac: v => `${v ? v + " · " : ""}Apple シリコン · プレビュー版`,
+      otherWin: (a, b) => `macOS 版もあります：${a}  ·  ${b}`,
+      otherMac: (a, w) => `Intel の Mac：${a}  ·  ${w}`,
+      armLabel: "Apple シリコン", intelLabel: "Intel", intelOnly: "Intel 版をダウンロード", winLabel: "Windows 版",
+      demoAlt: "デモ：チャットアプリで音声入力し、LLM が話し言葉を整える。続いて返信を選択し、音声で書き直す",
+      useTitle: "覚えるキーは三つだけ",
+      useSub: "ウィンドウを切り替える必要も、新しい画面を覚える必要もありません。いま使っているアプリの中でそのまま話せます。",
+      moves: [
+        { name: "音声入力", seq: "{hk} → {say} → {hk}", say: "話す", result: "文字起こし・整形して、フォーカスのある入力欄に入力します。" },
+        { name: "音声で修正", seq: "{sel} → {hold} + {space} → {say} → {hk}", say: "直し方を話す", sel: "テキストを選択", hold: "{hk} を押したまま", result: "選択範囲を話した指示どおりに書き直して置き換えます。" },
+        { name: "キャンセル", seq: "{esc}", result: "今回の処理を中止し、何も入力しません。" }
+      ],
+      whyTitle: "使いやすさのために、ここまでやります",
+      reasons: [
+        ["声はパソコンの外に出ません", "音声認識は SenseVoice または Whisper で手元のパソコン上で行います。アカウントもクラウドサービスも不要です。リモートの LLM を自分で設定した場合だけ、テキストが送信されます。"],
+        ["話し方が雑でも大丈夫", "OpenAI 互換の LLM をつなぐと、「えーと」「あの」を取り除き、途切れた文をつなげ、要点は番号付きリストにまとめます。言っていないことは足しません。"],
+        ["誤変換は一度直せば覚えます", "人名や製品名、専門用語を間違えたら、入力欄でそのまま直してください。Aoide がその修正を覚え、次からは正しく入力します。"],
+        ["一文字も失いません", "入力できる場所がないときは、結果を小さなカードに表示し、ワンクリックでコピーできます。貼り付けた後は元のクリップボードに戻します。"]
+      ],
+      principle: "Aoide は機能を安易に増やしません。どのアップデートも、同じ一つのことを快適にするためにあります。話せば、文字がそこにある。",
+      installTitle: "三分で使い始められます",
+      steps: {
+        win: [
+          `<a href="{win}">Windows インストーラー</a>をダウンロードして実行します。現在のユーザーにインストールされ、管理者権限は不要です。`,
+          "初回起動時に設定ウィンドウが開きます。「ダウンロード」をクリックして既定の音声認識モデル（239 MB）を取得します。",
+          "どの入力欄でも {hk} を押して話し始めます。"
+        ],
+        mac: [
+          `<a href="{arm}">Apple シリコン版</a>または <a href="{intel}">Intel 版</a>をダウンロードして開き、Aoide を「アプリケーション」にドラッグします。`,
+          "Aoide は Apple の公証を受けていないため、初回起動はブロックされます。「システム設定 → プライバシーとセキュリティ」を開き、下にスクロールして「このまま開く」をクリックします。",
+          "マイクを許可します。続いて設定ウィンドウでアクセシビリティの横にある「システム設定を開く」をクリックし、Aoide をオンにします。再起動は不要です。",
+          "設定ウィンドウでモデルをダウンロードし、どの入力欄でも {hk} を押して話し始めます。"
+        ]
+      },
+      req: {
+        win: "SenseVoice は CPU だけで動きます。Whisper モデルは Vulkan 対応の GPU（NVIDIA・AMD・Intel、CUDA 不要）があると大幅に速くなります。",
+        mac: "macOS 11 以降が必要です。Intel の Mac では既定の SenseVoice モデルをおすすめします。"
+      },
+      license: "MIT ライセンス · 無料・オープンソース",
+      source: "ソースコード", issues: "不具合を報告", releases: "すべてのリリース",
+      muse: "Aoide（アオイデー）はギリシャ神話で歌と声をつかさどるムーサにちなんで名付けられました。",
+      keys: { win: "右 Alt", mac: "右 Option" }
+    }
+  };
+
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} }
+  };
+  const nav = (navigator.language || "en").toLowerCase();
+  let lang = store.get("aoide-lang") || (nav.startsWith("zh") ? "zh" : nav.startsWith("ja") ? "ja" : "en");
+  if (!T[lang]) lang = "en";
+  let tabOS = userOS;
+
+  const $ = s => document.querySelector(s);
+  const kbd = s => `<kbd>${s}</kbd>`;
+  const link = (href, text) => `<a href="${href}">${text}</a>`;
+
+  function render() {
+    const t = T[lang];
+    document.documentElement.lang = t.htmlLang;
+    document.title = t.title;
+    document.querySelectorAll("[data-t]").forEach(el => { el.textContent = t[el.dataset.t]; });
+    document.querySelectorAll(".langs button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
+
+    // Download button follows the visitor's OS
+    const main = $("#dl-main");
+    if (userOS === "mac") {
+      main.href = dl.macArm;
+      $("#dl-main-label").textContent = t.dlMac;
+      $("#dl-meta").textContent = t.metaMac(dl.version);
+      $("#dl-other").innerHTML = t.otherMac(link(dl.macIntel, t.intelOnly), link(dl.win, t.winLabel));
+    } else {
+      main.href = dl.win;
+      $("#dl-main-label").textContent = t.dlWin;
+      $("#dl-meta").textContent = t.metaWin(dl.version);
+      $("#dl-other").innerHTML = t.otherWin(link(dl.macArm, t.armLabel), link(dl.macIntel, t.intelLabel));
+    }
+
+    const demo = $("#demo");
+    demo.src = `images/${lang}/demo.webp`;
+    demo.alt = t.demoAlt;
+
+    // Keys use the names printed on the visitor's keyboard
+    const hk = kbd(t.keys[userOS]);
+    const fill = (s, m = {}) => s
+      .replace("{sel}", `<span class="say">${m.sel || ""}</span>`)
+      .replace("{hold}", m.hold ? m.hold.replace("{hk}", hk) : "")
+      .replaceAll("{hk}", hk)
+      .replace("{space}", kbd("Space"))
+      .replace("{esc}", kbd("Esc"))
+      .replace("{say}", `<span class="say">${m.say || ""}</span>`)
+      .replaceAll(" → ", ` <span class="arrow" aria-hidden="true">→</span> `);
+    $("#moves").innerHTML = t.moves.map(m =>
+      `<div class="move"><dt>${m.name}</dt><dd><div class="seq">${fill(m.seq, m)}</div><p class="result">${m.result}</p></dd></div>`
+    ).join("");
+
+    $("#reasons").innerHTML = t.reasons.map(([h, p]) => `<div class="reason"><h3>${h}</h3><p>${p}</p></div>`).join("");
+
+    renderSteps();
+    pillLabel();
+  }
+
+  function renderSteps() {
+    const t = T[lang];
+    const hk = kbd(t.keys[tabOS]);
+    document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.os === tabOS)));
+    $("#steps").setAttribute("aria-labelledby", `tab-${tabOS}`);
+    $("#steps-list").innerHTML = t.steps[tabOS].map(s =>
+      `<li><div>${s.replaceAll("{hk}", hk).replace("{win}", dl.win).replace("{arm}", dl.macArm).replace("{intel}", dl.macIntel)}</div></li>`
+    ).join("");
+    $("#req").textContent = t.req[tabOS];
+  }
+
+  // Floating bar: cycles through the same states the app shows at the bottom of the screen
+  const states = ["rec", "asr", "llm"];
+  let si = 0;
+  const pill = $(".pill");
+  const label = $("#pill-label");
+  function pillLabel() {
+    label.innerHTML = T[lang].pill.map(s => `<span>${s}</span>`).join("");
+    pillState();
+  }
+  function pillState() {
+    const spans = label.children;
+    for (let i = 0; i < spans.length; i++) spans[i].classList.toggle("on", i === si);
+    label.style.width = `${spans[si].offsetWidth}px`;
+  }
+  document.fonts?.ready.then(pillState);
+  pill.querySelectorAll(".bars i").forEach((b, i) => { b.style.animationDelay = `${(i * 0.13) % 0.9}s`; });
+  if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    setInterval(() => {
+      si = (si + 1) % states.length;
+      pill.dataset.state = states[si];
+      pillState();
+    }, 2200);
+  }
+
+  document.querySelectorAll(".langs button").forEach(b => b.addEventListener("click", () => {
+    lang = b.dataset.lang;
+    store.set("aoide-lang", lang);
+    render();
+  }));
+  document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
+    tabOS = b.dataset.os;
+    renderSteps();
+  }));
+
+  render();
+
+  // Resolve exact installer URLs so the button downloads directly instead of opening the release page
+  fetch(`https://api.github.com/repos/${REPO}/releases/latest`)
+    .then(r => r.ok ? r.json() : null)
+    .then(rel => {
+      if (!rel) return;
+      const find = re => (rel.assets || []).find(a => re.test(a.name))?.browser_download_url;
+      dl.win = find(/_x64-setup\.exe$/) || dl.win;
+      dl.macArm = find(/_aarch64\.dmg$/) || dl.macArm;
+      dl.macIntel = find(/_x64\.dmg$/) || dl.macIntel;
+      dl.version = rel.tag_name || "";
+      render();
+    })
+    .catch(() => {});
+})();
+</script>
+</body>
+</html>

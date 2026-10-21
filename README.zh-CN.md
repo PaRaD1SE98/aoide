@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <a href="https://parad1se98.github.io/aoide/"><b>parad1se98.github.io/aoide</b></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Windows%20%E5%AE%89%E8%A3%85%E5%8C%85-0078D4?logo=windows&logoColor=white" alt="Download"></a>
   <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-macOS%EF%BC%88%E9%A2%84%E8%A7%88%E7%89%88%EF%BC%89-000000?logo=apple&logoColor=white" alt="下载 macOS 版"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-MIT-2ea44f" alt="MIT"></a>

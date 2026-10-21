@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <a href="https://parad1se98.github.io/aoide/"><b>parad1se98.github.io/aoide</b></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/download-Windows%20installer-0078D4?logo=windows&logoColor=white" alt="Download"></a>
   <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/download-macOS%20(preview)-000000?logo=apple&logoColor=white" alt="Download for macOS"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2ea44f" alt="MIT"></a>

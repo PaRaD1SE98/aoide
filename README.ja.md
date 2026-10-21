@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <a href="https://parad1se98.github.io/aoide/"><b>parad1se98.github.io/aoide</b></a>
+</p>
+
+<p align="center">
   <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/%E3%83%80%E3%82%A6%E3%83%B3%E3%83%AD%E3%83%BC%E3%83%89-Windows%20%E3%82%A4%E3%83%B3%E3%82%B9%E3%83%88%E3%83%BC%E3%83%A9%E3%83%BC-0078D4?logo=windows&logoColor=white" alt="ダウンロード"></a>
   <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/%E3%83%80%E3%82%A6%E3%83%B3%E3%83%AD%E3%83%BC%E3%83%89-macOS%EF%BC%88%E3%83%97%E3%83%AC%E3%83%93%E3%83%A5%E3%83%BC%E7%89%88%EF%BC%89-000000?logo=apple&logoColor=white" alt="macOS 版をダウンロード"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/%E3%83%A9%E3%82%A4%E3%82%BB%E3%83%B3%E3%82%B9-MIT-2ea44f" alt="MIT"></a>
