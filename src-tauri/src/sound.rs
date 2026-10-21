@@ -1,10 +1,6 @@
-//! 提示音（Kenney Interface Sounds，CC0，见 sounds/LICENSE.txt）
-//!
-//! 走本进程自己的音频会话，录音期间静音其他程序时不受影响。
+//! 提示音（Kenney Interface Sounds，CC0，见 sounds/LICENSE.txt）。播放见各平台的 sound.rs
 
 use std::sync::OnceLock;
-use windows::core::PCWSTR;
-use windows::Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_MEMORY, SND_NODEFAULT, SND_SYNC};
 
 /// 相对原始音效文件的音量
 const VOLUME: f32 = 0.5;
@@ -67,22 +63,14 @@ fn bytes(cue: Cue) -> &'static [u8] {
     }
 }
 
-fn play_with(cue: Cue, sync: bool) {
-    let flags = SND_MEMORY | SND_NODEFAULT | if sync { SND_SYNC } else { SND_ASYNC };
-    unsafe {
-        // SND_MEMORY：第一个参数实际是指向 WAV 数据的指针
-        let _ = PlaySoundW(PCWSTR(bytes(cue).as_ptr() as *const u16), None, flags);
-    }
-}
-
 /// 异步播放，立即返回
 pub fn play(cue: Cue) {
-    play_with(cue, false);
+    crate::platform::sound::play(bytes(cue), false);
 }
 
 /// 播完才返回：开始音用它，避免提示音被录进去，也保证播完后才静音其他程序
 pub fn play_sync(cue: Cue) {
-    play_with(cue, true);
+    crate::platform::sound::play(bytes(cue), true);
 }
 
 #[cfg(test)]

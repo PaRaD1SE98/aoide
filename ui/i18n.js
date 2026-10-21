@@ -135,6 +135,14 @@ const I18N = {
     "result.copied": "已复制 ✓",
     "result.close": "关闭",
     "result.closeTitle": "关闭 (Esc)",
+    "perm.title": "Aoide 还需要以下权限才能正常工作",
+    "perm.accessibility.title": "辅助功能",
+    "perm.accessibility.desc": "用于监听快捷键、把文字输入到当前输入框。请在系统设置中打开 Aoide 的开关，打开后这里会自动更新",
+    "perm.microphone.title": "麦克风",
+    "perm.microphone.desc": "用于录下你说的话",
+    "perm.microphone.denied": "之前没有允许使用麦克风。请在系统设置中打开 Aoide 的开关",
+    "perm.allow": "允许",
+    "perm.openSettings": "打开系统设置",
   },
   en: {
     "hero.subtitle": "Press the hotkey, speak, press it again — the text is typed into the focused input box",
@@ -269,13 +277,40 @@ const I18N = {
     "result.copied": "Copied ✓",
     "result.close": "Close",
     "result.closeTitle": "Close (Esc)",
+    "perm.title": "Aoide needs these permissions to work",
+    "perm.accessibility.title": "Accessibility",
+    "perm.accessibility.desc": "Lets Aoide listen for the hotkey and type into the focused text box. Turn on Aoide in System Settings; this page updates once it is on",
+    "perm.microphone.title": "Microphone",
+    "perm.microphone.desc": "Lets Aoide record your voice",
+    "perm.microphone.denied": "Microphone access was denied. Turn on Aoide in System Settings",
+    "perm.allow": "Allow",
+    "perm.openSettings": "Open System Settings",
+  },
+};
+
+// macOS 上不同的文字（托盘 → 菜单栏、Vulkan → Metal……），优先于上面的同名键
+const I18N_MACOS = {
+  zh: {
+    "device.gpu": "Apple 芯片通过 Metal 加速；Intel Mac 只用 CPU",
+    "uiLang.desc": "界面、菜单栏菜单和通知使用的语言",
+    "autostart.title": "登录时启动",
+    "autostart.desc": "登录 Mac 后在菜单栏中运行",
+  },
+  en: {
+    "device.gpu": "GPU acceleration through Metal on Apple silicon; Intel Macs use the CPU",
+    "uiLang.desc": "Language of this window, the menu bar menu and notifications",
+    "autostart.title": "Open at login",
+    "autostart.desc": "Runs in the menu bar after you log in",
   },
 };
 
 let LANG = "zh";
+/** windows / macos，设置页加载时由后端告知 */
+let PLATFORM = "windows";
 
 function t(key, vars) {
-  let s = I18N[LANG][key] ?? I18N.zh[key] ?? key;
+  const platform = PLATFORM === "macos" ? I18N_MACOS[LANG][key] ?? I18N_MACOS.zh[key] : undefined;
+  let s = platform ?? I18N[LANG][key] ?? I18N.zh[key] ?? key;
   for (const [k, v] of Object.entries(vars ?? {})) s = s.replaceAll(`{${k}}`, v);
   return s;
 }

@@ -1,4 +1,7 @@
 //! 快捷键字符串（如 "right alt+space"）与虚拟键码之间的转换
+//!
+//! 两个平台都用 Windows 的虚拟键码（macOS 的钩子先换算过来，见 macos/keycode.rs）。
+//! macOS 上 Alt / Windows 键叫 Option / Command，解析时两种叫法都认，显示时用当前平台的叫法
 
 const VK_LSHIFT: u32 = 0xA0;
 const VK_RSHIFT: u32 = 0xA1;
@@ -9,22 +12,35 @@ const VK_RMENU: u32 = 0xA5;
 const VK_LWIN: u32 = 0x5B;
 const VK_RWIN: u32 = 0x5C;
 pub const VK_ESCAPE: u32 = 0x1B;
+/// macOS 的 fn（🌐）键：Windows 没有对应的虚拟键码，借用未分配的 0xFF
+pub const VK_FN: u32 = 0xFF;
 
-/// 名字 → 匹配的虚拟键码（低层钩子报告的修饰键总是区分左右）
+/// Alt 键和 Windows 键在当前平台上的叫法
+#[cfg(not(target_os = "macos"))]
+pub(crate) const ALT: &str = "alt";
+#[cfg(not(target_os = "macos"))]
+const WIN: &str = "windows";
+#[cfg(target_os = "macos")]
+pub(crate) const ALT: &str = "option";
+#[cfg(target_os = "macos")]
+const WIN: &str = "command";
+
+/// 名字 → 匹配的虚拟键码（钩子报告的修饰键总是区分左右）
 fn lookup(name: &str) -> Option<Vec<u32>> {
     let vks = match name {
         "ctrl" | "control" => vec![VK_LCONTROL, VK_RCONTROL],
-        "alt" => vec![VK_LMENU, VK_RMENU],
+        "alt" | "option" => vec![VK_LMENU, VK_RMENU],
         "shift" => vec![VK_LSHIFT, VK_RSHIFT],
-        "windows" | "win" => vec![VK_LWIN, VK_RWIN],
-        "left ctrl" => vec![VK_LCONTROL],
-        "right ctrl" => vec![VK_RCONTROL],
-        "left alt" => vec![VK_LMENU],
-        "right alt" | "alt gr" | "altgr" => vec![VK_RMENU],
+        "windows" | "win" | "command" | "cmd" => vec![VK_LWIN, VK_RWIN],
+        "left ctrl" | "left control" => vec![VK_LCONTROL],
+        "right ctrl" | "right control" => vec![VK_RCONTROL],
+        "left alt" | "left option" => vec![VK_LMENU],
+        "right alt" | "alt gr" | "altgr" | "right option" => vec![VK_RMENU],
         "left shift" => vec![VK_LSHIFT],
         "right shift" => vec![VK_RSHIFT],
-        "left windows" => vec![VK_LWIN],
-        "right windows" => vec![VK_RWIN],
+        "left windows" | "left command" => vec![VK_LWIN],
+        "right windows" | "right command" => vec![VK_RWIN],
+        "fn" => vec![VK_FN],
         _ => vec![named_vk(name)?],
     };
     Some(vks)
@@ -65,17 +81,18 @@ fn named_vk(name: &str) -> Option<u32> {
 pub fn name_of(vk: u32, as_modifier: bool) -> String {
     let s = match vk {
         VK_LCONTROL if as_modifier => "ctrl",
-        VK_LMENU if as_modifier => "alt",
+        VK_LMENU if as_modifier => ALT,
         VK_LSHIFT if as_modifier => "shift",
-        VK_LWIN if as_modifier => "windows",
+        VK_LWIN if as_modifier => WIN,
         VK_LCONTROL => "left ctrl",
         VK_RCONTROL => "right ctrl",
-        VK_LMENU => "left alt",
-        VK_RMENU => "right alt",
+        VK_LMENU => return format!("left {ALT}"),
+        VK_RMENU => return format!("right {ALT}"),
         VK_LSHIFT => "left shift",
         VK_RSHIFT => "right shift",
-        VK_LWIN => "left windows",
-        VK_RWIN => "right windows",
+        VK_LWIN => return format!("left {WIN}"),
+        VK_RWIN => return format!("right {WIN}"),
+        VK_FN => "fn",
         0x30..=0x39 | 0x41..=0x5A => return char::from(vk as u8).to_ascii_lowercase().to_string(),
         0x60..=0x69 => return format!("num {}", vk - 0x60),
         0x70..=0x87 => return format!("f{}", vk - 0x70 + 1),

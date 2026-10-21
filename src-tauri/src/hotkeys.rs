@@ -1,4 +1,4 @@
-//! 全局快捷键：低层键盘钩子（WH_KEYBOARD_LL）
+//! 全局快捷键：键盘钩子（各平台的实现见 win/hook.rs、macos/hook.rs）把每个按键交给这里的状态机
 //!
 //! 不用 RegisterHotKey 之类的「按下即触发」机制：单修饰键热键（如 right alt）在
 //! keydown 瞬间就会触发，导致 "right alt+space" 永远轮不到；长按的按键重复还会反复
@@ -7,6 +7,7 @@
 //!   - 按住热键期间按下组合键（如 space）→ 开始修订录音
 //! 热键的按下/松开事件全部拦截，系统看不到 Alt：不会弹窗口菜单，也不会卡键
 //! （代价：该键原本的系统组合键不可用，属于有意为之）。
+//! 键码统一用 Windows 虚拟键码，macOS 的钩子先把自己的键码换算过来（见 macos/keycode.rs）。
 
 use crate::keys::{self, Hotkey};
 use std::collections::HashSet;
@@ -14,13 +15,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Mutex, OnceLock, RwLock};
 use std::time::Duration;
-use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
-use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_HIGHEST};
-use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, GetMessageW, SetWindowsHookExW, HC_ACTION, KBDLLHOOKSTRUCT, LLKHF_INJECTED,
-    MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_SYSKEYDOWN,
-};
 
 #[derive(Clone, Copy, Debug)]
 pub enum HotkeyEvent {
@@ -101,24 +95,7 @@ pub fn install(tx: Sender<HotkeyEvent>) {
         capture: Mutex::default(),
         tx,
     });
-    std::thread::Builder::new()
-        .name("keyboard-hook".into())
-        .spawn(|| unsafe {
-            // 低层钩子必须及时返回，超时多次会被系统悄悄移除；系统繁忙（如加载模型）时也要优先调度
-            let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST);
-            let hmod = GetModuleHandleW(None).ok();
-            match SetWindowsHookExW(WH_KEYBOARD_LL, Some(hook_proc), hmod.map(Into::into), 0) {
-                Ok(_) => log::info!("Keyboard hook installed"),
-                Err(e) => {
-                    log::error!("Keyboard hook failed: {e}");
-                    return;
-                }
-            }
-            // 低层钩子需要安装线程有消息循环
-            let mut msg = MSG::default();
-            while GetMessageW(&mut msg, None, 0, 0).as_bool() {}
-        })
-        .expect("spawn hook thread");
+    crate::platform::hook::install();
 }
 
 /// 按配置更新快捷键；返回无法解析的快捷键文本
@@ -166,36 +143,41 @@ pub fn capture(timeout: Duration) -> Result<Option<String>, String> {
         Some(r) => Ok(r),
         None if !seen => {
             log::warn!("Hotkey capture timed out without receiving any key events (keyboard hook not working?)");
-            Err(crate::i18n::tr(
-                "没有收到任何按键：键盘监听可能被安全软件拦截。请把 Aoide 加入信任后，在托盘菜单退出并重新打开 Aoide",
-                "No key presses were received: the keyboard listener may be blocked by security software. Allow Aoide in it, then quit Aoide from the tray menu and start it again",
-            )
-            .into())
+            Err(crate::platform::hook::no_events_hint().into())
         }
         None => Ok(None),
     }
 }
 
-unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if code == HC_ACTION as i32 {
-        let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
-        // Aoide 自己模拟的按键（粘贴用的 Ctrl+V 等）不参与热键判定。其他程序模拟的按键照常处理：
-        // AutoHotkey 重映射、键鼠共享软件转发的按键都带 LLKHF_INJECTED，不能一概忽略
-        let own = kb.flags.0 & LLKHF_INJECTED.0 != 0 && kb.dwExtraInfo == crate::input::AOIDE_INPUT_MARK;
-        let down = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
-        if !own {
-            if !RECEIVING.swap(true, Ordering::Relaxed) {
-                // 写日志可能较慢，放到别的线程，钩子回调要尽快返回
-                std::thread::spawn(|| log::info!("Keyboard hook is receiving key events"));
-            }
-            if let Some(shared) = SHARED.get() {
-                if handle(shared, kb.vkCode, down) {
-                    return LRESULT(1);
-                }
-            }
-        }
+/// 钩子收到一个按键（Aoide 自己模拟的按键已由钩子排除）；返回 true 表示拦截该事件
+pub(crate) fn on_key(vk: u32, down: bool) -> bool {
+    if !RECEIVING.swap(true, Ordering::Relaxed) {
+        // 写日志可能较慢，放到别的线程，钩子回调要尽快返回
+        std::thread::spawn(|| log::info!("Keyboard hook is receiving key events"));
     }
-    CallNextHookEx(None, code, wparam, lparam)
+    SHARED.get().is_some_and(|shared| handle(shared, vk, down))
+}
+
+/// Raw Input 补上的、钩子漏掉的按键（见 win/hook.rs）。Raw Input 不能拦截按键，所以不需要返回值
+#[cfg(windows)]
+pub(crate) fn on_raw_key(vk: u32, down: bool) {
+    if let Some(shared) = SHARED.get() {
+        handle(shared, vk, down);
+    }
+}
+
+/// 正被按住的单键主热键（只有它的按下事件被拦截）。macOS 拦截了修饰键的事件，系统仍会把它记为按住，
+/// 钩子据此从放行的按键上去掉它的标志位：按住右 Option 时按的其他键不会变成 Option 组合
+#[cfg(target_os = "macos")]
+pub(crate) fn held_main_key() -> Vec<u32> {
+    let Some(shared) = SHARED.get() else { return Vec::new() };
+    let st = shared.state.lock().unwrap();
+    match &shared.bindings.read().unwrap().main {
+        Some(main) if main.is_single() && st.tap_down => {
+            main.trigger().iter().copied().filter(|vk| st.pressed.contains(vk)).collect()
+        }
+        _ => Vec::new(),
+    }
 }
 
 /// 返回 true 表示拦截该事件
@@ -375,10 +357,12 @@ mod tests {
             }
             rx.try_iter().collect::<Vec<_>>()
         };
-        assert_eq!(run(&[(RALT, true), (RALT, false)]), [Some("right alt".to_string())]);
+        // macOS 上叫 right option
+        let ralt = format!("right {}", keys::ALT);
+        assert_eq!(run(&[(RALT, true), (RALT, false)]), [Some(ralt.clone())]);
         // 组合键：先松开哪个都一样
-        assert_eq!(run(&[(RALT, true), (SPACE, true), (SPACE, false), (RALT, false)]), [Some("right alt+space".to_string())]);
-        assert_eq!(run(&[(RALT, true), (SPACE, true), (RALT, false), (SPACE, false)]), [Some("right alt+space".to_string())]);
+        assert_eq!(run(&[(RALT, true), (SPACE, true), (SPACE, false), (RALT, false)]), [Some(format!("{ralt}+space"))]);
+        assert_eq!(run(&[(RALT, true), (SPACE, true), (RALT, false), (SPACE, false)]), [Some(format!("{ralt}+space"))]);
         // 先按了半角/全角（没有松开事件）：不影响接下来的录制
         assert_eq!(run(&[(HANKAKU, true), (NONCONVERT, true), (NONCONVERT, false)]), [Some("vk0x1d".to_string())]);
         // 录制前按下的键（点「更改」用的回车）的松开事件不算

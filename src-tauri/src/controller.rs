@@ -7,7 +7,7 @@ use crate::hotkeys::{self, HotkeyEvent};
 use crate::transcriber::Transcriber;
 use crate::tray::{self, TrayState};
 use crate::overlay::{self, Mode};
-use crate::{learned_card, result_card};
+use crate::{learned_card, notice, result_card};
 use crate::mute;
 use crate::i18n::tr;
 use crate::{clipboard, focus, learn, llm, models, trf, vocab};
@@ -16,7 +16,6 @@ use std::sync::{mpsc, Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
 use tauri::AppHandle;
-use tauri_plugin_notification::NotificationExt;
 
 #[derive(Default)]
 struct RecState {
@@ -124,8 +123,9 @@ impl Controller {
         self.config.read().unwrap().clone()
     }
 
+    /// 在屏幕底部的提示小窗里显示一条消息（见 notice.rs）
     pub fn notify(&self, msg: &str) {
-        let _ = self.app.notification().builder().title("Aoide").body(msg).show();
+        notice::show(&self.app, msg);
     }
 
     fn set_tray(&self, state: TrayState) {
@@ -194,6 +194,7 @@ impl Controller {
                     HotkeyEvent::Dismiss => {
                         result_card::close(&me.app);
                         learned_card::close(&me.app);
+                        notice::close(&me.app);
                     }
                 }
             }
@@ -257,13 +258,14 @@ impl Controller {
         let (rec, task) = {
             let mut s = self.rec.lock().unwrap();
             if s.recording {
+                // 先恢复声音再播结束音：macOS 静音的是整个输出设备
+                mute::end();
                 sound::play(Cue::Stop);
                 if let Some(r) = &s.recorder {
                     r.stop();
                 }
                 s.recording = false;
                 overlay::set(Mode::Processing);
-                mute::end();
                 return; // 转录由正在等待录音结束的那个线程处理
             }
             s.recording = true;
@@ -290,9 +292,9 @@ impl Controller {
                 s.recording = false;
             }
             drop(s);
+            mute::end();
             sound::play(Cue::Stop);
             overlay::set(Mode::Processing);
-            mute::end();
         }
 
         if task.canceled() {
@@ -505,9 +507,9 @@ impl Controller {
         if let Some(r) = &rec {
             r.stop();
         }
+        mute::end();
         sound::play(Cue::Stop);
         overlay::set(Mode::Processing);
-        mute::end();
 
         let cfg = self.config();
         let Some(audio) = self.take_audio(rec.as_deref(), "Revision recording") else {

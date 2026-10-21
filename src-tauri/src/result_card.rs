@@ -2,19 +2,19 @@
 //! 输入焦点所在屏幕底部的卡片里，提供复制 / 关闭
 //!
 //! 卡片要能点按钮、选中文字，所以是普通 WebView 窗口（不像录音悬浮条那样鼠标穿透）。
-//! 显示时不抢焦点；进程启动时已调用 DisableProcessWindowsGhosting，界面卡顿也不会冒出系统外壳。
+//! 显示时不抢焦点（见各平台的 popup.rs）；Windows 上进程启动时已调用 DisableProcessWindowsGhosting，
+//! 界面卡顿也不会冒出系统外壳。
 
-use crate::overlay;
+use crate::platform::popup;
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
-use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, ShowWindow, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_SHOWNOACTIVATE};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub const LABEL: &str = "result";
 /// 逻辑尺寸（含阴影留白），按显示器缩放
 const WIDTH: f64 = 440.0;
-const HEIGHT: f64 = 220.0;
+pub const HEIGHT: f64 = 220.0;
 const BOTTOM_GAP: f64 = 8.0;
 
 #[derive(Clone, Default, Serialize)]
@@ -60,6 +60,8 @@ pub fn show(app: &AppHandle, title: &str, text: &str) {
             .resizable(false)
             .focused(false)
             .visible(false)
+            .accept_first_mouse(true)
+            .visible_on_all_workspaces(true)
             .build()
         {
             Ok(w) => {
@@ -81,19 +83,6 @@ pub fn show(app: &AppHandle, title: &str, text: &str) {
     crate::refresh_dismiss_key();
 
     // 输入焦点所在屏幕的底部中间
-    let (work, scale) = overlay::focus_work_area();
-    let (w, h) = ((WIDTH * scale).round() as i32, (HEIGHT * scale).round() as i32);
-    let x = work.left + (work.right - work.left - w) / 2;
-    let y = work.bottom - h - (BOTTOM_GAP * scale).round() as i32;
-    // 先移到目标屏幕再定尺寸，避免跨 DPI 移动时被系统按旧缩放改尺寸
-    let _ = window.set_position(PhysicalPosition::new(x, y));
-    let _ = window.set_size(PhysicalSize::new(w as u32, h as u32));
-    if let Ok(hwnd) = window.hwnd() {
-        unsafe {
-            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-            // tao 的无边框窗口保留着标题栏样式，靠 WM_NCCALCSIZE 把边框算成 0；用原生 ShowWindow 显示时
-            // 边框不会重新计算，系统标题栏会露出来。强制重算一次
-            let _ = SetWindowPos(hwnd, None, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE); // 不抢走当前窗口的焦点
-        }
-    }
+    popup::show(&window, WIDTH, HEIGHT, BOTTOM_GAP);
+    crate::notice::make_room(app);
 }

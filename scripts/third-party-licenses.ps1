@@ -3,15 +3,15 @@
 #   - C/C++ 库与资源：scripts/licenses/native.json 列出的组件，许可证原文在 scripts/licenses/native/
 #     （升级 sherpa-onnx、whisper-rs 等时同步更新）
 #
-# 用法：.\scripts\third-party-licenses.ps1
+# 用法：.\scripts\third-party-licenses.ps1（macOS 上用 pwsh 运行）
 
 # 不用 "Stop"：PowerShell 5.1 会把 cargo 写到 stderr 的普通输出当成错误；原生命令一律检查退出码
 $ErrorActionPreference = "Continue"
 
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $dir = Join-Path $PSScriptRoot "licenses"
-$manifestPath = Join-Path $root "src-tauri\Cargo.toml"
-$out = Join-Path $root "src-tauri\vendor\THIRD_PARTY_LICENSES.html"
+$manifestPath = Join-Path $root "src-tauri/Cargo.toml"
+$out = Join-Path $root "src-tauri/vendor/THIRD_PARTY_LICENSES.html"
 $utf8 = New-Object System.Text.UTF8Encoding $false
 
 cargo fetch --locked --manifest-path $manifestPath
@@ -29,7 +29,7 @@ $native = [System.IO.File]::ReadAllText((Join-Path $dir "native.json"), $utf8) |
 $sb = New-Object System.Text.StringBuilder
 [void]$sb.Append("<h2>Native libraries and assets</h2>`n  <p>C/C++ libraries compiled into Aoide and files bundled with it:</p>`n")
 foreach ($c in $native) {
-    $text = [System.IO.File]::ReadAllText((Join-Path $dir "native\$($c.file)"), $utf8)
+    $text = [System.IO.File]::ReadAllText((Join-Path $dir "native/$($c.file)"), $utf8)
     $meta = @($c.version, $c.license) | Where-Object { $_ } | ForEach-Object { & $enc $_ }
     [void]$sb.Append("  <div class=`"card`">`n")
     [void]$sb.Append("    <h3>$(& $enc $c.name)</h3>`n")

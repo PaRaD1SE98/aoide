@@ -103,5 +103,12 @@
     "license": "CC0-1.0",
     "url": "https://www.kenney.nl/assets/interface-sounds",
     "file": "interface-sounds-by-kenney.txt"
+  },
+  {
+    "name": "Fluent UI System Icons",
+    "version": "1.1.292 (icons used by the macOS settings window)",
+    "license": "MIT",
+    "url": "https://github.com/microsoft/fluentui-system-icons",
+    "file": "fluent-ui-system-icons.txt"
   }
 ]

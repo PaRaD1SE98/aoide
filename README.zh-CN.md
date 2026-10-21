@@ -5,12 +5,13 @@
 <h1 align="center">Aoide</h1>
 
 <p align="center">
-  <b>Windows 上的本地语音输入工具</b><br>
+  <b>Windows 和 macOS 上的本地语音输入工具</b><br>
   按快捷键说话，再按一次结束，文字直接输入到当前焦点所在的输入框。
 </p>
 
 <p align="center">
   <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-Windows%20%E5%AE%89%E8%A3%85%E5%8C%85-0078D4?logo=windows&logoColor=white" alt="Download"></a>
+  <a href="https://github.com/PaRaD1SE98/aoide/releases/latest"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-macOS%EF%BC%88%E9%A2%84%E8%A7%88%E7%89%88%EF%BC%89-000000?logo=apple&logoColor=white" alt="下载 macOS 版"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-MIT-2ea44f" alt="MIT"></a>
   <img src="https://img.shields.io/badge/%E5%9F%BA%E4%BA%8E-Tauri%202%20%2B%20Rust-24C8DB?logo=tauri&logoColor=white" alt="Tauri 2 + Rust">
 </p>
@@ -25,9 +26,9 @@
 
 <p align="center"><sub><i>Aoide</i>（阿俄伊得）得名于希腊神话中掌管歌声与嗓音的缪斯</sub></p>
 
-Aoide 是一款 Windows 平台的语音输入应用，是 Typeless、Wispr Flow 等商业工具的开源替代实现。
+Aoide 是一款 Windows 和 macOS（预览版）平台的语音输入应用，是 Typeless、Wispr Flow 等商业工具的开源替代实现。
 
-语音在本机由 [SenseVoice](https://github.com/FunAudioLLM/SenseVoice)（通过 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 运行）或 [whisper.cpp](https://github.com/ggml-org/whisper.cpp)（通过 Vulkan 进行 GPU 加速）识别，可选通过任意 OpenAI 格式 API 交给 LLM 润色，然后直接输出到当前焦点所在的输入框。
+语音在本机由 [SenseVoice](https://github.com/FunAudioLLM/SenseVoice)（通过 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 运行）或 [whisper.cpp](https://github.com/ggml-org/whisper.cpp)（Windows 上通过 Vulkan、macOS 上通过 Metal 进行 GPU 加速）识别，可选通过任意 OpenAI 格式 API 交给 LLM 润色，然后直接输出到当前焦点所在的输入框。
 
 不需要账号、不依赖云服务，除非你把 LLM 指向远程 API，否则音频不会离开你的电脑。
 
@@ -39,7 +40,9 @@ Aoide 是一款 Windows 平台的语音输入应用，是 Typeless、Wispr Flow 
 | **取消** | 录音或识别过程中按 `Esc` | 放弃本次任务，不输出任何内容 |
 | **语音修订** | 选中一段文本 → 按住 `右Alt` 再按 `Space` → 口述修改意见 → 单击 `右Alt` | LLM 按你的意见改写选中文本并替换 |
 
-- **反馈**：开始、结束、取消各有不同的提示音；屏幕底部的悬浮条显示当前所处的阶段；托盘图标录音时带红色角标，完成时带绿色角标。
+> macOS 上默认快捷键是 `右Option`，托盘图标在菜单栏里。
+
+- **反馈**：开始、结束、取消各有不同的提示音；屏幕底部的悬浮条显示当前所处的阶段；托盘图标录音时带红色角标，完成时带绿色角标。出错等消息显示在屏幕底部的提示小窗里，几秒后自动关闭（不使用系统通知，关掉了通知也不会错过）。
 
   ![悬浮条的各个状态：录音中、语音修订、转写中、LLM 润色中](docs/images/zh/states.png)
 
@@ -50,12 +53,14 @@ Aoide 是一款 Windows 平台的语音输入应用，是 Typeless、Wispr Flow 
 - **按上下文插入**：光标在已有文字中间时，LLM 会参考光标前后的文字，只生成应该插入光标处的内容，并与前后文的语言、标点自然衔接。已有文字绝不会被改动（结果是在光标处粘贴的）。很短的口述直接插入转写结果、保证速度，较长的才交给 LLM（阈值可调）。需要配置 LLM API；密码框的内容绝不会被读取。
 - **记住你的词**：人名、产品名、行业术语总被识别错，只需改正一次。识别结果输入后，直接在输入框里把错的词改对，Aoide 会比对你的修改和它输入的内容，确认两者读音相近（不会把你换了说法误当成识别错误），把这组纠正加入词库，并弹出带 **撤销** 按钮的提示。之后再遇到：反复纠正过的误识别直接替换，其余的连同相关词条交给 LLM 结合上下文改正。也可以在 **设置 → 词库** 里手动添加。
 - **LLM 润色**：去掉语气词（嗯、啊、那个……），把断句连成完整句子，多个并列要点自动排成编号列表 —— 不会添加你没说的内容。
-- **自动更新**：每天检查一次新版本，通过系统通知和托盘菜单提醒你，一键即可更新：自动下载带签名的安装包、校验后安装，装完自动重启。正在语音输入时不会更新。可以在 **设置 → 关于** 里手动检查，也可以关掉每日检查。
-- **两种识别引擎**：SenseVoice（默认）在任何 CPU 上都很快，中文识别准确，几乎不会产生幻觉；Whisper 模型通过 Vulkan 在 GPU 上运行（支持 NVIDIA、AMD、Intel 显卡，无需安装 CUDA），没有可用 GPU 时自动退回 CPU。
+- **自动更新**：每天检查一次新版本，通过屏幕底部的提示小窗和托盘菜单提醒你，一键即可更新：自动下载带签名的安装包、校验后安装，装完自动重启。正在语音输入时不会更新。可以在 **设置 → 关于** 里手动检查，也可以关掉每日检查。
+- **两种识别引擎**：SenseVoice（默认）在任何 CPU 上都很快，中文识别准确，几乎不会产生幻觉；Whisper 模型通过 Vulkan 在 GPU 上运行（支持 NVIDIA、AMD、Intel 显卡，无需安装 CUDA），没有可用 GPU 时自动退回 CPU。Apple 芯片的 Mac 上通过 Metal 在 GPU 上运行。
 
-> 界面支持中文和英文（设置 → *显示语言*，默认跟随 Windows 显示语言）。转录支持中文、英文、日语、韩语、粤语等多种语言。
+> 界面支持中文和英文（设置 → *显示语言*，默认跟随系统语言）。转录支持中文、英文、日语、韩语、粤语等多种语言。
 
 ## 安装
+
+### Windows
 
 1. 从 [Releases](https://github.com/PaRaD1SE98/aoide/releases) 下载 `Aoide_x.y.z_x64-setup.exe` 并运行。安装到当前用户，不需要管理员权限。
 2. 首次启动会打开设置窗口 —— 点击 **下载** 获取默认的 `sense-voice` 模型（239 MB）。Whisper 模型也可以在同一个列表中选择。
@@ -63,11 +68,24 @@ Aoide 是一款 Windows 平台的语音输入应用，是 Typeless、Wispr Flow 
 
 **环境要求：** Windows 10/11 x64。SenseVoice 只需要 CPU；Whisper 模型在支持 Vulkan 的显卡驱动下会快得多（较新的 NVIDIA、AMD、Intel 驱动均支持）。WebView2 运行时在 Windows 11 上已预装，Windows 10 缺失时安装程序会自动安装。
 
+### macOS（预览版）
+
+1. 从 [Releases](https://github.com/PaRaD1SE98/aoide/releases) 下载 `Aoide_x.y.z_aarch64.dmg`（Apple 芯片）或 `Aoide_x.y.z_x64.dmg`（Intel 芯片），打开后把 Aoide 拖进「应用程序」。
+2. Aoide 没有经过 Apple 公证，首次打开会被系统拦下。打开 **系统设置 → 隐私与安全性**，滚动到下方点击 **仍要打开**。
+3. Aoide 会先请求使用麦克风。之后设置窗口顶部会列出还缺少的权限：点 *辅助功能*（用于监听快捷键和粘贴文字）旁的 **打开系统设置**，在那里打开 Aoide 的开关。列表会自动更新，快捷键随即生效，不用重启。
+4. 在设置窗口下载模型，然后在任意位置单击 `右Option` 开始说话。
+
+**环境要求：** macOS 11 或更新版本，Apple 芯片或 Intel 芯片均可。Whisper 模型只在 Apple 芯片上用 GPU（Metal）加速，Intel Mac 上只用 CPU，建议使用 SenseVoice。
+
+Aoide 使用临时签名而不是 Apple 开发者证书签名，更新后 macOS 可能不再认可之前授予的辅助功能权限。如果更新后快捷键没反应，在辅助功能列表里用「−」删除 Aoide 再重新添加即可。macOS 没有按程序调节音量的接口，「录音时静音其他程序」在 macOS 上会静音整个输出设备。
+
 模型从 Hugging Face 下载，可通过环境变量 `HF_ENDPOINT` 使用镜像站。
 
 ## 使用
 
 从开始菜单启动 Aoide 会打开主窗口。关闭窗口后程序继续在系统托盘运行，快捷键照常可用；单击托盘图标或再次启动即可重新打开窗口，右键托盘图标 → *退出* 结束程序。开机自启时只在托盘运行，不弹出窗口。
+
+macOS 上 Aoide 在菜单栏中运行：单击图标打开窗口，右键图标打开菜单。只有窗口开着时程序坞里才显示图标。
 
 ![设置窗口](docs/images/zh/settings.png)
 
@@ -83,22 +101,22 @@ Aoide 是一款 Windows 平台的语音输入应用，是 Typeless、Wispr Flow 
 
 ## 配置项
 
-配置保存在 `%APPDATA%\Aoide\config.json`，一般通过设置窗口修改。
+配置保存在 `%APPDATA%\Aoide\config.json`（macOS：`~/Library/Application Support/Aoide/config.json`），一般通过设置窗口修改。
 
 | 键 | 默认值 | 说明 |
 |---|---|---|
-| `ui_language` | `auto` | 显示语言：`auto`（跟随 Windows）/ `zh` / `en` |
-| `hotkey` | `right alt` | 开始/停止录音（单击触发） |
+| `ui_language` | `auto` | 显示语言：`auto`（跟随系统）/ `zh` / `en` |
+| `hotkey` | `right alt` | 开始/停止录音（单击触发）。macOS 上默认为 `right option` |
 | `revise_hotkey` | `right alt+space` | 开始语音修订。`<主快捷键>+<某键>` 表示按住主快捷键再按该键 |
 | `revise_stop_hotkey` | `right alt` | 停止语音修订（与 `hotkey` 相同时合并为单击逻辑） |
 | `cancel_hotkey` | `esc` | 取消本次录音或识别；只在任务进行中拦截该键 |
 | `model` | `sense-voice` | SenseVoice：`sense-voice`（中英日韩粤）/ `sense-voice-yue`（粤语增强）。Whisper：`tiny` / `base` / `small` / `medium` / `large-v3-turbo-q5_0` / `large-v3-turbo` / `large-v2` / `large-v3` |
-| `model_dir` | *（空）* | 模型存放目录，留空 = `%LOCALAPPDATA%\Aoide\models` |
-| `language` | `zh` | 转录语言，`auto` 为自动检测。SenseVoice 支持 `zh` / `en` / `ja` / `ko` / `yue` / `auto` |
-| `max_duration` | `60` | 单次录音最长秒数，超时自动停止 |
+| `model_dir` | *（空）* | 模型存放目录，留空 = `%LOCALAPPDATA%\Aoide\models`（macOS：`~/Library/Application Support/Aoide/models`） |
+| `language` | `auto` | 转录语言，`auto` 为自动检测。SenseVoice 支持 `zh` / `en` / `ja` / `ko` / `yue` / `auto` |
+| `max_duration` | `90` | 单次录音最长秒数，超时自动停止 |
 | `min_duration` | `3` | 短于此秒数的录音用静音补齐到该长度再识别；设 `0` 关闭 |
-| `mute_while_recording` | `true` | 录音期间静音其他正在播放声音的程序，结束后恢复；Aoide 自己的提示音不受影响 |
-| `device` | `gpu` | `gpu`（Vulkan）/ `cpu`。仅对 Whisper 生效，SenseVoice 固定使用 CPU |
+| `mute_while_recording` | `true` | 录音期间静音其他正在播放声音的程序，结束后恢复；Aoide 自己的提示音不受影响。macOS 上静音的是输出设备 |
+| `device` | `gpu` | `gpu`（Vulkan；Apple 芯片的 Mac 上为 Metal，Intel Mac 上为 CPU）/ `cpu`。仅对 Whisper 生效，SenseVoice 固定使用 CPU |
 | `polish` | `true` | 是否启用 LLM 润色（`polish_api` 为空时自动跳过） |
 | `polish_api` | *（空）* | OpenAI 格式 API base，如 `https://api.openai.com/v1` |
 | `polish_api_key` | *（空）* | API Key，不需要时留空 |
@@ -113,11 +131,13 @@ Aoide 是一款 Windows 平台的语音输入应用，是 Typeless、Wispr Flow 
 | `auto_check_updates` | `true` | 每天检查一次新版本并通知你；是否更新始终由你决定 |
 | `polish_prompt` / `revise_prompt` / `insert_prompt` | *（空）* | 自定义润色提示词（含 `{text}`）、修订提示词（含 `{original}`、`{instruction}`）和插入提示词（含 `{before}`、`{after}`、`{text}`），留空使用内置提示词，可在设置页编辑 |
 
-词库保存在 `%APPDATA%\Aoide\vocabulary.json`。日志文件为 `%APPDATA%\Aoide\logs\app.log`（超过 1 MB 自动轮转）。日志包含你的转录内容，只保存在本机。
+词库保存在 `%APPDATA%\Aoide\vocabulary.json`。日志文件为 `%APPDATA%\Aoide\logs\app.log`（超过 1 MB 自动轮转）。macOS 上分别是 `~/Library/Application Support/Aoide/vocabulary.json` 和 `~/Library/Logs/Aoide/app.log`。日志包含你的转录内容，只保存在本机。
 
 ## 从源码构建
 
 Aoide 是一个 [Tauri 2](https://tauri.app/) 应用：后端为 Rust（`src-tauri/`），设置窗口为纯 HTML/CSS/JS（`ui/`）。sherpa-onnx 从源码构建，并去掉了语音合成（TTS）模块，因此程序中不含任何 GPL 代码（espeak-ng）。
+
+### Windows
 
 前置工具（均可通过 `winget` 安装）。Visual Studio 2022 需要 **17.10 或更新版本** —— ONNX Runtime 预编译库依赖较新的 MSVC STL：
 
@@ -140,13 +160,40 @@ pnpm tauri build                     # 构建安装包 → src-tauri\target\rele
 
 构建 sherpa-onnx 和首次构建应用（编译 whisper.cpp 及其 Vulkan 着色器）都比较耗时。依赖变化后请重新运行 `third-party-licenses.ps1`。
 
+### macOS
+
+前置工具：Xcode 命令行工具、[Rust](https://rustup.rs/)，以及通过 [Homebrew](https://brew.sh/) 安装的：
+
+```bash
+xcode-select --install
+brew install node pnpm cmake
+brew install --cask powershell                     # 运行许可页生成脚本
+cargo install cargo-about --locked --features cli
+```
+
+然后：
+
+```bash
+./scripts/build-sherpa-onnx.sh           # 只需一次：构建不含 TTS 的 sherpa-onnx → src-tauri/vendor/sherpa-onnx
+pwsh ./scripts/third-party-licenses.ps1  # 随应用附带的许可页
+pnpm install
+pnpm tauri dev                           # 开发模式运行
+pnpm tauri build                         # 构建应用 → src-tauri/target/release/bundle/dmg/
+```
+
+开发模式下，macOS 会为启动 Aoide 的终端程序申请辅助功能权限。
+
+### 平台相关代码
+
+与操作系统打交道的代码（键盘钩子、模拟按键、焦点检测、静音、悬浮条窗口、提示音）在 `src-tauri/src/win/` 和 `src-tauri/src/macos/` 中，两者提供相同的接口；其余代码两个平台共用。
+
 README 中的截图由 `.\scripts\readme-images.ps1` 在内存中渲染生成（程序自身的绘制代码 + 无头浏览器渲染真实界面页面），演示动图由 `.\scripts\readme-demo.ps1` 生成（另需 [FFmpeg](https://ffmpeg.org/)），界面改动后重新运行即可更新。
 
 ## 致谢
 
 - 音效：**Kenney**（[www.kenney.nl](https://www.kenney.nl)）的 [Interface Sounds](https://kenney.nl/assets/interface-sounds)，CC0
 - 语音识别：[SenseVoice](https://github.com/FunAudioLLM/SenseVoice)（通过 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) 运行）、[whisper.cpp](https://github.com/ggml-org/whisper.cpp)（通过 [whisper-rs](https://codeberg.org/tazz4843/whisper-rs) 调用）
-- 安装包附带 [Khronos Vulkan Loader](https://github.com/KhronosGroup/Vulkan-Loader)（Apache-2.0），使程序在没有 Vulkan 驱动的机器上也能启动
+- Windows 安装包附带 [Khronos Vulkan Loader](https://github.com/KhronosGroup/Vulkan-Loader)（Apache-2.0），使程序在没有 Vulkan 驱动的机器上也能启动
 
 ## 许可证
 

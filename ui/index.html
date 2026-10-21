@@ -27,6 +27,12 @@
 
     <main class="content" id="content">
 
+    <!-- 缺少系统权限时显示（macOS），授权后自动消失 -->
+    <div class="perm" id="perm" hidden>
+      <div class="perm-head"><span class="ico">&#xE946;</span><span data-i18n="perm.title">Aoide 还需要以下权限才能正常工作</span></div>
+      <div class="group" id="perm-list"></div>
+    </div>
+
     <section class="pane" id="pane-hotkeys" hidden>
       <h1 class="pane-title" data-i18n="sec.hotkeys">快捷键</h1>
       <div class="group">
@@ -475,6 +481,7 @@
   </div>
 
   <div id="toast" role="status"></div>
+  <script src="icons.js"></script>
   <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>

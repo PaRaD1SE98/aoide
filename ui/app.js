@@ -70,6 +70,7 @@ const resolveLang = (setting) => (setting === "zh" || setting === "en" ? setting
 // === 快捷键显示 ===
 const KEY_LABELS = {
   ctrl: "Ctrl", alt: "Alt", shift: "Shift", windows: "Win", esc: "Esc", space: "Space",
+  option: "Option", command: "Command", fn: "fn",
   enter: "Enter", tab: "Tab", backspace: "Backspace", delete: "Delete", insert: "Insert",
   home: "Home", end: "End", "page up": "PgUp", "page down": "PgDn", "caps lock": "Caps Lock",
   "print screen": "PrtSc", "scroll lock": "Scroll Lock", pause: "Pause", menu: "Menu",
@@ -77,6 +78,7 @@ const KEY_LABELS = {
 };
 
 function keyLabel(k) {
+  if (PLATFORM === "macos" && k === "ctrl") return "Control";
   if (KEY_LABELS[k]) return KEY_LABELS[k];
   return k.replace(/\b\w/g, (c) => c.toUpperCase()).replace("Windows", "Win");
 }
@@ -193,6 +195,7 @@ function applyLanguage() {
   applyI18n(resolveLang(state.config.ui_language));
   renderModels();
   renderVocab();
+  renderPermissions();
   setUpdateStatus(updateStatus.key, updateStatus.vars, updateStatus.cls);
   updateResetButtons();
 }
@@ -229,6 +232,53 @@ function el(tag, props = {}, ...children) {
   const e = Object.assign(document.createElement(tag), props);
   e.append(...children);
   return e;
+}
+
+// === 设置页里的按键 ===
+// 有的电脑上设置窗口在前台时，键盘钩子收不到按键，由 Raw Input 补上（见 win/hook.rs），但它拦不住按键，
+// 按键照样送到页面：录制快捷键时按的键不应触发页面里的操作；单独按下再松开 Alt（默认的主快捷键是右 Alt）
+// 会让窗口进入菜单模式、吞掉下一个按键。（Alt+空格弹出的窗口菜单页面拦不住，见 win/mod.rs）
+let capturing = false;
+
+function suppressKey(e) {
+  if (capturing || e.code === "AltLeft" || e.code === "AltRight") e.preventDefault();
+}
+
+window.addEventListener("keydown", suppressKey, true);
+window.addEventListener("keyup", suppressKey, true);
+
+// === 系统权限（macOS）：缺少时在页面顶部列出，授权后自动消失 ===
+const PERMISSIONS = [
+  { kind: "accessibility", icon: "&#xE765;" },
+  { kind: "microphone", icon: "&#xE720;" },
+];
+let permissions = null;
+
+function renderPermissions() {
+  if (!permissions) return;
+  const granted = (kind) => (kind === "microphone" ? permissions.microphone === "granted" : permissions.accessibility);
+  const missing = PERMISSIONS.filter(({ kind }) => !granted(kind));
+  $("perm").hidden = missing.length === 0;
+  $("perm-list").replaceChildren(...missing.map(({ kind, icon }) => {
+    // 麦克风还没问过：点按钮弹出系统对话框；其余情况只能去系统设置里打开
+    const ask = kind === "microphone" && permissions.microphone === "undetermined";
+    const desc = kind === "microphone" && permissions.microphone === "denied" ? "perm.microphone.denied" : `perm.${kind}.desc`;
+    const btn = el("button", { className: "btn accent", textContent: t(ask ? "perm.allow" : "perm.openSettings") });
+    btn.addEventListener("click", () => invoke("request_permission", { kind }).then(refreshPermissions));
+    return el("div", { className: "card" },
+      el("span", { className: "ico", innerHTML: icon }),
+      el("div", { className: "text" },
+        el("div", { className: "title", textContent: t(`perm.${kind}.title`) }),
+        el("div", { className: "desc", textContent: t(desc) })),
+      el("div", { className: "control" }, btn));
+  }));
+}
+
+async function refreshPermissions() {
+  const p = await invoke("get_permissions");
+  if (JSON.stringify(p) === JSON.stringify(permissions)) return;
+  permissions = p;
+  renderPermissions();
 }
 
 function renderVocab() {
@@ -406,6 +456,7 @@ function bind() {
       document.querySelectorAll("[data-capture]").forEach((b) => (b.disabled = true));
       btn.classList.add("capturing");
       btn.textContent = t("btn.capturing");
+      capturing = true;
       try {
         const combo = await invoke("capture_hotkey").catch((e) => {
           toast(String(e), true);
@@ -422,6 +473,7 @@ function bind() {
           }
         }
       } finally {
+        capturing = false;
         btn.classList.remove("capturing");
         btn.textContent = t("btn.change");
         document.querySelectorAll("[data-capture]").forEach((b) => (b.disabled = false));
@@ -499,6 +551,7 @@ async function init() {
   models = s.models;
   defaultModelDir = s.default_model_dir;
   systemLanguage = s.system_language;
+  PLATFORM = s.platform;
   defaultPrompts = {
     polish_prompt: s.default_polish_prompt,
     revise_prompt: s.default_revise_prompt,
@@ -515,6 +568,9 @@ async function init() {
   update = await invoke("get_update");
   setUpdateStatus("update.current");
   renderUpdate();
+  await refreshPermissions();
+  // 用户去系统设置里授权后，这里自动更新
+  if (PLATFORM === "macos") setInterval(refreshPermissions, 1500);
   await loadVocab();
 }
 
