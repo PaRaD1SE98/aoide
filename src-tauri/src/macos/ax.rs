@@ -1,11 +1,13 @@
 //! 辅助功能 API（AXUIElement）的封装：读取焦点程序、焦点元素和它们的属性
 //!
-//! Chromium / Electron 程序（Chrome、VS Code、Slack……）默认不对外提供辅助功能树（网页、界面里的输入框都读不到），
+//! Chromium / Electron / Firefox 程序（Chrome、VS Code、Slack……）默认不对外提供辅助功能树（网页、界面里的输入框都读不到），
 //! 要由读取方打开：
+//! - 读取程序元素的 AXRole：Apple 建议程序以此判断有辅助工具在用。Firefox 121 起据此打开
+//!   （Mozilla bug 1845364）；Chrome 据此打开基本模式，但 macOS 14 起可能不含网页内容
 //! - Electron 程序认 AXManualAccessibility，设置后立即生效
-//! - Chrome 等浏览器只认 VoiceOver 用的 AXEnhancedUserInterface，而且要等 2 秒才生效
-//!   （Chromium 的 chrome_browser_application_mac.mm）。这个开关在别的程序上有副作用（窗口动画、窗口管理工具），
-//!   所以只对已知的 Chromium 浏览器设置
+//! - Chrome 的完整模式只认 VoiceOver 用的 AXEnhancedUserInterface，而且要等 2 秒才生效
+//!   （Chromium 的 chrome_browser_application_mac.mm）；Firefox 也认这个开关。
+//!   这个开关在别的程序上有副作用（窗口动画、窗口管理工具），所以只对已知的浏览器设置
 
 use super::cf::{CFRange, CFTypeRef, CF};
 use super::CGPoint;
@@ -21,10 +23,8 @@ const VALUE_CGSIZE: u32 = 2;
 const VALUE_CFRANGE: u32 = 4;
 /// 调用目标程序的超时（秒）：目标程序卡死也不会拖住我们
 const TIMEOUT: f32 = 0.3;
-/// Chromium 浏览器收到 AXEnhancedUserInterface 后 2 秒才打开辅助功能树，再留一点建树的时间
-const CHROMIUM_DELAY: Duration = Duration::from_millis(2500);
-/// 每隔多久重新给 Chromium 浏览器设置一次开关（以防浏览器自己关掉了辅助功能）
-const CHROMIUM_REASSERT: Duration = Duration::from_secs(30);
+/// 每隔多久重新给浏览器设置一次开关（以防浏览器自己关掉了辅助功能）
+const BROWSER_REASSERT: Duration = Duration::from_secs(30);
 
 /// Chromium 系浏览器的 bundle id（前缀）
 const CHROMIUM_BROWSERS: &[&str] = &[
@@ -39,6 +39,45 @@ const CHROMIUM_BROWSERS: &[&str] = &[
     "ru.yandex.desktop.yandex-browser",
     "com.naver.Whale",
 ];
+
+/// Firefox 系浏览器的 bundle id（前缀）
+const GECKO_BROWSERS: &[&str] = &[
+    "org.mozilla.",
+    "io.gitlab.librewolf-community",
+    "app.zen-browser.",
+    "net.waterfox.",
+    "org.torproject.",
+];
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Kind {
+    Chromium,
+    Gecko,
+    Other,
+}
+
+impl Kind {
+    fn of(pid: i32) -> Self {
+        let Some(id) = bundle_id(pid) else { return Kind::Other };
+        if CHROMIUM_BROWSERS.iter().any(|b| id.starts_with(b)) {
+            Kind::Chromium
+        } else if GECKO_BROWSERS.iter().any(|b| id.starts_with(b)) {
+            Kind::Gecko
+        } else {
+            Kind::Other
+        }
+    }
+
+    /// 第一次打开辅助功能树后要等多久才能读到：Chromium 收到开关 2 秒后才打开，Firefox 打开后要建树；
+    /// 都再留一点余量
+    fn delay(self) -> Duration {
+        match self {
+            Kind::Chromium => Duration::from_millis(2500),
+            Kind::Gecko => Duration::from_millis(1000),
+            Kind::Other => Duration::ZERO,
+        }
+    }
+}
 
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
@@ -170,41 +209,42 @@ impl Element {
 /// 已经打开过辅助功能树的程序
 struct Enabled {
     pid: i32,
-    chromium: bool,
-    /// 第一次给 Chromium 浏览器设置开关的时间：之后 CHROMIUM_DELAY 内辅助功能树还没打开
-    first_request: Option<Instant>,
-    last_request: Option<Instant>,
+    kind: Kind,
+    /// 第一次打开的时间：之后 kind.delay() 内辅助功能树可能还没准备好
+    first_request: Instant,
+    last_request: Instant,
 }
 
 static ENABLED: Mutex<Vec<Enabled>> = Mutex::new(Vec::new());
 
-/// 打开程序的辅助功能树，返回还要等多久才能读到（只有刚给 Chromium 浏览器设置完开关时需要等）
+/// 打开程序的辅助功能树，返回还要等多久才能读到（只有刚打开浏览器的辅助功能树时需要等）
 fn enable_tree(app: &Element, pid: i32) -> Duration {
     let mut enabled = ENABLED.lock().unwrap();
-    let i = match enabled.iter().position(|e| e.pid == pid) {
-        Some(i) => i,
+    let e = match enabled.iter().position(|e| e.pid == pid) {
+        Some(i) => &mut enabled[i],
         None => {
+            let kind = Kind::of(pid);
+            let role = app.string("AXRole");
             // Electron 的开关；其他程序不认这个属性，设置失败也无妨
             let manual = app.set_bool("AXManualAccessibility", true);
-            let chromium = bundle_id(pid).is_some_and(|id| CHROMIUM_BROWSERS.iter().any(|b| id.starts_with(b)));
-            log::info!("AX: enable accessibility tree of pid {pid}: manual={manual}, chromium={chromium}");
-            enabled.push(Enabled { pid, chromium, first_request: None, last_request: None });
-            enabled.len() - 1
+            let enhanced = kind != Kind::Other && app.set_bool("AXEnhancedUserInterface", true);
+            log::info!("AX: enable accessibility tree of pid {pid} ({kind:?}): role={role:?}, manual={manual}, enhanced={enhanced}");
+            let now = Instant::now();
+            enabled.push(Enabled { pid, kind, first_request: now, last_request: now });
+            return kind.delay();
         }
     };
-    let e = &mut enabled[i];
-    if !e.chromium {
+    if e.kind == Kind::Other {
         return Duration::ZERO;
     }
-    // 每次设置都会让浏览器重新开始 2 秒倒计时，所以不能每次读取都设置，隔一段时间重申一次
-    if e.last_request.is_none_or(|t| t.elapsed() >= CHROMIUM_REASSERT) {
+    // 每次设置都会让 Chrome 重新开始 2 秒倒计时，所以不能每次读取都设置，隔一段时间重申一次
+    if e.last_request.elapsed() >= BROWSER_REASSERT {
+        let role = app.string("AXRole").is_some();
         let ok = app.set_bool("AXEnhancedUserInterface", true);
-        let now = Instant::now();
-        e.first_request.get_or_insert(now);
-        e.last_request = Some(now);
-        log::info!("AX: AXEnhancedUserInterface for pid {pid}: {ok}");
+        e.last_request = Instant::now();
+        log::info!("AX: re-enable accessibility tree of pid {pid}: role={role}, enhanced={ok}");
     }
-    e.first_request.map_or(Duration::ZERO, |t| CHROMIUM_DELAY.saturating_sub(t.elapsed()))
+    e.kind.delay().saturating_sub(e.first_request.elapsed())
 }
 
 /// 程序的 bundle id
@@ -236,7 +276,7 @@ fn focused_application() -> Option<Element> {
     focused_application_and_delay().map(|(app, _)| app)
 }
 
-/// 当前的键盘焦点元素。刚给 Chromium 浏览器打开辅助功能树时，先等它生效
+/// 当前的键盘焦点元素。刚打开浏览器的辅助功能树时，先等它生效
 /// （录音开始时显示悬浮条就会打开，通常等到转写完已经生效，不用再等）
 pub fn focused_element() -> Option<Element> {
     let (app, delay) = focused_application_and_delay()?;

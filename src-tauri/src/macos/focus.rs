@@ -15,6 +15,8 @@ use crate::input;
 use std::time::Duration;
 
 const PROBE_CHAR: char = '∙';
+const PROBE_POLL: Duration = Duration::from_millis(50);
+const PROBE_WAIT: Duration = Duration::from_millis(500);
 
 /// 最多读取光标前 / 后多少个字符（只取光标附近，长文档也不会慢）
 const CONTEXT_BEFORE: isize = 600;
@@ -59,10 +61,18 @@ fn try_type_probe(elem: Option<&Element>) -> bool {
         return false;
     }
     input::unicode_char(PROBE_CHAR);
-    std::thread::sleep(Duration::from_millis(150));
-    let (after_text, after_sel) = snapshot(elem);
-
-    let inserted = (before_text.is_some() && after_text != before_text) || (before_sel.is_some() && after_sel != before_sel);
+    // 浏览器把网页里的变化同步给辅助功能树要一会儿：最多等 PROBE_WAIT，看到变化就停
+    let mut waited = Duration::ZERO;
+    let (mut after_text, mut after_sel);
+    let inserted = loop {
+        std::thread::sleep(PROBE_POLL);
+        waited += PROBE_POLL;
+        (after_text, after_sel) = snapshot(elem);
+        let changed = (before_text.is_some() && after_text != before_text) || (before_sel.is_some() && after_sel != before_sel);
+        if changed || waited >= PROBE_WAIT {
+            break changed;
+        }
+    };
     if inserted {
         input::backspace();
         std::thread::sleep(Duration::from_millis(50));
