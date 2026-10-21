@@ -10,6 +10,7 @@ mod learn;
 mod learned_card;
 mod llm;
 mod models;
+mod notice;
 mod overlay;
 mod phonetic;
 mod result_card;
@@ -60,10 +61,11 @@ pub fn open_settings(app: &AppHandle) {
         Ok(w) => {
             platform::main_window_shown(app);
             let app = app.clone();
-            w.on_window_event(move |e| {
-                if let tauri::WindowEvent::Destroyed = e {
-                    platform::main_window_closed(&app);
-                }
+            w.on_window_event(move |e| match e {
+                tauri::WindowEvent::Destroyed => platform::main_window_closed(&app),
+                // 设置窗口在前台时其他程序的键盘钩子可能先拦下按键，重新安装让 Aoide 的钩子排到前面（见 win/hook.rs）
+                tauri::WindowEvent::Focused(true) => platform::hook::reinstall(),
+                _ => {}
             });
         }
         Err(e) => log::error!("Open settings failed: {e}"),
@@ -287,9 +289,20 @@ fn close_result(app: AppHandle) {
     result_card::close(&app);
 }
 
-/// 有小窗（结果卡片、词条入库提示）开着时，让键盘钩子用 Esc 关闭它们
+/// 提示小窗：读取当前消息
+#[tauri::command]
+fn get_notice(app: AppHandle) -> String {
+    notice::message(&app)
+}
+
+#[tauri::command]
+fn close_notice(app: AppHandle) {
+    notice::close(&app)
+}
+
+/// 有小窗（结果卡片、词条入库提示、提示小窗）开着时，让键盘钩子用 Esc 关闭它们
 pub(crate) fn refresh_dismiss_key() {
-    hotkeys::set_dismiss_armed(result_card::is_open() || learned_card::is_open());
+    hotkeys::set_dismiss_armed(result_card::is_open() || learned_card::is_open() || notice::is_open());
 }
 
 /// 用默认浏览器打开网址（只允许 https）
@@ -428,7 +441,6 @@ pub fn run() {
                 .timezone_strategy(TimezoneStrategy::UseLocal)
                 .build(),
         )
-        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![AUTOSTART_ARG]),
@@ -439,6 +451,7 @@ pub fn run() {
         .manage(Downloads::default())
         .manage(result_card::ResultState::default())
         .manage(learned_card::LearnedState::default())
+        .manage(notice::NoticeState::default())
         .invoke_handler(tauri::generate_handler![
             get_settings,
             list_models,
@@ -461,6 +474,8 @@ pub fn run() {
             get_learned,
             undo_learned,
             close_learned,
+            get_notice,
+            close_notice,
             check_update,
             get_update,
             install_update,

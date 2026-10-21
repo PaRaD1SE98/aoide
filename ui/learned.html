@@ -14,10 +14,6 @@
     .item .note { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
     footer { justify-content: space-between; align-items: center; gap: 12px; }
     #hint { color: var(--muted); font-size: 12px; }
-    /* 自动关闭倒计时：从满格缩到空，鼠标悬停时暂停 */
-    .countdown { height: 3px; flex: none; background: var(--stroke); }
-    #bar { height: 100%; background: var(--accent); transform-origin: left; animation: countdown linear forwards; }
-    @keyframes countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
   </style>
 </head>
 <body>
@@ -36,6 +32,7 @@
   </div>
   <script src="icons.js"></script>
   <script src="i18n.js"></script>
+  <script src="countdown.js"></script>
   <script src="learned.js"></script>
 </body>
 </html>

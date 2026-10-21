@@ -14,7 +14,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 pub const LABEL: &str = "learned";
 /// 逻辑尺寸（含阴影留白），按显示器缩放
 const WIDTH: f64 = 400.0;
-const HEIGHT: f64 = 156.0;
+pub const HEIGHT: f64 = 156.0;
 const BOTTOM_GAP: f64 = 8.0;
 
 #[derive(Clone, Serialize)]
@@ -106,6 +106,7 @@ pub fn show(app: &AppHandle, learned: Vec<(Correction, vocab::Change)>) {
 
     // 输入焦点所在屏幕的底部中间
     popup::show(&window, WIDTH, HEIGHT, BOTTOM_GAP);
+    crate::notice::make_room(app);
 }
 
 pub fn items(app: &AppHandle) -> Vec<Item> {

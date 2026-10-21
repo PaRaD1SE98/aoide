@@ -76,6 +76,11 @@ header img { width: 16px; height: 16px; }
   cursor: text;
 }
 
+/* 自动关闭倒计时（见 countdown.js）：从满格缩到空，鼠标悬停时暂停 */
+.countdown { height: 3px; flex: none; background: var(--stroke); }
+#bar { height: 100%; background: var(--accent); transform-origin: left; animation: countdown linear forwards; }
+@keyframes countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
 footer {
   display: flex;
   justify-content: flex-end;

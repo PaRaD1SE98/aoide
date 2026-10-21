@@ -135,6 +135,7 @@ pub fn update(hotkey: &str, revise: &str, revise_stop: &str, cancel: &str) -> Ve
 /// 超时且一个按键都没收到时返回 Err：键盘钩子没在工作（常见原因是被安全软件拦截）
 pub fn capture(timeout: Duration) -> Result<Option<String>, String> {
     let Some(shared) = SHARED.get() else { return Ok(None) };
+    crate::platform::hook::reinstall();
     let (tx, rx) = mpsc::channel();
     *shared.capture.lock().unwrap() = Some(Capture { order: Vec::new(), seen: false, tx });
     let result = rx.recv_timeout(timeout).ok();

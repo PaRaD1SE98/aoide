@@ -77,6 +77,9 @@ pub fn install() {
         .expect("spawn hook thread");
 }
 
+/// 让钩子排到其他程序的钩子前面（Windows 上需要，见 win/hook.rs）；macOS 上没有要做的
+pub fn reinstall() {}
+
 /// 录制快捷键时一个按键都没收到：提示用户可能的原因
 pub fn no_events_hint() -> &'static str {
     tr(

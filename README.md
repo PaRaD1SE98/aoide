@@ -42,7 +42,7 @@ No account, no cloud service, no audio leaves your computer unless you point the
 
 > On macOS the default hotkey is `Right Option`, and the tray icon lives in the menu bar.
 
-- **Feedback**: distinct sounds for start, stop and cancel; a floating bar at the bottom of the screen shows what Aoide is doing; the tray icon gets a red badge while recording and a green one when done.
+- **Feedback**: distinct sounds for start, stop and cancel; a floating bar at the bottom of the screen shows what Aoide is doing; the tray icon gets a red badge while recording and a green one when done. Errors and other messages appear in a small notice at the bottom of the screen that closes on its own (Aoide doesn't use system notifications, so they can't be missed when notifications are off).
 
   ![Floating bar states: recording, voice edit, transcribing, LLM polishing](docs/images/en/states.png)
 
@@ -53,7 +53,7 @@ No account, no cloud service, no audio leaves your computer unless you point the
 - **Context-aware insertion**: when the cursor sits inside existing text, the LLM sees the text before and after the cursor and writes only the piece that belongs at the cursor, matching the surrounding language and punctuation. The existing text is never changed — the result is pasted at the cursor. Short dictation is inserted as transcribed for speed; the LLM step kicks in for longer input (configurable). Requires an LLM API; password fields are never read.
 - **Learns your words**: names, product names and jargon that keep coming out wrong only need to be fixed once. Correct the word in the text box after it is typed, and Aoide compares your edit with what it typed, checks that the two sound alike (so rewording is not mistaken for a recognition error), adds the pair to your vocabulary and shows a small notice with **Undo**. Next time, a misrecognition you have corrected repeatedly is replaced directly; others are passed to the LLM together with the related vocabulary entries, so it can fix them in context. You can also add words by hand under **Settings → Vocabulary**.
 - **LLM polishing**: removes filler words ("um", "uh", 嗯, 那个…), joins broken sentences, and turns lists of points into a numbered list — without adding content you didn't say.
-- **Automatic updates**: Aoide checks for a new version once a day, lets you know with a notification and a tray menu item, and updates in one click: the signed installer is downloaded, verified and installed, and Aoide restarts on its own. It never updates while you are dictating. You can turn the daily check off and check manually under **Settings → About**.
+- **Automatic updates**: Aoide checks for a new version once a day, lets you know with a notice at the bottom of the screen and a tray menu item, and updates in one click: the signed installer is downloaded, verified and installed, and Aoide restarts on its own. It never updates while you are dictating. You can turn the daily check off and check manually under **Settings → About**.
 - **Two speech engines**: SenseVoice (default) is fast on any CPU, very accurate for Chinese and rarely hallucinates; Whisper models run on the GPU through Vulkan (NVIDIA, AMD or Intel, no CUDA install required) and fall back to CPU automatically. On Apple silicon Macs they run on the GPU through Metal.
 
 > The interface is available in English and Chinese (Settings → *Display language*; follows the system language by default). Transcription supports Chinese, English, Japanese, Korean, Cantonese and more.

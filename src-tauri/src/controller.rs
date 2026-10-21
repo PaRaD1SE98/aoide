@@ -7,7 +7,7 @@ use crate::hotkeys::{self, HotkeyEvent};
 use crate::transcriber::Transcriber;
 use crate::tray::{self, TrayState};
 use crate::overlay::{self, Mode};
-use crate::{learned_card, result_card};
+use crate::{learned_card, notice, result_card};
 use crate::mute;
 use crate::i18n::tr;
 use crate::{clipboard, focus, learn, llm, models, trf, vocab};
@@ -16,7 +16,6 @@ use std::sync::{mpsc, Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
 use tauri::AppHandle;
-use tauri_plugin_notification::NotificationExt;
 
 #[derive(Default)]
 struct RecState {
@@ -124,13 +123,9 @@ impl Controller {
         self.config.read().unwrap().clone()
     }
 
+    /// 在屏幕底部的提示小窗里显示一条消息（见 notice.rs）
     pub fn notify(&self, msg: &str) {
-        // macOS 打包运行时用系统的 UserNotifications，Tauri 插件的通知在 Aoide 位于前台时会被丢掉（见 macos/notify.rs）
-        #[cfg(target_os = "macos")]
-        if crate::platform::notify::show("Aoide", msg) {
-            return;
-        }
-        let _ = self.app.notification().builder().title("Aoide").body(msg).show();
+        notice::show(&self.app, msg);
     }
 
     fn set_tray(&self, state: TrayState) {
@@ -199,6 +194,7 @@ impl Controller {
                     HotkeyEvent::Dismiss => {
                         result_card::close(&me.app);
                         learned_card::close(&me.app);
+                        notice::close(&me.app);
                     }
                 }
             }

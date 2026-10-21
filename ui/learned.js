@@ -4,11 +4,7 @@ const { listen } = window.__TAURI__.event;
 
 const $ = (id) => document.getElementById(id);
 const SHOW_MS = 8000;
-const bar = $("bar");
-let timer;
-let remaining = SHOW_MS; // 距离自动关闭还剩多久
-let startedAt = 0;
-let paused = false;
+const countdown = createCountdown($("bar"), () => invoke("close_learned"));
 
 function render(items) {
   $("items").replaceChildren(...items.map(({ wrong, right, count }) => {
@@ -24,47 +20,15 @@ function render(items) {
     }
     return row;
   }));
-  restart();
+  countdown.restart(SHOW_MS); // 新学到词条时从满格重新开始
 }
-
-// === 自动关闭倒计时：进度条和计时器同步，悬停时一起暂停 ===
-function run() {
-  clearTimeout(timer);
-  startedAt = performance.now();
-  timer = setTimeout(() => invoke("close_learned"), remaining);
-  bar.style.animationPlayState = paused ? "paused" : "running";
-  if (paused) clearTimeout(timer);
-}
-
-/** 从满格重新开始（新学到词条时） */
-function restart() {
-  remaining = SHOW_MS;
-  bar.style.animation = "none";
-  void bar.offsetWidth; // 让动画从头播放
-  bar.style.animation = "";
-  bar.style.animationDuration = `${SHOW_MS}ms`;
-  run();
-}
-
-document.body.addEventListener("mouseenter", () => {
-  if (paused) return;
-  paused = true;
-  clearTimeout(timer);
-  remaining = Math.max(0, remaining - (performance.now() - startedAt));
-  bar.style.animationPlayState = "paused";
-});
-document.body.addEventListener("mouseleave", () => {
-  paused = false;
-  run();
-});
 
 $("undo").addEventListener("click", async () => {
   await invoke("undo_learned");
   $("title").textContent = t("learned.undone");
   $("items").style.opacity = 0.4;
   $("undo").disabled = true;
-  bar.parentElement.style.visibility = "hidden";
-  clearTimeout(timer);
+  countdown.stop();
   setTimeout(() => invoke("close_learned"), 900);
 });
 
