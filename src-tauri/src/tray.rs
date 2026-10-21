@@ -90,7 +90,7 @@ pub fn create(app: &AppHandle, hotkey: &str) -> tauri::Result<()> {
                     if let Err(e) = crate::updater::install(&app).await {
                         use tauri::Manager;
                         app.state::<std::sync::Arc<crate::controller::Controller>>()
-                            .notify(&crate::trf!("更新失败：{e}", "Update failed: {e}", "更新に失敗しました: {e}"));
+                            .notify_error(&crate::trf!("更新失败：{e}", "Update failed: {e}", "更新に失敗しました: {e}"));
                     }
                 });
             }

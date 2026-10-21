@@ -128,6 +128,12 @@ impl Controller {
         notice::show(&self.app, msg);
     }
 
+    /// 同 notify，并播放出错的提示音：操作失败、没能完成时用
+    pub fn notify_error(&self, msg: &str) {
+        sound::play(Cue::Error);
+        notice::show(&self.app, msg);
+    }
+
     fn set_tray(&self, state: TrayState) {
         tray::set_state(&self.app, state);
     }
@@ -217,7 +223,7 @@ impl Controller {
         thread::spawn(move || {
             if let Err(e) = me.transcriber.preload(&me.config()) {
                 log::error!("{e}");
-                me.notify(&e);
+                me.notify_error(&e);
             }
         });
     }
@@ -330,7 +336,7 @@ impl Controller {
             }
             Err(e) => {
                 log::error!("Transcribe error: {e}");
-                self.notify(&trf!("错误：{e}", "Error: {e}", "エラー: {e}"));
+                self.notify_error(&trf!("错误：{e}", "Error: {e}", "エラー: {e}"));
                 self.set_tray(TrayState::Idle);
             }
         }
@@ -482,7 +488,7 @@ impl Controller {
             }
         }
         if selected.is_empty() {
-            self.notify(tr("请先选中要修改的文本", "Select the text you want to edit first", "修正したいテキストを先に選択してください"));
+            self.notify_error(tr("请先选中要修改的文本", "Select the text you want to edit first", "修正したいテキストを先に選択してください"));
             return;
         }
         self.set_tray(TrayState::Recording);
@@ -529,7 +535,7 @@ impl Controller {
                 return Ok(());
             }
             if revised.is_empty() || revised == selected {
-                self.notify(tr("未检测到修改意见", "No edit instruction detected", "修正の指示が聞き取れませんでした"));
+                self.notify_error(tr("未检测到修改意见", "No edit instruction detected", "修正の指示が聞き取れませんでした"));
                 return Ok(());
             }
             thread::sleep(Duration::from_millis(100));
@@ -552,7 +558,7 @@ impl Controller {
         }
         if let Err(e) = result {
             log::error!("Revision error: {e}");
-            self.notify(&trf!("修订失败：{e}", "Edit failed: {e}", "修正に失敗しました: {e}"));
+            self.notify_error(&trf!("修订失败：{e}", "Edit failed: {e}", "修正に失敗しました: {e}"));
         }
         self.finish_overlay();
         self.flash_done();
