@@ -77,8 +77,8 @@ struct ModelEntry {
     id: &'static str,
     engine: models::Engine,
     size_mb: u32,
-    /// [中文, English]
-    note: [&'static str; 2],
+    /// [中文, English, 日本語]
+    note: [&'static str; 3],
     downloaded: bool,
 }
 
@@ -177,15 +177,15 @@ fn save_settings(
 ) -> Result<(), String> {
     for hk in [&config.hotkey, &config.revise_hotkey, &config.revise_stop_hotkey, &config.cancel_hotkey] {
         if keys::Hotkey::parse(hk).is_none() {
-            return Err(trf!("无法识别的快捷键：{hk}", "Unrecognized hotkey: {hk}"));
+            return Err(trf!("无法识别的快捷键：{hk}", "Unrecognized hotkey: {hk}", "認識できないショートカットキーです: {hk}"));
         }
     }
     let cancel = keys::Hotkey::parse(&config.cancel_hotkey);
     if cancel == keys::Hotkey::parse(&config.hotkey) || cancel == keys::Hotkey::parse(&config.revise_hotkey) {
-        return Err(i18n::tr("取消快捷键不能与语音输入 / 语音修订快捷键相同", "The cancel hotkey must differ from the dictation and voice edit hotkeys").into());
+        return Err(i18n::tr("取消快捷键不能与语音输入 / 语音修订快捷键相同", "The cancel hotkey must differ from the dictation and voice edit hotkeys", "キャンセルのショートカットキーは、音声入力・音声修正のショートカットキーとは別のキーにしてください").into());
     }
     if !config.polish_prompt.trim().is_empty() && !config.polish_prompt.contains("{text}") {
-        return Err(i18n::tr("润色提示词必须包含 {text}（转写结果）", "The polish prompt must contain {text} (the transcript)").into());
+        return Err(i18n::tr("润色提示词必须包含 {text}（转写结果）", "The polish prompt must contain {text} (the transcript)", "整形プロンプトには {text}（文字起こし結果）を含めてください").into());
     }
     if !config.revise_prompt.trim().is_empty()
         && !(config.revise_prompt.contains("{original}") && config.revise_prompt.contains("{instruction}"))
@@ -193,6 +193,7 @@ fn save_settings(
         return Err(i18n::tr(
             "修订提示词必须包含 {original}（选中的原文）和 {instruction}（修改意见）",
             "The edit prompt must contain {original} (the selected text) and {instruction} (your instruction)",
+            "修正プロンプトには {original}（選択した元のテキスト）と {instruction}（修正の指示）を含めてください",
         )
         .into());
     }
@@ -202,16 +203,18 @@ fn save_settings(
         return Err(i18n::tr(
             "插入提示词必须包含 {before}、{after}（光标前后的文字）和 {text}（转写结果）",
             "The insert prompt must contain {before}, {after} (text around the cursor) and {text} (the transcript)",
+            "挿入プロンプトには {before}・{after}（カーソル前後のテキスト）と {text}（文字起こし結果）を含めてください",
         )
         .into());
     }
     if models::find(&config.model).is_none() {
-        return Err(trf!("未知模型：{}", "Unknown model: {}", config.model));
+        return Err(trf!("未知模型：{}", "Unknown model: {}", "不明なモデルです: {}", config.model));
     }
     if config.min_duration >= config.max_duration {
         return Err(trf!(
             "最短录音（{} 秒）必须小于最长录音（{} 秒）",
             "Minimum recording length ({} s) must be shorter than the maximum ({} s)",
+            "最短録音時間（{} 秒）は最長録音時間（{} 秒）より短くしてください",
             config.min_duration, config.max_duration
         ));
     }
@@ -220,10 +223,10 @@ fn save_settings(
     let launcher = app.autolaunch();
     if launcher.is_enabled().unwrap_or(false) != autostart {
         let r = if autostart { launcher.enable() } else { launcher.disable() };
-        r.map_err(|e| trf!("开机启动设置失败：{e}", "Failed to update start at login: {e}"))?;
+        r.map_err(|e| trf!("开机启动设置失败：{e}", "Failed to update start at login: {e}", "ログイン時の自動起動を設定できませんでした: {e}"))?;
     }
 
-    config.save().map_err(|e| trf!("保存失败：{e}", "Failed to save: {e}"))?;
+    config.save().map_err(|e| trf!("保存失败：{e}", "Failed to save: {e}", "保存できませんでした: {e}"))?;
     ctl.apply_config(config);
     Ok(())
 }
@@ -264,7 +267,7 @@ fn download_model(
     model_dir: String,
 ) -> Result<(), String> {
     if downloads.busy.swap(true, Ordering::SeqCst) {
-        return Err(i18n::tr("已有下载任务在进行", "A download is already in progress").into());
+        return Err(i18n::tr("已有下载任务在进行", "A download is already in progress", "ほかのダウンロードが進行中です").into());
     }
     downloads.cancel.store(false, Ordering::SeqCst);
     let cancel = downloads.cancel.clone();
@@ -290,10 +293,10 @@ fn cancel_download(downloads: State<Downloads>) {
     downloads.cancel.store(true, Ordering::SeqCst);
 }
 
-/// 当前界面语言（zh / en），结果卡片用
+/// 当前界面语言（zh / en / ja），结果卡片等小窗用
 #[tauri::command]
 fn get_ui_language() -> &'static str {
-    if i18n::is_en() { "en" } else { "zh" }
+    i18n::current()
 }
 
 /// 结果卡片：读取当前内容
@@ -358,7 +361,7 @@ fn open_licenses(app: AppHandle) -> Result<(), String> {
         .resolve("THIRD_PARTY_LICENSES.html", tauri::path::BaseDirectory::Resource)
         .map_err(|e| e.to_string())?;
     if !path.is_file() {
-        return Err(trf!("找不到第三方许可文件：{}", "Third-party license file not found: {}", path.display()));
+        return Err(trf!("找不到第三方许可文件：{}", "Third-party license file not found: {}", "サードパーティライセンスのファイルが見つかりません: {}", path.display()));
     }
     platform::open(path).map_err(|e| e.to_string())
 }
@@ -445,7 +448,7 @@ pub fn run() {
             // 仅调试版：再次启动时带 --demo-result 弹出结果卡片，用于测试
             #[cfg(debug_assertions)]
             if _args.iter().any(|a| a == "--demo-result") {
-                result_card::show(app, i18n::tr("没有检测到输入框，识别结果如下", "No input box detected. Here is the transcript"), "这是一段测试文字：今天下午三点的会议改到明天上午十点，请大家提前准备好季度汇报材料。");
+                result_card::show(app, i18n::tr("没有检测到输入框，识别结果如下", "No input box detected. Here is the transcript", "入力欄が見つからないため、認識結果をここに表示します"), "这是一段测试文字：今天下午三点的会议改到明天上午十点，请大家提前准备好季度汇报材料。");
                 return;
             }
             // 仅调试版：带 --demo-learned 时模拟学到一个词条，弹出入库提示。
@@ -551,7 +554,7 @@ pub fn run() {
                 open_settings(app.handle());
             }
             if !ctl.model_downloaded() {
-                ctl.notify(i18n::tr("请先下载语音识别模型", "Download a speech recognition model first"));
+                ctl.notify(i18n::tr("请先下载语音识别模型", "Download a speech recognition model first", "先に音声認識モデルをダウンロードしてください"));
             }
             Ok(())
         })

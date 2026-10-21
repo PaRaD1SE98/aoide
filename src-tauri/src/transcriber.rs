@@ -58,7 +58,7 @@ impl Transcriber {
         }
         *slot = None;
         if !models::is_downloaded(&cfg.model_dir(), &cfg.model) {
-            return Err(crate::trf!("模型 {} 未下载（在设置中下载）", "Model {} is not downloaded (download it in Settings)", cfg.model));
+            return Err(crate::trf!("模型 {} 未下载（在设置中下载）", "Model {} is not downloaded (download it in Settings)", "モデル {} がダウンロードされていません（設定でダウンロードしてください）", cfg.model));
         }
         log::info!("Loading model '{}' (gpu={})...", cfg.model, key.gpu);
         let start = Instant::now();
@@ -67,7 +67,7 @@ impl Transcriber {
                 let mut params = WhisperContextParameters::default();
                 params.use_gpu(key.gpu).flash_attn(key.gpu);
                 let ctx = WhisperContext::new_with_params(&key.path, params)
-                    .map_err(|e| crate::trf!("模型加载失败：{e}", "Failed to load the model: {e}"))?;
+                    .map_err(|e| crate::trf!("模型加载失败：{e}", "Failed to load the model: {e}", "モデルを読み込めませんでした: {e}"))?;
                 warm_up(&ctx);
                 Model::Whisper(ctx)
             }
@@ -133,7 +133,7 @@ fn load_sense_voice(dir: &std::path::Path, language: &str) -> Result<OfflineReco
     config.model_config.num_threads =
         std::thread::available_parallelism().map_or(2, |n| n.get().min(4)) as i32;
     config.model_config.provider = Some("cpu".into());
-    OfflineRecognizer::create(&config).ok_or_else(|| crate::i18n::tr("SenseVoice 模型加载失败", "Failed to load the SenseVoice model").to_string())
+    OfflineRecognizer::create(&config).ok_or_else(|| crate::i18n::tr("SenseVoice 模型加载失败", "Failed to load the SenseVoice model", "SenseVoice モデルを読み込めませんでした").to_string())
 }
 
 fn load_vad(cfg: &Config) -> Option<WhisperVadContext> {
@@ -213,7 +213,7 @@ fn decode(ctx: &WhisperContext, audio: &[f32], cfg: &Config) -> Result<String, S
     // 抑制非语音 token（音乐符号、[掌声] 之类）
     params.set_suppress_nst(true);
 
-    state.full(params, audio).map_err(|e| crate::trf!("识别失败：{e}", "Transcription failed: {e}"))?;
+    state.full(params, audio).map_err(|e| crate::trf!("识别失败：{e}", "Transcription failed: {e}", "音声認識に失敗しました: {e}"))?;
 
     let parts: Vec<String> = state
         .as_iter()

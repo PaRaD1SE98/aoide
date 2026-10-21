@@ -91,7 +91,7 @@ pub fn all() -> Vec<Entry> {
 pub fn add_manual(term: &str, variants: &[String]) -> Result<(), String> {
     let term = term.trim();
     if term.is_empty() {
-        return Err(crate::i18n::tr("请填写正确写法", "Enter the correct spelling").into());
+        return Err(crate::i18n::tr("请填写正确写法", "Enter the correct spelling", "正しい表記を入力してください").into());
     }
     with(|entries| {
         let idx = match entries.iter().position(|e| e.term == term) {
@@ -276,7 +276,8 @@ pub fn glossary(entries: &[Entry]) -> Option<String> {
     if entries.is_empty() {
         return None;
     }
-    let en = crate::i18n::is_en();
+    // 中文界面用中文说明，其他语言用英文（LLM 都看得懂）
+    let en = crate::i18n::current() != "zh";
     let mut s = String::from(if en {
         "User vocabulary. Speech recognition often gets these words wrong. If the text contains a word that sounds like one of them and is clearly a misrecognition, write it the way it is spelled here. Leave unrelated words alone.\n"
     } else {

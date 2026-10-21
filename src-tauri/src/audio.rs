@@ -81,7 +81,7 @@ impl Recorder {
 fn run_stream(s: &Arc<Shared>, rx: mpsc::Receiver<()>) -> Result<(), String> {
     let device = cpal::default_host()
         .default_input_device()
-        .ok_or(crate::i18n::tr("没有找到麦克风", "No microphone found"))?;
+        .ok_or(crate::i18n::tr("没有找到麦克风", "No microphone found", "マイクが見つかりません"))?;
     let supported = device.default_input_config().map_err(|e| e.to_string())?;
     let channels = supported.channels() as usize;
     s.rate.store(supported.sample_rate().0, Ordering::SeqCst);
@@ -92,7 +92,7 @@ fn run_stream(s: &Arc<Shared>, rx: mpsc::Receiver<()>) -> Result<(), String> {
         SampleFormat::I16 => build::<i16>(&device, &config, channels, s.clone()),
         SampleFormat::U16 => build::<u16>(&device, &config, channels, s.clone()),
         SampleFormat::I32 => build::<i32>(&device, &config, channels, s.clone()),
-        other => return Err(crate::trf!("不支持的采样格式 {other:?}", "Unsupported sample format {other:?}")),
+        other => return Err(crate::trf!("不支持的采样格式 {other:?}", "Unsupported sample format {other:?}", "サポートされていないサンプル形式です: {other:?}")),
     }?;
     stream.play().map_err(|e| e.to_string())?;
     let _ = rx.recv(); // 阻塞直到 stop()

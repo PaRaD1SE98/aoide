@@ -241,6 +241,7 @@ pub fn no_events_hint() -> &'static str {
     tr(
         "没有收到任何按键：键盘监听可能被安全软件拦截。请把 Aoide 加入信任后，在托盘菜单退出并重新打开 Aoide",
         "No key presses were received: the keyboard listener may be blocked by security software. Allow Aoide in it, then quit Aoide from the tray menu and start it again",
+        "キー入力を受け取れませんでした。キーボードの監視がセキュリティソフトにブロックされている可能性があります。Aoide を許可してから、トレイメニューで終了して Aoide を起動し直してください",
     )
 }
 

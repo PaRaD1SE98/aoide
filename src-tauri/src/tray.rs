@@ -49,16 +49,16 @@ fn mic_icon(state: TrayState) -> Image<'static> {
 }
 
 pub fn tooltip(hotkey: &str) -> String {
-    crate::trf!("Aoide — 按 {hotkey} 开始/停止", "Aoide — press {hotkey} to start/stop")
+    crate::trf!("Aoide — 按 {hotkey} 开始/停止", "Aoide — press {hotkey} to start/stop", "Aoide — {hotkey} で開始 / 停止")
 }
 
 fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    let open = MenuItem::with_id(app, "settings", tr("打开 Aoide", "Open Aoide"), true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", tr("退出", "Quit"), true, None::<&str>)?;
+    let open = MenuItem::with_id(app, "settings", tr("打开 Aoide", "Open Aoide", "Aoide を開く"), true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", tr("退出", "Quit", "終了"), true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     // 有新版本时，菜单最上面加一项「更新到 x.y.z」
     let update = crate::updater::available(app)
-        .map(|u| MenuItem::with_id(app, "update", crate::trf!("更新到 {}", "Update to {}", u.version), true, None::<&str>))
+        .map(|u| MenuItem::with_id(app, "update", crate::trf!("更新到 {}", "Update to {}", "{} に更新", u.version), true, None::<&str>))
         .transpose()?;
     match &update {
         Some(update) => Menu::with_items(app, &[update, &open, &separator, &quit]),
@@ -70,7 +70,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 pub fn refresh_menu(app: &AppHandle) {
     if let (Some(tray), Ok(menu)) = (app.tray_by_id(TRAY_ID), build_menu(app)) {
         let _ = tray.set_menu(Some(menu));
-        log::info!("Tray menu language: {}", tr("中文", "English"));
+        log::info!("Tray menu language: {}", tr("中文", "English", "日本語"));
     }
 }
 
@@ -90,7 +90,7 @@ pub fn create(app: &AppHandle, hotkey: &str) -> tauri::Result<()> {
                     if let Err(e) = crate::updater::install(&app).await {
                         use tauri::Manager;
                         app.state::<std::sync::Arc<crate::controller::Controller>>()
-                            .notify(&crate::trf!("更新失败：{e}", "Update failed: {e}"));
+                            .notify(&crate::trf!("更新失败：{e}", "Update failed: {e}", "更新に失敗しました: {e}"));
                     }
                 });
             }

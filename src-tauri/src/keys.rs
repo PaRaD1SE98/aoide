@@ -52,6 +52,7 @@ const NAMED: &[(&str, u32)] = &[
     ("page down", 0x22), ("end", 0x23), ("home", 0x24), ("left", 0x25), ("up", 0x26),
     ("right", 0x27), ("down", 0x28), ("print screen", 0x2C), ("insert", 0x2D),
     ("delete", 0x2E), ("menu", 0x5D), ("num lock", 0x90), ("scroll lock", 0x91),
+    ("convert", 0x1C), ("nonconvert", 0x1D), // 日文键盘的「変換」「無変換」
     (";", 0xBA), ("=", 0xBB), (",", 0xBC), ("-", 0xBD), (".", 0xBE), ("/", 0xBF),
     ("`", 0xC0), ("[", 0xDB), ("\\", 0xDC), ("]", 0xDD), ("'", 0xDE),
 ];

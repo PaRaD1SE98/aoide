@@ -364,7 +364,7 @@ mod tests {
         assert_eq!(run(&[(RALT, true), (SPACE, true), (SPACE, false), (RALT, false)]), [Some(format!("{ralt}+space"))]);
         assert_eq!(run(&[(RALT, true), (SPACE, true), (RALT, false), (SPACE, false)]), [Some(format!("{ralt}+space"))]);
         // 先按了半角/全角（没有松开事件）：不影响接下来的录制
-        assert_eq!(run(&[(HANKAKU, true), (NONCONVERT, true), (NONCONVERT, false)]), [Some("vk0x1d".to_string())]);
+        assert_eq!(run(&[(HANKAKU, true), (NONCONVERT, true), (NONCONVERT, false)]), [Some("nonconvert".to_string())]);
         // 录制前按下的键（点「更改」用的回车）的松开事件不算
         assert_eq!(run(&[(0x0D, false), (A, true), (A, false)]), [Some("a".to_string())]);
         // 一开始就按 Esc：取消

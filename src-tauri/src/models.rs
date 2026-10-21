@@ -21,7 +21,7 @@ pub struct ModelInfo {
     pub engine: Engine,
     pub size_mb: u32,
     /// [中文, English]
-    pub note: [&'static str; 2],
+    pub note: [&'static str; 3],
     /// SenseVoice 模型所在的 Hugging Face 仓库
     repo: &'static str,
 }
@@ -31,24 +31,24 @@ pub const MODELS: &[ModelInfo] = &[
         id: "sense-voice",
         engine: Engine::SenseVoice,
         size_mb: 239,
-        note: ["推荐：中文更准、速度极快、不易幻觉（中英日韩粤）", "Recommended: accurate for Chinese, very fast, rarely hallucinates (zh/en/ja/ko/yue)"],
+        note: ["推荐：中文更准、速度极快、不易幻觉（中英日韩粤）", "Recommended: accurate for Chinese, very fast, rarely hallucinates (zh/en/ja/ko/yue)", "おすすめ：中国語に強く、非常に高速で、幻覚が起きにくい（中英日韓粵）"],
         repo: "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17",
     },
     ModelInfo {
         id: "sense-voice-yue",
         engine: Engine::SenseVoice,
         size_mb: 237,
-        note: ["粤语增强版", "Cantonese-tuned"],
+        note: ["粤语增强版", "Cantonese-tuned", "広東語強化版"],
         repo: "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09",
     },
-    ModelInfo { id: "tiny", engine: Engine::Whisper, size_mb: 78, note: ["最快，精度最低", "Fastest, least accurate"], repo: "" },
-    ModelInfo { id: "base", engine: Engine::Whisper, size_mb: 148, note: ["", ""], repo: "" },
-    ModelInfo { id: "small", engine: Engine::Whisper, size_mb: 488, note: ["", ""], repo: "" },
-    ModelInfo { id: "medium", engine: Engine::Whisper, size_mb: 1530, note: ["", ""], repo: "" },
-    ModelInfo { id: "large-v3-turbo-q5_0", engine: Engine::Whisper, size_mb: 574, note: ["量化版，体积小、速度快", "Quantized: smaller and faster"], repo: "" },
-    ModelInfo { id: "large-v3-turbo", engine: Engine::Whisper, size_mb: 1620, note: ["又快又准", "Fast and accurate"], repo: "" },
-    ModelInfo { id: "large-v2", engine: Engine::Whisper, size_mb: 3090, note: ["短音频更稳", "More stable on short clips"], repo: "" },
-    ModelInfo { id: "large-v3", engine: Engine::Whisper, size_mb: 3100, note: ["最准，但短音频较易幻觉", "Most accurate, but hallucinates more on short clips"], repo: "" },
+    ModelInfo { id: "tiny", engine: Engine::Whisper, size_mb: 78, note: ["最快，精度最低", "Fastest, least accurate", "最速だが精度は最も低い"], repo: "" },
+    ModelInfo { id: "base", engine: Engine::Whisper, size_mb: 148, note: ["", "", ""], repo: "" },
+    ModelInfo { id: "small", engine: Engine::Whisper, size_mb: 488, note: ["", "", ""], repo: "" },
+    ModelInfo { id: "medium", engine: Engine::Whisper, size_mb: 1530, note: ["", "", ""], repo: "" },
+    ModelInfo { id: "large-v3-turbo-q5_0", engine: Engine::Whisper, size_mb: 574, note: ["量化版，体积小、速度快", "Quantized: smaller and faster", "量子化版：小さくて速い"], repo: "" },
+    ModelInfo { id: "large-v3-turbo", engine: Engine::Whisper, size_mb: 1620, note: ["又快又准", "Fast and accurate", "速くて正確"], repo: "" },
+    ModelInfo { id: "large-v2", engine: Engine::Whisper, size_mb: 3090, note: ["短音频更稳", "More stable on short clips", "短い音声で安定"], repo: "" },
+    ModelInfo { id: "large-v3", engine: Engine::Whisper, size_mb: 3100, note: ["最准，但短音频较易幻觉", "Most accurate, but hallucinates more on short clips", "最も正確だが、短い音声では幻覚が起きやすい"], repo: "" },
 ];
 
 /// Silero VAD：识别前先切掉静音段，抗幻觉的第一道防线
@@ -97,8 +97,8 @@ pub fn download(
     cancel: &AtomicBool,
     mut progress: impl FnMut(u64, u64),
 ) -> Result<(), String> {
-    let info = find(id).ok_or_else(|| crate::trf!("未知模型：{id}", "Unknown model: {id}"))?;
-    std::fs::create_dir_all(dir).map_err(|e| crate::trf!("无法创建模型目录：{e}", "Cannot create the model folder: {e}"))?;
+    let info = find(id).ok_or_else(|| crate::trf!("未知模型：{id}", "Unknown model: {id}", "不明なモデルです: {id}"))?;
+    std::fs::create_dir_all(dir).map_err(|e| crate::trf!("无法创建模型目录：{e}", "Cannot create the model folder: {e}", "モデルフォルダを作成できません: {e}"))?;
 
     let base = hf_base();
     let vad = vad_path(dir);
@@ -113,7 +113,7 @@ pub fn download(
         }
         Engine::SenseVoice => {
             let target = model_path(dir, id);
-            std::fs::create_dir_all(&target).map_err(|e| crate::trf!("无法创建模型目录：{e}", "Cannot create the model folder: {e}"))?;
+            std::fs::create_dir_all(&target).map_err(|e| crate::trf!("无法创建模型目录：{e}", "Cannot create the model folder: {e}", "モデルフォルダを作成できません: {e}"))?;
             for (i, file) in SENSE_VOICE_FILES.iter().enumerate() {
                 let url = format!("{base}/{}/resolve/main/{file}", info.repo);
                 let is_main = i == SENSE_VOICE_FILES.len() - 1;
@@ -144,11 +144,11 @@ fn download_file(
         .get(url)
         .send()
         .and_then(|r| r.error_for_status())
-        .map_err(|e| crate::trf!("下载失败：{e}", "Download failed: {e}"))?;
+        .map_err(|e| crate::trf!("下载失败：{e}", "Download failed: {e}", "ダウンロードに失敗しました: {e}"))?;
     let total = resp.content_length().unwrap_or(0);
 
     let part = dest.with_extension("part");
-    let mut file = File::create(&part).map_err(|e| crate::trf!("无法写入文件：{e}", "Cannot write file: {e}"))?;
+    let mut file = File::create(&part).map_err(|e| crate::trf!("无法写入文件：{e}", "Cannot write file: {e}", "ファイルに書き込めません: {e}"))?;
     let mut buf = vec![0u8; 1 << 16];
     let mut done = 0u64;
     let mut last_report = 0u64;
@@ -156,13 +156,13 @@ fn download_file(
         if cancel.load(Ordering::Relaxed) {
             drop(file);
             let _ = std::fs::remove_file(&part);
-            return Err(crate::i18n::tr("已取消", "Canceled").into());
+            return Err(crate::i18n::tr("已取消", "Canceled", "キャンセルしました").into());
         }
-        let n = resp.read(&mut buf).map_err(|e| crate::trf!("下载中断：{e}", "Download interrupted: {e}"))?;
+        let n = resp.read(&mut buf).map_err(|e| crate::trf!("下载中断：{e}", "Download interrupted: {e}", "ダウンロードが中断されました: {e}"))?;
         if n == 0 {
             break;
         }
-        file.write_all(&buf[..n]).map_err(|e| crate::trf!("无法写入文件：{e}", "Cannot write file: {e}"))?;
+        file.write_all(&buf[..n]).map_err(|e| crate::trf!("无法写入文件：{e}", "Cannot write file: {e}", "ファイルに書き込めません: {e}"))?;
         done += n as u64;
         if done - last_report >= 1 << 20 {
             last_report = done;
@@ -171,7 +171,7 @@ fn download_file(
     }
     file.flush().map_err(|e| e.to_string())?;
     drop(file);
-    std::fs::rename(&part, dest).map_err(|e| crate::trf!("无法保存文件：{e}", "Cannot save file: {e}"))?;
+    std::fs::rename(&part, dest).map_err(|e| crate::trf!("无法保存文件：{e}", "Cannot save file: {e}", "ファイルを保存できません: {e}"))?;
     progress(done, total.max(done));
     log::info!("Downloaded {}", dest.display());
     Ok(())

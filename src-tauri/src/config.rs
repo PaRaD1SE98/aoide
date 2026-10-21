@@ -6,7 +6,7 @@ use std::path::PathBuf;
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Config {
-    /// 界面语言：auto（跟随系统）/ zh / en
+    /// 界面语言：auto（跟随系统）/ zh / en / ja
     pub ui_language: String,
     /// 开始/停止录音（单击触发）
     pub hotkey: String,
@@ -62,16 +62,26 @@ pub struct Config {
     pub insert_prompt: String,
 }
 
-/// 默认的主快捷键：右 Alt（macOS 上是右 Option）
-const DEFAULT_HOTKEY: &str = if cfg!(target_os = "macos") { "right option" } else { "right alt" };
+/// 默认的主快捷键：选一个紧挨空格、大拇指够得着、平时又很少单独按的键。
+/// 美式等键盘：右 Alt（macOS 上是右 Option）。日文键盘（JIS）上往往没有这两个键：
+/// Windows 用空格右边的「変換」（输入日文时变换候选都按空格，很少单独按它；「カタカナ ひらがな」「半角/全角」
+/// 在日文输入法下常常没有松开事件，判断不了单击）；macOS 用右 Command（「かな」「英数」切换输入法，用得太多）
+fn default_hotkey() -> &'static str {
+    match (cfg!(target_os = "macos"), crate::platform::jis_keyboard()) {
+        (false, false) => "right alt",
+        (false, true) => "convert",
+        (true, false) => "right option",
+        (true, true) => "right command",
+    }
+}
 
 impl Default for Config {
     fn default() -> Self {
         Self {
             ui_language: "auto".into(),
-            hotkey: DEFAULT_HOTKEY.into(),
-            revise_hotkey: format!("{DEFAULT_HOTKEY}+space"),
-            revise_stop_hotkey: DEFAULT_HOTKEY.into(),
+            hotkey: default_hotkey().into(),
+            revise_hotkey: format!("{}+space", default_hotkey()),
+            revise_stop_hotkey: default_hotkey().into(),
             cancel_hotkey: "esc".into(),
             model: "sense-voice".into(),
             model_dir: String::new(),

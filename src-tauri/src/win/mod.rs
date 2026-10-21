@@ -13,6 +13,7 @@ use tauri::{App, AppHandle, Manager};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::Globalization::GetUserDefaultUILanguage;
 use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
+use windows::Win32::UI::Input::KeyboardAndMouse::GetKeyboardType;
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{SC_KEYMENU, WM_SYSCOMMAND};
 
@@ -70,14 +71,21 @@ unsafe extern "system" fn no_key_menu(hwnd: HWND, msg: u32, wparam: WPARAM, lpar
     DefSubclassProc(hwnd, msg, wparam, lparam)
 }
 
-/// Windows 显示语言是否为中文
+/// Windows 显示语言：中文 zh、日语 ja，其他 en
 pub fn system_language() -> &'static str {
     const LANG_CHINESE: u16 = 0x04;
-    if unsafe { GetUserDefaultUILanguage() } & 0x3ff == LANG_CHINESE {
-        "zh"
-    } else {
-        "en"
+    const LANG_JAPANESE: u16 = 0x11;
+    match unsafe { GetUserDefaultUILanguage() } & 0x3ff {
+        LANG_CHINESE => "zh",
+        LANG_JAPANESE => "ja",
+        _ => "en",
     }
+}
+
+/// 是否日文键盘（JIS 布局，空格右侧是「変換」「カタカナ ひらがな」，不一定有右 Alt）
+pub fn jis_keyboard() -> bool {
+    const JAPANESE_KEYBOARD: i32 = 7;
+    unsafe { GetKeyboardType(0) == JAPANESE_KEYBOARD }
 }
 
 /// 剪贴板内容每次改变都会变化的序号

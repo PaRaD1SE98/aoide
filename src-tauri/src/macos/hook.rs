@@ -87,6 +87,7 @@ pub fn no_events_hint() -> &'static str {
     tr(
         "没有收到任何按键：请在「系统设置 → 隐私与安全性 → 辅助功能」中允许 Aoide（列表里已有 Aoide 时，先用「−」删除再重新添加）",
         "No key presses were received: allow Aoide in System Settings → Privacy & Security → Accessibility (if Aoide is already listed, remove it with \"−\" and add it again)",
+        "キー入力を受け取れませんでした。「システム設定 → プライバシーとセキュリティ → アクセシビリティ」で Aoide を許可してください（すでに一覧にある場合は「−」で削除してから追加し直してください）",
     )
 }
 
