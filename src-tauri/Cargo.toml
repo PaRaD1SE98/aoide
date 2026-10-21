@@ -1,6 +1,6 @@
 [package]
 name = "aoide"
-version = "0.4.2"
+version = "0.4.3"
 description = "Local push-to-talk voice typing for Windows and macOS"
 authors = ["PaRaD1SE98"]
 license = "MIT"
