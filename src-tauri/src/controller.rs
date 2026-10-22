@@ -176,6 +176,7 @@ impl Controller {
         hotkeys::install(tx);
         let cfg = self.config();
         hotkeys::update(&cfg.hotkey, &cfg.revise_hotkey, &cfg.revise_stop_hotkey, &cfg.cancel_hotkey, &cfg.translate_hotkey);
+        vocab::set_size_limit(u64::from(cfg.vocab_max_kb) * 1024);
 
         let me = self.clone();
         thread::spawn(move || {
@@ -250,6 +251,10 @@ impl Controller {
     pub fn apply_config(self: &Arc<Self>, new: Config) {
         let old = std::mem::replace(&mut *self.config.write().unwrap(), new.clone());
         hotkeys::update(&new.hotkey, &new.revise_hotkey, &new.revise_stop_hotkey, &new.cancel_hotkey, &new.translate_hotkey);
+        if old.vocab_max_kb != new.vocab_max_kb {
+            vocab::set_size_limit(u64::from(new.vocab_max_kb) * 1024);
+            let _ = self.app.emit("vocab-changed", ());
+        }
         if (&old.speech_source, &old.model, &old.model_dir, &old.device) != (&new.speech_source, &new.model, &new.model_dir, &new.device) {
             self.transcriber.reset();
             self.preload_model();

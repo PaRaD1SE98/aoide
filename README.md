@@ -153,6 +153,7 @@ Settings are stored in `%APPDATA%\Aoide\config.json` (macOS: `~/Library/Applicat
 | `insert_min_seconds` / `insert_min_chars` | `10` / `12` | Shorter recordings / transcripts are inserted as-is without calling the LLM |
 | `vocab_enabled` | `true` | Correct transcripts with your vocabulary: repeated misrecognitions are replaced directly, others go to the LLM with the related entries |
 | `learn_from_edits` | `true` | When you correct a word after it is typed, add the correction to the vocabulary (with an Undo notice) |
+| `vocab_max_kb` | `10240` | Size limit of the vocabulary file in KB. Above it, the learned entries that haven't been used for the longest are removed; entries added by hand are kept |
 | `auto_check_updates` | `true` | Check for a new version once a day and notify you; updating is always your choice |
 | `style_prompt` | *(empty)* | Custom output style shared by polishing, insertion, voice edit and translation: how the text is laid out (lists, paragraphs) and worded. Empty = built-in. The task prompts below only describe their own task |
 | `polish_prompt` / `revise_prompt` / `insert_prompt` / `translate_prompt` | *(empty)* | Custom LLM prompts for polishing (`{text}`), voice edit (`{original}`, `{instruction}`), context-aware insertion (`{before}`, `{after}`, `{text}`) and voice translation (`{language}`, `{text}`). Empty = built-in prompt. Edit them in Settings |
