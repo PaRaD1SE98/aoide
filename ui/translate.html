@@ -9,6 +9,9 @@
   <style>
     /* 选语言：贴在悬浮条上方的小条，候选列表向上展开（窗口同时向上长高） */
     body.picker { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+    /* 候选列表向上展开时窗口向上长高：内容贴着窗口底部，核对卡片保持原来的高度 */
+    body.review { display: flex; flex-direction: column; justify-content: flex-end; }
+    body.review .card { flex: none; height: 304px; }
     body.picker .card { display: none; }
     body.review #picker { display: none; }
     #picker {
@@ -40,7 +43,6 @@
       outline: none;
     }
     #picker input:focus { border-color: #34d399; }
-    #picker .lang-list { left: 50%; right: auto; width: 224px; transform: translateX(-50%); }
 
     /* 核对：原文（可修改）、目标语言、译文 */
     .body { flex: 1; display: flex; flex-direction: column; gap: 6px; padding: 2px 14px 4px; min-height: 0; }
@@ -95,7 +97,7 @@
     <span class="label" data-i18n="translate.into">译成</span>
     <div class="combo">
       <input id="picker-lang" spellcheck="false" autocomplete="off">
-      <div class="lang-list above" id="picker-list"></div>
+      <div class="lang-list" id="picker-list"></div>
     </div>
   </div>
 
@@ -112,7 +114,7 @@
         <span class="field-label" data-i18n="translate.into">译成</span>
         <div class="combo">
           <input id="review-lang" spellcheck="false" autocomplete="off">
-          <div class="lang-list below" id="review-list"></div>
+          <div class="lang-list" id="review-list"></div>
         </div>
       </div>
       <div id="translation"></div>

@@ -34,11 +34,19 @@ function languageLabel(value) {
   return lang ? lang[LANG] || lang.en : value;
 }
 
+/** 候选列表的最大高度、和输入框的间距、最小宽度（放得下「简体中文 Simplified Chinese」） */
+const LIST_MAX = 220;
+const LIST_GAP = 4;
+const LIST_MIN_WIDTH = 240;
+
 /**
  * 把 input 变成语言选择框：input 显示和编辑语言名，list（一个空的容器）放候选列表。
- * onPick(value) 在选定时调用（点选候选、或输入后按回车）；onCancel() 在按 Esc 收起时调用
+ * onPick(value) 在选定时调用（点选候选、或输入后按回车）；onCancel() 在按 Esc 收起时调用。
+ * 候选列表默认往下面放得下的一侧展开（下面不够就往上）；grow 用于翻译小窗这种放不下的小窗口：
+ * 总是往上展开，并调用 grow(需要向上多出的高度) 让窗口向上长高（收起时调用 grow(0)）。
+ * anchor：列表按哪个元素水平对齐（默认输入框），列表居中于它
  */
-function languagePicker(input, list, { onPick, onCancel, onOpen, autoWidth = false } = {}) {
+function languagePicker(input, list, { onPick, onCancel, grow, anchor = input, autoWidth = false } = {}) {
   let items = [];
   let active = -1;
   const canvas = autoWidth && document.createElement("canvas");
@@ -110,18 +118,45 @@ function languagePicker(input, list, { onPick, onCancel, onOpen, autoWidth = fal
     }
   }
 
+  /** 定位列表：水平居中于 anchor（不超出窗口），竖直方向贴着输入框往上或往下 */
+  function place() {
+    const box = input.getBoundingClientRect();
+    const a = anchor.getBoundingClientRect();
+    const width = Math.min(Math.max(a.width, LIST_MIN_WIDTH), innerWidth - 16);
+    const left = Math.min(Math.max(a.left + (a.width - width) / 2, 8), innerWidth - 8 - width);
+    Object.assign(list.style, { left: `${left}px`, width: `${width}px`, top: "", bottom: "" });
+    const below = innerHeight - box.bottom - LIST_GAP - 8;
+    const above = box.top - LIST_GAP - 8;
+    // 用 bottom 定位往上展开：内容贴着窗口底部，窗口向上长高后列表跟输入框的相对位置不变
+    const up = grow || (below < Math.min(LIST_MAX, list.scrollHeight) && above > below);
+    if (up) {
+      list.style.bottom = `${innerHeight - box.top + LIST_GAP}px`;
+      list.style.maxHeight = `${grow ? LIST_MAX : Math.min(LIST_MAX, above)}px`;
+      grow?.(Math.max(0, Math.ceil(LIST_MAX - above)));
+    } else {
+      list.style.top = `${box.bottom + LIST_GAP}px`;
+      list.style.maxHeight = `${Math.min(LIST_MAX, below)}px`;
+    }
+  }
+
   function show() {
     if (open()) return;
     list.hidden = false;
-    onOpen?.(true);
     render();
+    place();
   }
 
   function hide() {
     if (!open()) return;
     list.hidden = true;
-    onOpen?.(false);
+    grow?.(0);
   }
+
+  // 列表浮在页面上，不随页面滚动：页面滚动或窗口大小改变时跟着输入框重新定位（列表自己滚动不算）。
+  // 点进输入框时浏览器可能把它滚进视野，这时不能收起列表
+  const follow = (e) => open() && !grow && e?.target !== list && place();
+  document.addEventListener("scroll", follow, true);
+  addEventListener("resize", follow);
 
   function pick(value) {
     value = value.trim();
