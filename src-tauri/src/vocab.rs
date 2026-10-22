@@ -276,21 +276,16 @@ pub fn glossary(entries: &[Entry]) -> Option<String> {
     if entries.is_empty() {
         return None;
     }
-    // 中文界面用中文说明，其他语言用英文（LLM 都看得懂）
-    let en = crate::i18n::current() != "zh";
-    let mut s = String::from(if en {
-        "User vocabulary. Speech recognition often gets these words wrong. If the text contains a word that sounds like one of them and is clearly a misrecognition, write it the way it is spelled here. Leave unrelated words alone.\n"
-    } else {
-        "用户词库：语音识别经常把下面这些词识别错。如果文字里出现读音相近、明显是误识别的词，请改成这里的正确写法；不相关的词不要改动。\n"
-    });
+    // 和提示词一样用英文写
+    let mut s = String::from(
+        "User vocabulary. Speech recognition often gets these words wrong. If the text contains a word that sounds like one of them and is clearly a misrecognition, write it the way it is spelled here. Leave unrelated words alone.\n",
+    );
     for e in entries {
         let seen: Vec<&str> = e.variants.iter().map(|v| v.text.as_str()).collect();
         if seen.is_empty() {
             s.push_str(&format!("- {}\n", e.term));
-        } else if en {
-            s.push_str(&format!("- {} (misrecognized before as: {})\n", e.term, seen.join(", ")));
         } else {
-            s.push_str(&format!("- {}（曾被误识别为：{}）\n", e.term, seen.join("、")));
+            s.push_str(&format!("- {} (misrecognized before as: {})\n", e.term, seen.join(", ")));
         }
     }
     Some(s)
