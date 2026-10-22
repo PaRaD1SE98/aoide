@@ -317,7 +317,12 @@ impl Controller {
         if cfg.mute_while_recording {
             mute::begin(); // 在开始提示音之后静音，提示音本身也不受影响
         }
-        if !rec.wait(Duration::from_secs(cfg.max_duration.into())) && !task.canceled() {
+        // 悬浮条在最后 20 秒显示倒计时
+        let limit = Duration::from_secs(cfg.max_duration.into());
+        overlay::set_deadline(Some(std::time::Instant::now() + limit));
+        let stopped_by_user = rec.wait(limit);
+        overlay::set_deadline(None);
+        if !stopped_by_user && !task.canceled() {
             log::info!("Max duration reached");
             rec.stop();
             rec.wait(Duration::from_secs(1));
