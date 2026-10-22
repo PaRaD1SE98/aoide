@@ -11,7 +11,7 @@
 
 use crate::keys::{self, Hotkey};
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Mutex, OnceLock, RwLock};
 use std::time::Duration;
@@ -34,6 +34,14 @@ pub enum HotkeyEvent {
 /// 往往只有「按下」没有「松开」事件。不把它们记为按住，也不能录成快捷键，
 /// 否则会一直当作按着，录制快捷键永远等不到「松开」
 const NO_KEYUP: &[u32] = &[0x15, 0x19, 0xF0, 0xF1, 0xF2, 0xF3, 0xF4, 0xF5];
+
+/// 放行给其他程序的按键按下了几次：学习模块据此在用户按键后立刻读一次输入框，
+/// 改完马上按回车发送时也能读到清空前的版本（见 learn.rs）
+static KEY_PRESSES: AtomicU64 = AtomicU64::new(0);
+
+pub fn key_presses() -> u64 {
+    KEY_PRESSES.load(Ordering::Relaxed)
+}
 
 /// 是否有任务在进行中：只有这时才拦截取消键，平时该键照常传给其他程序
 static CANCEL_ARMED: AtomicBool = AtomicBool::new(false);
@@ -163,7 +171,11 @@ pub(crate) fn on_key(vk: u32, down: bool) -> bool {
         // 写日志可能较慢，放到别的线程，钩子回调要尽快返回
         std::thread::spawn(|| log::info!("Keyboard hook is receiving key events"));
     }
-    SHARED.get().is_some_and(|shared| handle(shared, vk, down))
+    let intercept = SHARED.get().is_some_and(|shared| handle(shared, vk, down));
+    if down && !intercept {
+        KEY_PRESSES.fetch_add(1, Ordering::Relaxed);
+    }
+    intercept
 }
 
 /// Raw Input 补上的、钩子漏掉的按键（见 win/hook.rs）。Raw Input 不能拦截按键，所以不需要返回值

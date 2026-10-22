@@ -2,7 +2,8 @@
 //! 比对出「误识别 → 正确写法」存入词库（vocab.rs），并弹出可撤销的提示（learned_card.rs）
 //!
 //! 流程：
-//! 1. 粘贴后记下输入框全文，用插入位置前后的原文作为锚点，之后每 0.5 秒重新定位这段文字
+//! 1. 粘贴后记下输入框全文，用插入位置前后的原文作为锚点，之后每 0.5 秒、以及每次按键后，重新定位这段文字。
+//!    按键后的读取让「改完马上按回车发送」也能读到清空前的最后一版
 //! 2. 改动停下 2.5 秒、焦点离开输入框、输入框被清空（聊天发送）、开始下一次语音输入时，比对一次
 //! 3. 比对按字（中文）/ 按词（西文）进行，只看「替换」；中文的改动扩展到完整的词（jieba 分词），
 //!    改动太大（整句重写）、纯增删、只改标点大小写、含数字的都不算
@@ -24,6 +25,12 @@ const ACCEPT: f32 = 0.75;
 const REJECT: f32 = 0.45;
 
 const POLL: Duration = Duration::from_millis(500);
+/// 检查有没有按键的间隔
+const TICK: Duration = Duration::from_millis(25);
+/// 按键后等多久再读，让目标程序先处理完这个键
+const KEY_DELAY: Duration = Duration::from_millis(50);
+/// 按键触发的读取，两次之间至少隔多久（连续打字时不至于读得太频繁）
+const MIN_GAP: Duration = Duration::from_millis(100);
 /// 改动停下多久算「改完了」
 const SETTLE: Duration = Duration::from_millis(2500);
 /// 焦点离开 / 文字找不到持续多久后结束观察
@@ -60,7 +67,7 @@ pub fn watch(app: AppHandle, inserted: String, cfg: Config) {
             log::info!("Learn: focused control is not readable, not watching");
             return;
         };
-        let timing = Timing { poll: POLL, settle: SETTLE, gone: GONE, max: MAX_WATCH };
+        let timing = Timing { poll: POLL, tick: TICK, key_delay: KEY_DELAY, min_gap: MIN_GAP, settle: SETTLE, gone: GONE, max: MAX_WATCH };
         observe(&w, &inserted, &GENERATION, generation, timing, |old, new| process(&app, old, new, &cfg));
     });
 }
@@ -69,6 +76,8 @@ pub fn watch(app: AppHandle, inserted: String, cfg: Config) {
 trait Source {
     fn text(&self) -> Option<String>;
     fn still_focused(&self) -> bool;
+    /// 用户按下的键的计数，变了就说明按过键
+    fn keys(&self) -> u64;
 }
 
 impl Source for TextWatch {
@@ -78,11 +87,17 @@ impl Source for TextWatch {
     fn still_focused(&self) -> bool {
         TextWatch::still_focused(self)
     }
+    fn keys(&self) -> u64 {
+        crate::hotkeys::key_presses()
+    }
 }
 
 #[derive(Clone, Copy)]
 struct Timing {
     poll: Duration,
+    tick: Duration,
+    key_delay: Duration,
+    min_gap: Duration,
     settle: Duration,
     gone: Duration,
     max: Duration,
@@ -103,23 +118,38 @@ fn observe(src: &impl Source, inserted: &str, counter: &AtomicU64, generation: u
     let mut current = inserted.to_string(); // 最近一次定位到的版本
     let mut changed_at = Instant::now();
     let mut gone_since: Option<Instant> = None;
+    let mut last_read = Instant::now();
+    let mut seen_keys = src.keys();
+    // 按过键、还没读的话，最后一次按键的时间
+    let mut key_at: Option<Instant> = None;
 
     loop {
-        thread::sleep(timing.poll);
+        thread::sleep(timing.tick);
         if counter.load(Ordering::SeqCst) != generation || started.elapsed() > timing.max {
             break;
         }
-        let located = src.text().and_then(|s| region(&s, &prefix, &suffix).map(str::to_string));
-        match located.filter(|r| !r.trim().is_empty()) {
-            Some(r) => {
-                if r != current {
-                    current = r;
-                    changed_at = Instant::now();
+        let keys = src.keys();
+        if keys != seen_keys {
+            seen_keys = keys;
+            key_at = Some(Instant::now());
+        }
+        // 读取只更新「最近一次看到的版本」；比对仍要等改动停下、焦点离开、文字消失等（见下面）
+        let key_due = key_at.is_some_and(|t| t.elapsed() >= timing.key_delay) && last_read.elapsed() >= timing.min_gap;
+        if key_due || last_read.elapsed() >= timing.poll {
+            key_at = None;
+            last_read = Instant::now();
+            let located = src.text().and_then(|s| region(&s, &prefix, &suffix).map(str::to_string));
+            match located.filter(|r| !r.trim().is_empty()) {
+                Some(r) => {
+                    if r != current {
+                        current = r;
+                        changed_at = Instant::now();
+                    }
+                    gone_since = if src.still_focused() { None } else { gone_since.or(Some(Instant::now())) };
                 }
-                gone_since = if src.still_focused() { None } else { gone_since.or(Some(Instant::now())) };
+                // 找不到这段文字（比如消息已发送、输入框被清空）：保留最后一次看到的版本
+                None => gone_since = gone_since.or(Some(Instant::now())),
             }
-            // 找不到这段文字（比如消息已发送、输入框被清空）：保留最后一次看到的版本
-            None => gone_since = gone_since.or(Some(Instant::now())),
         }
         if gone_since.is_some_and(|t| t.elapsed() >= timing.gone) {
             break;
@@ -348,10 +378,12 @@ mod tests {
         assert!(c[0].score < REJECT, "{c:?}");
     }
 
-    /// 按时间变化的输入框：script 为 (从开始算起的毫秒数, 文字, 焦点是否还在)，取最近一个已到时间的状态
+    /// 按时间变化的输入框：script 为 (从开始算起的毫秒数, 文字, 焦点是否还在)，取最近一个已到时间的状态；
+    /// keys 为各次按键的毫秒数
     struct Scripted {
         start: Instant,
         script: Vec<(u64, Option<&'static str>, bool)>,
+        keys: Vec<u64>,
     }
 
     impl Scripted {
@@ -369,19 +401,36 @@ mod tests {
         fn still_focused(&self) -> bool {
             self.now().1
         }
+        fn keys(&self) -> u64 {
+            let t = self.start.elapsed().as_millis() as u64;
+            self.keys.iter().filter(|&&at| at <= t).count() as u64
+        }
     }
 
     const FAST: Timing = Timing {
         poll: Duration::from_millis(10),
+        tick: Duration::from_millis(5),
+        key_delay: Duration::from_millis(10),
+        min_gap: Duration::from_millis(10),
         settle: Duration::from_millis(120),
         gone: Duration::from_millis(60),
         max: Duration::from_secs(3),
     };
 
     fn run(script: Vec<(u64, Option<&'static str>, bool)>, inserted: &str, counter: &AtomicU64) -> Vec<(String, String)> {
-        let src = Scripted { start: Instant::now(), script };
+        run_with(script, vec![], inserted, counter, FAST)
+    }
+
+    fn run_with(
+        script: Vec<(u64, Option<&'static str>, bool)>,
+        keys: Vec<u64>,
+        inserted: &str,
+        counter: &AtomicU64,
+        timing: Timing,
+    ) -> Vec<(String, String)> {
+        let src = Scripted { start: Instant::now(), script, keys };
         let mut edits = Vec::new();
-        observe(&src, inserted, counter, 0, FAST, |a, b| edits.push((a.to_string(), b.to_string())));
+        observe(&src, inserted, counter, 0, timing, |a, b| edits.push((a.to_string(), b.to_string())));
         edits
     }
 
@@ -408,6 +457,24 @@ mod tests {
             &AtomicU64::new(0),
         );
         assert_eq!(edits, [("思维到图很好用".into(), "思维导图很好用".into())]);
+    }
+
+    #[test]
+    fn reads_right_after_keys_between_polls() {
+        // 改完不到一个定时读取的间隔就按回车发送：靠按键后的那次读取拿到清空前的版本
+        let slow = Timing { poll: Duration::from_secs(10), ..FAST };
+        let script = || vec![(0, Some("思维到图很好用"), true), (30, Some("思维导图很好用"), true), (80, Some(""), true)];
+        let edits = run_with(script(), vec![30, 80], "思维到图很好用", &AtomicU64::new(0), slow);
+        assert_eq!(edits, [("思维到图很好用".into(), "思维导图很好用".into())]);
+        // 没有按键时，只靠定时读取就看不到这次修改（说明上面确实是按键触发的读取）
+        let counter = AtomicU64::new(0);
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                std::thread::sleep(Duration::from_millis(200));
+                counter.fetch_add(1, Ordering::SeqCst);
+            });
+            assert!(run_with(script(), vec![], "思维到图很好用", &counter, slow).is_empty());
+        });
     }
 
     #[test]
