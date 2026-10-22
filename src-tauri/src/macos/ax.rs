@@ -257,7 +257,7 @@ fn enable_tree(app: &Element, pid: i32) -> (Kind, Duration) {
 }
 
 /// 程序的 bundle id
-fn bundle_id(pid: i32) -> Option<String> {
+pub(super) fn bundle_id(pid: i32) -> Option<String> {
     objc2::rc::autoreleasepool(|_| unsafe {
         let app: *mut AnyObject = msg_send![class!(NSRunningApplication), runningApplicationWithProcessIdentifier: pid];
         if app.is_null() {
@@ -270,7 +270,7 @@ fn bundle_id(pid: i32) -> Option<String> {
 }
 
 /// 前台程序的进程号，由系统（NSWorkspace）记录，不用问前台程序本身
-fn frontmost_pid() -> Option<i32> {
+pub(super) fn frontmost_pid() -> Option<i32> {
     objc2::rc::autoreleasepool(|_| unsafe {
         let workspace: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
         if workspace.is_null() {

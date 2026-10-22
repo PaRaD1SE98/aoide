@@ -569,12 +569,13 @@ pub fn run() {
             // 用户手动启动时打开主窗口；开机自启时只在托盘运行（除非语音识别还不能用、缺少系统权限）
             let autostarted = std::env::args().any(|a| a == AUTOSTART_ARG);
             if !autostarted || !ctl.speech_ready() || !platform::permissions::status().all_granted() {
-                // macOS：首次打开时先请求麦克风权限，用户回答后再打开窗口，免得窗口盖住系统的对话框
+                // macOS：先按顺序请求缺少的权限（麦克风 → 辅助功能），用户都处理完后再打开窗口，
+                // 免得窗口盖住系统的对话框
                 #[cfg(target_os = "macos")]
                 {
                     let app = app.handle().clone();
                     std::thread::spawn(move || {
-                        platform::permissions::request_microphone();
+                        platform::permissions::request_at_startup();
                         open_settings(&app);
                     });
                 }

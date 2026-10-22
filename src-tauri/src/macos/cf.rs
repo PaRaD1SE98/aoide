@@ -36,6 +36,8 @@ extern "C" {
     fn CFNumberGetValue(n: CFTypeRef, kind: CFIndex, out: *mut c_void) -> u8;
     fn CFArrayGetCount(a: CFTypeRef) -> CFIndex;
     fn CFArrayGetValueAtIndex(a: CFTypeRef, i: CFIndex) -> CFTypeRef;
+    fn CFDictionaryGetTypeID() -> usize;
+    fn CFDictionaryGetValue(d: CFTypeRef, key: CFTypeRef) -> CFTypeRef;
     fn CFDictionaryCreate(
         alloc: CFTypeRef,
         keys: *const CFTypeRef,
@@ -111,6 +113,16 @@ impl CF {
                 return None;
             }
             Self::retained(CFArrayGetValueAtIndex(self.0, i))
+        }
+    }
+
+    /// 是字典时取 key 对应的值
+    pub fn dictionary_value(&self, key: &str) -> Option<CF> {
+        unsafe {
+            if !self.is(CFDictionaryGetTypeID()) {
+                return None;
+            }
+            Self::retained(CFDictionaryGetValue(self.0, Self::string(key).as_ptr()))
         }
     }
 
