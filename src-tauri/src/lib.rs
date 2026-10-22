@@ -231,6 +231,9 @@ fn save_settings(
     if models::find(&config.model).is_none() {
         return Err(trf!("未知模型：{}", "Unknown model: {}", "不明なモデルです: {}", config.model));
     }
+    if config.vocab_max_kb < 16 {
+        return Err(i18n::tr("词库大小上限不能小于 16 KB", "The vocabulary size limit must be at least 16 KB", "単語帳のサイズ上限は 16 KB 以上にしてください").into());
+    }
     if config.min_duration >= config.max_duration {
         return Err(trf!(
             "最短录音（{} 秒）必须小于最长录音（{} 秒）",
@@ -393,6 +396,12 @@ fn get_vocab() -> Vec<vocab::Entry> {
     vocab::all()
 }
 
+/// 词库文件当前的大小（字节）
+#[tauri::command]
+fn get_vocab_size() -> u64 {
+    vocab::size()
+}
+
 /// 词库：手动添加（正确写法已存在时合并误识别写法）
 #[tauri::command]
 fn add_vocab(term: String, variants: Vec<String>) -> Result<(), String> {
@@ -529,6 +538,7 @@ pub fn run() {
             copy_result,
             close_result,
             get_vocab,
+            get_vocab_size,
             add_vocab,
             remove_vocab,
             remove_vocab_variant,

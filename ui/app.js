@@ -12,6 +12,7 @@ let downloading = null;
 let systemLanguage = "zh";
 let defaultPrompts = {};
 let defaults = null; // 默认值 { config, autostart }
+let vocabBytes = 0; // 词库文件当前的大小
 let translateLanguage = { set() {} }; // 翻译目标语言的选择框（bind 时创建）
 
 // === 恢复默认 ===
@@ -213,6 +214,7 @@ function applyLanguage() {
   applyI18n(resolveLang(state.config.ui_language));
   renderModels();
   renderSource();
+  renderVocabSize();
   translateLanguage.set(state.config.translate_language); // 语言名按新的界面语言显示
   renderVocab();
   renderPermissions();
@@ -245,7 +247,15 @@ let vocab = [];
 
 async function loadVocab() {
   vocab = await invoke("get_vocab");
+  vocabBytes = await invoke("get_vocab_size");
   renderVocab();
+  renderVocabSize();
+}
+
+/** 词库大小：当前占用 / 上限 */
+function renderVocabSize() {
+  const kb = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${(bytes / 1024).toFixed(1)} KB`);
+  $("vocab-size-desc").textContent = t("vocabMax.desc", { used: kb(vocabBytes) });
 }
 
 function el(tag, props = {}, ...children) {

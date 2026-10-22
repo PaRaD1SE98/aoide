@@ -153,6 +153,7 @@ Aoide は OpenAI の音声認識形式（`POST {API ベース URL}/audio/transcr
 | `insert_min_seconds` / `insert_min_chars` | `10` / `12` | これより短い録音・文字起こし結果は LLM を使わずそのまま挿入します |
 | `vocab_enabled` | `true` | 辞書で文字起こし結果を補正する。繰り返し出る誤認識はそのまま置き換え、それ以外は関連する項目と一緒に LLM に渡します |
 | `learn_from_edits` | `true` | 入力後に手動で直した言葉を辞書に追加する（元に戻せる通知付き） |
+| `vocab_max_kb` | `10240` | 単語帳ファイルのサイズ上限（KB）。超えると、自動で覚えた語のうち最も長く使われていないものから削除します（手動で追加した語は削除しません） |
 | `auto_check_updates` | `true` | 1 日 1 回新しいバージョンを確認して知らせる。更新するかどうかは常にユーザーが決めます |
 | `style_prompt` | *（空）* | 出力スタイルのカスタムプロンプト：整形・挿入・音声で修正・翻訳に共通する体裁（箇条書き、段落）と言葉づかいのルール。空欄 = 内蔵。以下の各プロンプトにはそれぞれの作業だけを書きます |
 | `polish_prompt` / `revise_prompt` / `insert_prompt` / `translate_prompt` | *（空）* | 整形（`{text}`）、音声で修正（`{original}`、`{instruction}`）、文脈に合わせた挿入（`{before}`、`{after}`、`{text}`）、音声翻訳（`{language}`、`{text}`）用のカスタム LLM プロンプト。空欄 = 内蔵のプロンプト。設定画面で編集できます |

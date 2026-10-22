@@ -62,6 +62,8 @@ pub struct Config {
     pub vocab_enabled: bool,
     /// 用户手动修改识别结果时，自动把纠正的词存入词库
     pub learn_from_edits: bool,
+    /// 词库文件的大小上限（KB）：超出时删掉最久没用到的自动学习词条（见 vocab.rs）
+    pub vocab_max_kb: u32,
     /// 定期检查新版本（发现后通知，由用户一键更新）
     pub auto_check_updates: bool,
     /// 自定义输出风格提示词（润色、插入、修订、翻译共用的排版和措辞规则）；留空使用内置提示词
@@ -122,6 +124,7 @@ impl Default for Config {
             insert_min_chars: 12,
             vocab_enabled: true,
             learn_from_edits: true,
+            vocab_max_kb: 10240,
             auto_check_updates: true,
             style_prompt: String::new(),
             polish_prompt: String::new(),
