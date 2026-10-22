@@ -14,10 +14,12 @@ const pickerLang = languagePicker($("picker-lang"), $("picker-list"), {
   grow,
 });
 
-// 核对（翻译输出后）：换语言只记下，点「重新翻译」时生效
-const reviewLang = languagePicker($("review-lang"), $("review-list"), { grow });
+// 核对（翻译输出后）：换语言只记下，点「重新翻译」时生效。
+// 卡片里语言框上方的空间放得下整个列表，就在卡片里往上展开、不改窗口大小：
+// WebView 窗口改尺寸时旧画面会先按新尺寸显示一帧，整个小窗会闪一下
+const reviewLang = languagePicker($("review-lang"), $("review-list"));
 
-/** 候选列表向上展开：小窗向上长高，列表可以超出原来的上边界（底边不动） */
+/** 选语言的小条只有一行高，放不下列表：小窗向上长高，列表超出原来的上边界（底边不动） */
 function grow(extra) {
   invoke("resize_translate_popup", { extra }).catch(() => {});
 }
