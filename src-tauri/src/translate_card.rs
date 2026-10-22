@@ -16,7 +16,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 
 pub const LABEL: &str = "translate";
 /// 逻辑尺寸（含四周 8 的阴影留白），按显示器缩放
-const PICKER_WIDTH: f64 = 280.0;
+const PICKER_WIDTH: f64 = 240.0;
 const PICKER_HEIGHT: f64 = 60.0;
 /// 候选语言列表展开时，选语言的小窗向上长出的高度
 const PICKER_LIST_HEIGHT: f64 = 232.0;

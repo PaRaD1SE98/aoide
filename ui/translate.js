@@ -7,6 +7,7 @@ let busy = false;
 
 // 选语言（翻译录音时）：选定后存进设置，并把焦点还给原来的输入框
 const pickerLang = languagePicker($("picker-lang"), $("picker-list"), {
+  autoWidth: true,
   onPick: (language) => invoke("set_translate_language", { language, restoreFocus: true }).catch((e) => console.error(e)),
   onCancel: () => invoke("set_translate_language", { language: view.language, restoreFocus: true }).catch(() => {}),
   // 候选列表向上展开，窗口跟着长高

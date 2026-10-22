@@ -38,9 +38,21 @@ function languageLabel(value) {
  * 把 input 变成语言选择框：input 显示和编辑语言名，list（一个空的容器）放候选列表。
  * onPick(value) 在选定时调用（点选候选、或输入后按回车）；onCancel() 在按 Esc 收起时调用
  */
-function languagePicker(input, list, { onPick, onCancel, onOpen } = {}) {
+function languagePicker(input, list, { onPick, onCancel, onOpen, autoWidth = false } = {}) {
   let items = [];
   let active = -1;
+  const canvas = autoWidth && document.createElement("canvas");
+
+  /** autoWidth：输入框宽度跟着文字走（语言名长短不一，固定宽度时右边常常空着） */
+  function fit() {
+    if (!canvas) return;
+    const cs = getComputedStyle(input);
+    const ctx = canvas.getContext("2d");
+    ctx.font = `${cs.fontSize} ${cs.fontFamily}`;
+    const text = ctx.measureText(input.value || " ").width;
+    const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + 4;
+    input.style.width = `${Math.ceil(Math.min(Math.max(text + pad, 64), 168))}px`;
+  }
 
   const open = () => !list.hidden;
 
@@ -88,7 +100,14 @@ function languagePicker(input, list, { onPick, onCancel, onOpen } = {}) {
   function highlight(i) {
     active = i;
     [...list.children].forEach((el, k) => el.classList.toggle("active", k === i));
-    list.children[i]?.scrollIntoView({ block: "nearest" });
+    // 只滚动列表本身（scrollIntoView 会连带滚动页面，小窗里整条会被推出窗口）
+    const el = list.children[i];
+    if (el) {
+      if (el.offsetTop < list.scrollTop) list.scrollTop = el.offsetTop;
+      else if (el.offsetTop + el.offsetHeight > list.scrollTop + list.clientHeight) {
+        list.scrollTop = el.offsetTop + el.offsetHeight - list.clientHeight;
+      }
+    }
   }
 
   function show() {
@@ -117,6 +136,7 @@ function languagePicker(input, list, { onPick, onCancel, onOpen } = {}) {
   function set(value) {
     input.dataset.value = value;
     input.value = languageLabel(value);
+    fit();
   }
 
   input.addEventListener("focus", () => {
@@ -124,6 +144,7 @@ function languagePicker(input, list, { onPick, onCancel, onOpen } = {}) {
     show();
   });
   input.addEventListener("input", () => {
+    fit();
     show();
     render();
   });
