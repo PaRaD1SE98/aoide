@@ -22,6 +22,8 @@ pub enum HotkeyEvent {
     Tap,
     Revise,
     ReviseStop,
+    /// 开始语音翻译
+    Translate,
     /// 取消本次任务（只在任务进行中触发）
     Cancel,
     /// 关闭屏幕底部的小窗（结果卡片、词条入库提示）：小窗不抢焦点、收不到按键，由钩子代为处理 Esc
@@ -56,6 +58,9 @@ struct Bindings {
     /// 与主热键相同时为 None（合并为单击逻辑）
     revise_stop: Option<Hotkey>,
     cancel: Option<Hotkey>,
+    /// 翻译热键；形如 "<单键主热键>+<键>" 时记录那个组合键（同 revise_hold）
+    translate: Option<Hotkey>,
+    translate_hold: Option<Vec<u32>>,
 }
 
 #[derive(Default)]
@@ -99,7 +104,7 @@ pub fn install(tx: Sender<HotkeyEvent>) {
 }
 
 /// 按配置更新快捷键；返回无法解析的快捷键文本
-pub fn update(hotkey: &str, revise: &str, revise_stop: &str, cancel: &str) -> Vec<String> {
+pub fn update(hotkey: &str, revise: &str, revise_stop: &str, cancel: &str, translate: &str) -> Vec<String> {
     let mut bad = Vec::new();
     let mut parse = |s: &str| {
         let hk = Hotkey::parse(s);
@@ -112,13 +117,16 @@ pub fn update(hotkey: &str, revise: &str, revise_stop: &str, cancel: &str) -> Ve
     let revise = parse(revise);
     let revise_stop = parse(revise_stop).filter(|h| Some(h) != main.as_ref());
     let cancel = parse(cancel);
+    let translate = parse(translate);
 
-    let mut b = Bindings { main, revise, revise_stop, cancel, revise_hold: None };
-    if let (Some(main), Some(rev)) = (&b.main, &b.revise) {
-        if main.is_single() && rev.parts.len() == 2 && rev.parts[0] == main.parts[0] {
-            b.revise_hold = Some(rev.parts[1].clone());
-        }
-    }
+    let mut b = Bindings { main, revise, revise_stop, cancel, revise_hold: None, translate, translate_hold: None };
+    // 「单键主热键 + 某键」：按住主热键时按下那个键即触发
+    let hold_key = |main: &Option<Hotkey>, hk: &Option<Hotkey>| match (main, hk) {
+        (Some(main), Some(hk)) if main.is_single() && hk.parts.len() == 2 && hk.parts[0] == main.parts[0] => Some(hk.parts[1].clone()),
+        _ => None,
+    };
+    b.revise_hold = hold_key(&b.main, &b.revise);
+    b.translate_hold = hold_key(&b.main, &b.translate);
     match (&b.main, &b.revise_hold) {
         (Some(m), Some(_)) => log::info!("Hotkeys: tap='{}', revise='{}' (hold)", m.text, b.revise.as_ref().unwrap().text),
         (Some(m), None) => log::info!("Hotkeys: tap='{}', revise={:?}", m.text, b.revise.as_ref().map(|h| &h.text)),
@@ -245,12 +253,12 @@ fn handle(shared: &Shared, vk: u32, down: bool) -> bool {
                 return true;
             }
             if st.tap_down {
-                if let Some(hold) = &b.revise_hold {
-                    if hold.contains(&vk) {
+                for (hold, event) in [(&b.revise_hold, HotkeyEvent::Revise), (&b.translate_hold, HotkeyEvent::Translate)] {
+                    if hold.as_ref().is_some_and(|h| h.contains(&vk)) {
                         if down {
                             st.tap_combo = true;
                             if !repeat {
-                                send(HotkeyEvent::Revise);
+                                send(event);
                             }
                         }
                         return true; // 吞掉组合键，避免打进输入框
@@ -272,6 +280,16 @@ fn handle(shared: &Shared, vk: u32, down: bool) -> bool {
             if combo(rev, vk, down, repeat, &mut st) {
                 if down && !repeat {
                     send(HotkeyEvent::Revise);
+                }
+                return true;
+            }
+        }
+    }
+    if b.translate_hold.is_none() {
+        if let Some(tr) = &b.translate {
+            if combo(tr, vk, down, repeat, &mut st) {
+                if down && !repeat {
+                    send(HotkeyEvent::Translate);
                 }
                 return true;
             }
@@ -381,7 +399,7 @@ mod tests {
             capture: Mutex::default(),
             tx,
         });
-        update("right alt", "right alt+space", "right alt", "esc");
+        update("right alt", "right alt+space", "right alt", "esc", "right alt+t");
         let sh = SHARED.get().unwrap();
         let events = || rx.try_iter().map(|e| format!("{e:?}")).collect::<Vec<_>>();
 
@@ -403,6 +421,14 @@ mod tests {
         assert!(handle(sh, SPACE, false));
         handle(sh, RALT, false);
         assert_eq!(events(), ["Revise"]);
+
+        // 按住右 Alt 再按 T：触发翻译，T 被吞掉
+        const T: u32 = 0x54;
+        handle(sh, RALT, true);
+        assert!(handle(sh, T, true));
+        assert!(handle(sh, T, false));
+        handle(sh, RALT, false);
+        assert_eq!(events(), ["Translate"]);
 
         // 按住右 Alt 期间按了别的键：放行该键，松开不算单击
         handle(sh, RALT, true);

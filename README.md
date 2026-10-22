@@ -43,6 +43,7 @@ No account and no cloud service needed. Audio only leaves your computer if you c
 | **Dictate** | Tap `Right Alt` → speak → tap `Right Alt` again | Transcribed, polished, and pasted into the focused input box |
 | **Cancel** | Press `Esc` while recording or transcribing | The task is discarded, nothing is typed |
 | **Voice edit** | Select some text → hold `Right Alt` and press `Space` → say how to change it → tap `Right Alt` | The LLM rewrites the selection according to your instruction and replaces it |
+| **Voice translation** | Hold `Right Alt` and press `T` → speak → tap `Right Alt` | The LLM translates what you said into the target language and types it. A card then shows the recognized text: fix any misrecognized words and click **Retranslate** to replace the translation in the input box. Pick the target language above the floating bar while recording, or in Settings |
 
 > On macOS the default hotkey is `Right Option`, and the tray icon lives in the menu bar. On Japanese (JIS) keyboards, which often lack these keys, the default is `変換` (Henkan) on Windows and `Right Command` on macOS; voice edit is that key + `Space`.
 
@@ -130,6 +131,8 @@ Settings are stored in `%APPDATA%\Aoide\config.json` (macOS: `~/Library/Applicat
 | `revise_hotkey` | `right alt+space` | Start a voice edit. `<main hotkey>+<key>` means: hold the main hotkey, then press the key |
 | `revise_stop_hotkey` | `right alt` | Stop a voice edit (merged into the tap logic when equal to `hotkey`) |
 | `cancel_hotkey` | `esc` | Cancel the current recording or transcription. Only intercepted while a task is in progress |
+| `translate_hotkey` | `right alt+t` | Start a voice translation (hold the main hotkey, then press the key); tap the main hotkey to finish |
+| `translate_language` | `English` | Target language of voice translation; any language name |
 | `speech_source` | `local` | Speech recognition: `local` (local model) / `api` (OpenAI-compatible speech-to-text API) |
 | `speech_api` / `speech_api_key` / `speech_api_model` | *(empty)* | API base, key and model name used when `speech_source` is `api` |
 | `model` | `sense-voice` | SenseVoice: `sense-voice` (zh/en/ja/ko/yue) / `sense-voice-yue` (Cantonese-tuned). Whisper: `tiny` / `base` / `small` / `medium` / `large-v3-turbo-q5_0` / `large-v3-turbo` / `large-v2` / `large-v3` |
@@ -151,7 +154,8 @@ Settings are stored in `%APPDATA%\Aoide\config.json` (macOS: `~/Library/Applicat
 | `vocab_enabled` | `true` | Correct transcripts with your vocabulary: repeated misrecognitions are replaced directly, others go to the LLM with the related entries |
 | `learn_from_edits` | `true` | When you correct a word after it is typed, add the correction to the vocabulary (with an Undo notice) |
 | `auto_check_updates` | `true` | Check for a new version once a day and notify you; updating is always your choice |
-| `polish_prompt` / `revise_prompt` / `insert_prompt` | *(empty)* | Custom LLM prompts for polishing (`{text}`), voice edit (`{original}`, `{instruction}`) and context-aware insertion (`{before}`, `{after}`, `{text}`). Empty = built-in prompt. Edit them in Settings |
+| `style_prompt` | *(empty)* | Custom output style shared by polishing, insertion, voice edit and translation: how the text is laid out (lists, paragraphs) and worded. Empty = built-in. The task prompts below only describe their own task |
+| `polish_prompt` / `revise_prompt` / `insert_prompt` / `translate_prompt` | *(empty)* | Custom LLM prompts for polishing (`{text}`), voice edit (`{original}`, `{instruction}`), context-aware insertion (`{before}`, `{after}`, `{text}`) and voice translation (`{language}`, `{text}`). Empty = built-in prompt. Edit them in Settings |
 
 The vocabulary is stored in `%APPDATA%\Aoide\vocabulary.json`. The log file is `%APPDATA%\Aoide\logs\app.log` (rotated at 1 MB). On macOS they are `~/Library/Application Support/Aoide/vocabulary.json` and `~/Library/Application Support/Aoide/logs/app.log`. It contains your transcripts and stays on your machine.
 

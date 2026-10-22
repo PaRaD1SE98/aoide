@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Aoide</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="langpick.css">
 </head>
 <body>
   <div class="app">
@@ -67,6 +68,17 @@
           <div class="control">
             <span class="keys" data-keys="revise_stop_hotkey"></span>
             <button class="btn" data-capture="revise_stop_hotkey" data-i18n="btn.change">更改</button>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE8C1;</span>
+          <div class="text">
+            <div class="title" data-i18n="hk.translate.title">语音翻译</div>
+            <div class="desc" data-i18n="hk.translate.desc">说完后用 LLM 翻译成目标语言再输入。「主快捷键 + 某键」表示按住主快捷键再按该键开始，单击主快捷键结束</div>
+          </div>
+          <div class="control">
+            <span class="keys" data-keys="translate_hotkey"></span>
+            <button class="btn" data-capture="translate_hotkey" data-i18n="btn.change">更改</button>
           </div>
         </div>
         <div class="card">
@@ -417,6 +429,19 @@
             <label class="num"><input type="number" min="0" max="200" data-key="insert_min_chars" data-type="int"><span data-i18n="unit.chars">字</span></label>
           </div>
         </div>
+        <div class="card">
+          <span class="ico">&#xE8C1;</span>
+          <div class="text">
+            <div class="title" data-i18n="translateLang.title">翻译目标语言</div>
+            <div class="desc" data-i18n="translateLang.desc">语音翻译译成的语言：可从列表选择，也可以直接填写；录音时也能在悬浮条上方更改</div>
+          </div>
+          <div class="control">
+            <div class="combo" data-key="translate_language">
+              <input type="text" id="translate-language" spellcheck="false" autocomplete="off">
+              <div class="lang-list below" id="translate-language-list"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -424,6 +449,18 @@
       <h1 class="pane-title" data-i18n="sec.prompts">提示词</h1>
       <p class="pane-desc muted" data-i18n="prompts.desc">发送给 LLM 的指令，可按需修改；花括号里的占位符会被替换成实际内容</p>
       <div class="group">
+        <div class="card stack">
+          <div class="row">
+            <span class="ico">&#xE9F9;</span>
+            <div class="text">
+              <div class="title" data-i18n="prompt.style.title">输出风格</div>
+              <div class="desc" data-i18n="prompt.style.desc">润色、插入、修订、翻译共用的排版和措辞规则（如分点、分段）；下面各项只写各自的任务</div>
+            </div>
+            <div class="control">
+            </div>
+          </div>
+          <textarea data-prompt="style_prompt" rows="9" spellcheck="false"></textarea>
+        </div>
         <div class="card stack">
           <div class="row">
             <span class="ico">&#xE8BD;</span>
@@ -458,6 +495,17 @@
             <div class="control"></div>
           </div>
           <textarea data-prompt="insert_prompt" rows="9" spellcheck="false"></textarea>
+        </div>
+        <div class="card stack">
+          <div class="row">
+            <span class="ico">&#xE8C1;</span>
+            <div class="text">
+              <div class="title" data-i18n="prompt.translate.title">翻译提示词</div>
+              <div class="desc" data-i18n="prompt.translate.desc">语音翻译时使用：{language} 为目标语言，{text} 为转写结果</div>
+            </div>
+            <div class="control"></div>
+          </div>
+          <textarea data-prompt="translate_prompt" rows="9" spellcheck="false"></textarea>
         </div>
       </div>
     </section>
@@ -528,6 +576,7 @@
   <div id="toast" role="status"></div>
   <script src="icons.js"></script>
   <script src="i18n.js"></script>
+  <script src="langpick.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

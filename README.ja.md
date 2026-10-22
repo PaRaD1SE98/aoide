@@ -43,6 +43,7 @@ Aoide は Windows と macOS 向けの音声入力アプリで、Typeless や Wis
 | **音声入力** | `右 Alt` を 1 回押す → 話す → もう一度 `右 Alt` を押す | 文字起こし・整形してから、フォーカスのある入力欄に貼り付けます |
 | **キャンセル** | 録音中・認識中に `Esc` を押す | その処理を中止し、何も入力しません |
 | **音声で修正** | テキストを選択 → `右 Alt` を押したまま `Space` を押す → 修正内容を話す → `右 Alt` を押す | 話した指示どおりに LLM が選択範囲を書き直して置き換えます |
+| **音声翻訳** | `右 Alt` を押したまま `T` を押す → 話す → `右 Alt` を押す | 話した内容を LLM が翻訳先の言語に翻訳して入力します。続いて表示される小さなウィンドウに認識された原文が表示され、認識の誤りを直して **再翻訳** を押すと、入力欄の訳文が置き換わります。翻訳先の言語は録音中にフローティングバーの上で選ぶか、設定で変更できます |
 
 > macOS の既定のショートカットキーは `右 Option` で、トレイアイコンはメニューバーに表示されます。これらのキーがないことが多い日本語（JIS）キーボードでは、Windows は `変換` キー、macOS は `右 Command` が既定です。音声で修正は、そのキー + `Space` です。
 
@@ -130,6 +131,8 @@ Aoide は OpenAI の音声認識形式（`POST {API ベース URL}/audio/transcr
 | `revise_hotkey` | `right alt+space` | 音声で修正を開始。`<メインのキー>+<キー>` は、メインのキーを押したままそのキーを押すことを表します |
 | `revise_stop_hotkey` | `right alt` | 音声で修正を終了（`hotkey` と同じ場合は 1 回押しの動作にまとめます） |
 | `cancel_hotkey` | `esc` | 録音中・認識中の処理をキャンセル。処理中だけこのキーを横取りします |
+| `translate_hotkey` | `right alt+t` | 音声翻訳を開始（メインのキーを押したままこのキーを押す）。メインのキーを押して終了 |
+| `translate_language` | `English` | 音声翻訳の翻訳先の言語。任意の言語名を指定できます |
 | `speech_source` | `local` | 音声認識の方法：`local`（ローカルモデル）/ `api`（OpenAI 互換の音声認識 API） |
 | `speech_api` / `speech_api_key` / `speech_api_model` | *（空）* | `speech_source` が `api` のときに使う API ベース URL、Key、モデル名 |
 | `model` | `sense-voice` | SenseVoice：`sense-voice`（中・英・日・韓・粵）/ `sense-voice-yue`（広東語強化版）。Whisper：`tiny` / `base` / `small` / `medium` / `large-v3-turbo-q5_0` / `large-v3-turbo` / `large-v2` / `large-v3` |
@@ -151,7 +154,8 @@ Aoide は OpenAI の音声認識形式（`POST {API ベース URL}/audio/transcr
 | `vocab_enabled` | `true` | 辞書で文字起こし結果を補正する。繰り返し出る誤認識はそのまま置き換え、それ以外は関連する項目と一緒に LLM に渡します |
 | `learn_from_edits` | `true` | 入力後に手動で直した言葉を辞書に追加する（元に戻せる通知付き） |
 | `auto_check_updates` | `true` | 1 日 1 回新しいバージョンを確認して知らせる。更新するかどうかは常にユーザーが決めます |
-| `polish_prompt` / `revise_prompt` / `insert_prompt` | *（空）* | 整形（`{text}`）、音声で修正（`{original}`、`{instruction}`）、文脈に合わせた挿入（`{before}`、`{after}`、`{text}`）用のカスタム LLM プロンプト。空欄 = 内蔵のプロンプト。設定画面で編集できます |
+| `style_prompt` | *（空）* | 出力スタイルのカスタムプロンプト：整形・挿入・音声で修正・翻訳に共通する体裁（箇条書き、段落）と言葉づかいのルール。空欄 = 内蔵。以下の各プロンプトにはそれぞれの作業だけを書きます |
+| `polish_prompt` / `revise_prompt` / `insert_prompt` / `translate_prompt` | *（空）* | 整形（`{text}`）、音声で修正（`{original}`、`{instruction}`）、文脈に合わせた挿入（`{before}`、`{after}`、`{text}`）、音声翻訳（`{language}`、`{text}`）用のカスタム LLM プロンプト。空欄 = 内蔵のプロンプト。設定画面で編集できます |
 
 辞書は `%APPDATA%\Aoide\vocabulary.json` に保存されます。ログファイルは `%APPDATA%\Aoide\logs\app.log`（1 MB を超えるとローテーション）です。macOS ではそれぞれ `~/Library/Application Support/Aoide/vocabulary.json` と `~/Library/Application Support/Aoide/logs/app.log` です。ログには文字起こしの内容が含まれ、手元のパソコンにだけ保存されます。
 

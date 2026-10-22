@@ -26,6 +26,8 @@ extern "C" {
     fn CGEventSourceFlagsState(state: i32) -> u64;
 }
 
+const FLAG_NUMERIC_PAD: u64 = 0x0020_0000;
+
 /// 硬件键盘的实际状态
 const SOURCE_STATE_HID: i32 = 1;
 
@@ -71,6 +73,16 @@ pub fn wait_modifiers_released(timeout: Duration) -> bool {
             return false;
         }
         std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// 按住 Shift 按 n 次 ←：从光标往前选中 n 个字符（重新翻译时选中之前粘贴的译文）
+pub fn select_back(n: usize) {
+    // 真实的方向键事件都带「小键盘」和 fn 标志
+    const ARROW: u64 = FLAG_SHIFT | FLAG_NUMERIC_PAD | keycode::FLAG_FN;
+    for _ in 0..n {
+        post(keycode::KEY_LEFT, true, ARROW, &[]);
+        post(keycode::KEY_LEFT, false, ARROW, &[]);
     }
 }
 

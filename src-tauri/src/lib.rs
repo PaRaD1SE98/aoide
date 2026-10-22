@@ -17,6 +17,7 @@ mod result_card;
 mod sound;
 mod speech_api;
 mod transcriber;
+mod translate_card;
 mod tray;
 mod updater;
 mod vocab;
@@ -140,9 +141,11 @@ struct SettingsPayload {
     /// 各项设置的默认值（设置页「恢复默认」用）
     defaults: Config,
     /// 内置提示词（自定义为空时显示和使用）
+    default_style_prompt: &'static str,
     default_polish_prompt: &'static str,
     default_revise_prompt: &'static str,
     default_insert_prompt: &'static str,
+    default_translate_prompt: &'static str,
 }
 
 #[tauri::command]
@@ -158,9 +161,11 @@ fn get_settings(app: AppHandle, ctl: State<Arc<Controller>>) -> SettingsPayload 
         platform: std::env::consts::OS,
         system_language: i18n::system_language(),
         defaults: Config::default(),
+        default_style_prompt: llm::STYLE_PROMPT,
         default_polish_prompt: llm::POLISH_PROMPT,
         default_revise_prompt: llm::REVISE_PROMPT,
         default_insert_prompt: llm::INSERT_PROMPT,
+        default_translate_prompt: llm::TRANSLATE_PROMPT,
     }
 }
 
@@ -176,14 +181,29 @@ fn save_settings(
     config: Config,
     autostart: bool,
 ) -> Result<(), String> {
-    for hk in [&config.hotkey, &config.revise_hotkey, &config.revise_stop_hotkey, &config.cancel_hotkey] {
+    for hk in [&config.hotkey, &config.revise_hotkey, &config.revise_stop_hotkey, &config.cancel_hotkey, &config.translate_hotkey] {
         if keys::Hotkey::parse(hk).is_none() {
             return Err(trf!("无法识别的快捷键：{hk}", "Unrecognized hotkey: {hk}", "認識できないショートカットキーです: {hk}"));
         }
     }
     let cancel = keys::Hotkey::parse(&config.cancel_hotkey);
-    if cancel == keys::Hotkey::parse(&config.hotkey) || cancel == keys::Hotkey::parse(&config.revise_hotkey) {
-        return Err(i18n::tr("取消快捷键不能与语音输入 / 语音修订快捷键相同", "The cancel hotkey must differ from the dictation and voice edit hotkeys", "キャンセルのショートカットキーは、音声入力・音声修正のショートカットキーとは別のキーにしてください").into());
+    let translate = keys::Hotkey::parse(&config.translate_hotkey);
+    if cancel == keys::Hotkey::parse(&config.hotkey) || cancel == keys::Hotkey::parse(&config.revise_hotkey) || cancel == translate {
+        return Err(i18n::tr("取消快捷键不能与语音输入 / 语音修订 / 语音翻译快捷键相同", "The cancel hotkey must differ from the dictation, voice edit and translation hotkeys", "キャンセルのショートカットキーは、音声入力・音声修正・音声翻訳のショートカットキーとは別のキーにしてください").into());
+    }
+    if translate == keys::Hotkey::parse(&config.hotkey) || translate == keys::Hotkey::parse(&config.revise_hotkey) {
+        return Err(i18n::tr("语音翻译快捷键不能与语音输入 / 语音修订快捷键相同", "The translation hotkey must differ from the dictation and voice edit hotkeys", "音声翻訳のショートカットキーは、音声入力・音声修正のショートカットキーとは別のキーにしてください").into());
+    }
+    if config.translate_language.trim().is_empty() {
+        return Err(i18n::tr("请填写翻译的目标语言", "Enter a target language for translation", "翻訳先の言語を入力してください").into());
+    }
+    if !config.translate_prompt.trim().is_empty() && !["{language}", "{text}"].iter().all(|p| config.translate_prompt.contains(p)) {
+        return Err(i18n::tr(
+            "翻译提示词必须包含 {language}（目标语言）和 {text}（转写结果）",
+            "The translation prompt must contain {language} (the target language) and {text} (the transcript)",
+            "翻訳プロンプトには {language}（翻訳先の言語）と {text}（文字起こし結果）を含めてください",
+        )
+        .into());
     }
     if !config.polish_prompt.trim().is_empty() && !config.polish_prompt.contains("{text}") {
         return Err(i18n::tr("润色提示词必须包含 {text}（转写结果）", "The polish prompt must contain {text} (the transcript)", "整形プロンプトには {text}（文字起こし結果）を含めてください").into());
@@ -343,7 +363,7 @@ fn log_focus_diagnosis() {
 
 /// 有小窗（结果卡片、词条入库提示、提示小窗）开着时，让键盘钩子用 Esc 关闭它们
 pub(crate) fn refresh_dismiss_key() {
-    hotkeys::set_dismiss_armed(result_card::is_open() || learned_card::is_open() || notice::is_open());
+    hotkeys::set_dismiss_armed(result_card::is_open() || learned_card::is_open() || notice::is_open() || translate_card::is_review_open());
 }
 
 /// 用默认浏览器打开网址（只允许 https）
@@ -493,6 +513,7 @@ pub fn run() {
         .manage(result_card::ResultState::default())
         .manage(learned_card::LearnedState::default())
         .manage(notice::NoticeState::default())
+        .manage(translate_card::TranslateState::default())
         .invoke_handler(tauri::generate_handler![
             get_settings,
             list_models,
@@ -517,6 +538,12 @@ pub fn run() {
             close_learned,
             get_notice,
             close_notice,
+            translate_card::get_translate,
+            translate_card::set_translate_language,
+            translate_card::retranslate,
+            translate_card::resize_translate_picker,
+            translate_card::copy_translation,
+            translate_card::close_translate,
             get_permissions,
             request_permission,
             check_update,

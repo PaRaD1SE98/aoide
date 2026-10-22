@@ -1,12 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissions for the main window, the result card, the learned-word card and the notice popup",
+  "description": "Permissions for the main window, the result card, the learned-word card, the notice popup and the translation popup",
   "windows": [
     "settings",
     "result",
     "learned",
-    "notice"
+    "notice",
+    "translate"
   ],
   "permissions": [
     "core:default",
