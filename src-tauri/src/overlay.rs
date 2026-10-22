@@ -373,7 +373,7 @@ mod tests {
     }
 
     /// README 演示动图用：按 30 fps 导出各状态的逐帧动画（scripts/readme-demo.ps1 调用）
-    /// 输出 {VT_IMG_DIR}/frames/{recording,revising,transcribing,polishing}-NNNN.png
+    /// 输出 {VT_IMG_DIR}/frames/{recording,revising,translating,transcribing,polishing}-NNNN.png
     #[test]
     #[ignore]
     fn export_capsule_frames() {
@@ -390,6 +390,7 @@ mod tests {
         for (name, mode, secs) in [
             ("recording", Mode::Recording, 8.0),
             ("revising", Mode::Revising, 6.0),
+            ("translating", Mode::Translating, 6.0),
             ("transcribing", Mode::Processing, 2.0),
             ("polishing", Mode::Polishing, 3.0),
         ] {
@@ -397,7 +398,7 @@ mod tests {
             for i in 0..(secs * FPS) as usize {
                 let t = i as f32 / FPS;
                 let mut v = anim(mode, [0.0; N_BARS], now - Duration::from_secs_f32(t));
-                if matches!(mode, Mode::Recording | Mode::Revising) {
+                if matches!(mode, Mode::Recording | Mode::Revising | Mode::Translating) {
                     // 与 update_bars 相同：每 60 ms 推入一格音量，从右往左滚动
                     let shifts = (t * 1000.0 / 60.0) as i32;
                     for (k, b) in v.bars.iter_mut().enumerate() {

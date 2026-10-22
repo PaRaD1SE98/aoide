@@ -45,7 +45,7 @@ try {
 Copy-Item (Join-Path $PSScriptRoot "readme\*") $tmp
 
 # 3. 逐帧录制（逻辑尺寸 960x612：540 的屏幕 + 72 的字幕栏，2 倍分辨率）并编码
-$durationMs = 19500
+$durationMs = 30700
 $fps = 30
 foreach ($lang in $Langs) {
     $frames = "$tmp\frames-$lang"
