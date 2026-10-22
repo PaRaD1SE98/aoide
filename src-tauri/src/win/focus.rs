@@ -20,10 +20,10 @@ use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::UI::Accessibility::{
     CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationTextPattern,
     IUIAutomationValuePattern, TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start,
-    TextUnit_Character, UIA_ComboBoxControlTypeId, UIA_DocumentControlTypeId,
+    TextUnit_Character, TreeScope_Children, UIA_ComboBoxControlTypeId, UIA_DocumentControlTypeId,
     UIA_EditControlTypeId, UIA_IsPasswordPropertyId, UIA_IsTextEditPatternAvailablePropertyId,
     UIA_IsValuePatternAvailablePropertyId, UIA_TextPatternId, UIA_ValueIsReadOnlyPropertyId,
-    UIA_ValuePatternId, UIA_PROPERTY_ID,
+    UIA_TextControlTypeId, UIA_ValuePatternId, UIA_PROPERTY_ID,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, GUITHREADINFO,
@@ -204,10 +204,73 @@ pub(crate) fn context_of(elem: &IUIAutomationElement) -> Option<CaretContext> {
         after.MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, CONTEXT_AFTER).ok()?;
 
         let normalize = |s: String| s.replace("\r\n", "\n").replace('\r', "\n");
-        Some(CaretContext {
-            before: normalize(before.GetText(-1).ok()?.to_string()),
-            after: normalize(after.GetText(-1).ok()?.to_string()),
-        })
+        let text = |r: &windows::Win32::UI::Accessibility::IUIAutomationTextRange| r.GetText(-1).ok().map(|t| normalize(t.to_string()));
+        // Chromium（浏览器、VS Code 等 Electron 程序）的文字范围覆盖整个页面，挪动时会挪出输入框，
+        // 读到页面上的其他文字（比如聊天记录），光标位置也可能报在输入框的范围之外：都限制在输入框自己的范围内
+        if !is_chromium(elem) {
+            return Some(CaretContext { before: text(&before)?, after: text(&after)? });
+        }
+        let doc = tp.DocumentRange().ok()?;
+        let cmp = |r: &windows::Win32::UI::Accessibility::IUIAutomationTextRange, a, b| r.CompareEndpoints(a, &doc, b).ok();
+        let (start, end) = (TextPatternRangeEndpoint_Start, TextPatternRangeEndpoint_End);
+        let mut ctx = CaretContext::default();
+        // 光标前：起点不早于输入框开头，终点不晚于输入框末尾；光标在输入框开头之前时没有内容
+        if cmp(&before, end, start)? > 0 {
+            if cmp(&before, start, start)? < 0 {
+                before.MoveEndpointByRange(start, &doc, start).ok()?;
+            }
+            if cmp(&before, end, end)? > 0 {
+                before.MoveEndpointByRange(end, &doc, end).ok()?;
+            }
+            ctx.before = text(&before)?;
+        }
+        // 光标后：同理；光标在输入框末尾或之后时没有内容
+        if cmp(&after, start, end)? < 0 {
+            if cmp(&after, end, end)? > 0 {
+                after.MoveEndpointByRange(end, &doc, end).ok()?;
+            }
+            if cmp(&after, start, start)? < 0 {
+                after.MoveEndpointByRange(start, &doc, start).ok()?;
+            }
+            ctx.after = text(&after)?;
+        }
+        if looks_like_placeholder(elem, &format!("{}{}", ctx.before, ctx.after)) {
+            log::info!("Caret context: the box only shows its placeholder, taken as empty");
+            return Some(CaretContext::default());
+        }
+        Some(ctx)
+    }
+}
+
+/// Chromium 内核的控件（浏览器、Electron 程序）
+fn is_chromium(elem: &IUIAutomationElement) -> bool {
+    unsafe { elem.CurrentFrameworkId() }.is_ok_and(|f| f.to_string() == "Chrome")
+}
+
+/// 空输入框交出来的其实是占位提示（「输入消息…」之类），不是用户写的内容（只对 Chromium 的输入框判断）：
+/// - 文字和控件的名称或帮助文本相同（SpeakoFlow 的判断）
+/// - 输入框里只有一个只读的文字子元素，内容就是这些文字（Chromium 里用 CSS 显示的占位提示，
+///   如 VS Code 里 Claude Code 的输入框：它的值也是这段提示）
+fn looks_like_placeholder(elem: &IUIAutomationElement, shown: &str) -> bool {
+    let shown = shown.trim();
+    if shown.is_empty() {
+        return false;
+    }
+    unsafe {
+        let same = |s: windows::core::Result<windows::core::BSTR>| s.is_ok_and(|s| s.to_string().trim() == shown);
+        if same(elem.CurrentName()) || same(elem.CurrentHelpText()) {
+            return true;
+        }
+        let Ok(children) = uia().and_then(|u| u.CreateTrueCondition()).and_then(|c| elem.FindAll(TreeScope_Children, &c)) else {
+            return false;
+        };
+        if children.Length().unwrap_or(0) != 1 {
+            return false;
+        }
+        let Ok(child) = children.GetElement(0) else { return false };
+        child.CurrentControlType().is_ok_and(|t| t == UIA_TextControlTypeId)
+            && same(child.CurrentName())
+            && child.CurrentAriaProperties().is_ok_and(|a| a.to_string().contains("readonly=true"))
     }
 }
 
@@ -470,5 +533,99 @@ mod tests {
         let c = read(h).unwrap();
         assert_eq!(c.before, "a".repeat(CONTEXT_BEFORE as usize));
         assert_eq!(c.after, "b".repeat(CONTEXT_AFTER as usize));
+    }
+
+    /// 手动运行：打印焦点控件自身的全文，以及按光标读到的前后文字（排查读到控件以外内容的问题）
+    /// cargo test --lib print_focused_context -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn print_focused_context() {
+        let _com = ComGuard::new();
+        let uia = uia().unwrap();
+        let elem = unsafe { uia.GetFocusedElement() }.unwrap();
+        let ctype = unsafe { elem.CurrentControlType() }.map(|c| c.0).unwrap_or_default();
+        let class = unsafe { elem.CurrentClassName() }.map(|s| s.to_string()).unwrap_or_default();
+        let framework = unsafe { elem.CurrentFrameworkId() }.map(|s| s.to_string()).unwrap_or_default();
+        println!("focused: control type {ctype}, class {class:?}, framework {framework:?}");
+        let help = unsafe { elem.CurrentHelpText() }.map(|s| s.to_string()).unwrap_or_default();
+        let name = unsafe { elem.CurrentName() }.map(|s| s.to_string()).unwrap_or_default();
+        println!("name {name:?}");
+        let value = unsafe {
+            elem.GetCurrentPattern(UIA_ValuePatternId)
+                .ok()
+                .and_then(|p| p.cast::<IUIAutomationValuePattern>().ok())
+                .and_then(|vp| vp.CurrentValue().ok())
+                .map(|s| s.to_string())
+        };
+        println!("help text {help:?}, value pattern {value:?}");
+        let doc = unsafe {
+            elem.GetCurrentPattern(UIA_TextPatternId)
+                .ok()
+                .and_then(|p| p.cast::<IUIAutomationTextPattern>().ok())
+                .and_then(|tp| tp.DocumentRange().ok())
+                .and_then(|r| r.GetText(5000).ok())
+                .map(|s| s.to_string())
+        };
+        let head = |s: &str| s.chars().take(60).collect::<String>();
+        let tail = |s: &str| {
+            let v: Vec<char> = s.chars().collect();
+            v[v.len().saturating_sub(60)..].iter().collect::<String>()
+        };
+        unsafe {
+            if let Some(range) = elem
+                .GetCurrentPattern(UIA_TextPatternId)
+                .ok()
+                .and_then(|p| p.cast::<IUIAutomationTextPattern>().ok())
+                .and_then(|tp| tp.DocumentRange().ok())
+            {
+                use windows::Win32::UI::Accessibility::UIA_IsReadOnlyAttributeId;
+                let ro = range.GetAttributeValue(UIA_IsReadOnlyAttributeId).map(|v| format!("{v:?}"));
+                println!("document range read-only attribute: {ro:?}");
+            }
+            if let (Ok(tp), true) = (
+                elem.GetCurrentPattern(UIA_TextPatternId).and_then(|p| p.cast::<IUIAutomationTextPattern>()),
+                true,
+            ) {
+                let doc = tp.DocumentRange().unwrap();
+                let sel = tp.GetSelection().unwrap();
+                let n = sel.Length().unwrap_or(0);
+                println!("selection ranges: {n}");
+                if n > 0 {
+                    let c = sel.GetElement(0).unwrap();
+                    let cmp = |a, b| c.CompareEndpoints(a, &doc, b).unwrap_or(99);
+                    println!(
+                        "caret start vs doc start {}, caret start vs doc end {}, caret end vs doc end {}, caret text {:?}",
+                        cmp(TextPatternRangeEndpoint_Start, TextPatternRangeEndpoint_Start),
+                        cmp(TextPatternRangeEndpoint_Start, TextPatternRangeEndpoint_End),
+                        cmp(TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_End),
+                        c.GetText(40).map(|s| s.to_string())
+                    );
+                }
+            }
+            if let Ok(all) = uia.CreateTrueCondition().and_then(|c| elem.FindAll(TreeScope_Children, &c)) {
+                for i in 0..all.Length().unwrap_or(0).min(10) {
+                    if let Ok(e) = all.GetElement(i) {
+                        let name = e.CurrentName().map(|s| s.to_string()).unwrap_or_default();
+                        let ct = e.CurrentControlType().map(|c| c.0).unwrap_or_default();
+                        let aria = e.CurrentAriaProperties().map(|s| s.to_string()).unwrap_or_default();
+                        println!("child [{i}] type {ct} name {name:?} aria {aria:?}");
+                    }
+                }
+            }
+        }
+        match &doc {
+            Some(d) => println!("control's own text: {} chars, starts {:?}", d.chars().count(), head(d)),
+            None => println!("control has no TextPattern"),
+        }
+        match context_of(&elem) {
+            Some(c) => println!(
+                "read before cursor: {} chars, ends {:?}\nread after cursor: {} chars, starts {:?}",
+                c.before.chars().count(),
+                tail(&c.before),
+                c.after.chars().count(),
+                head(&c.after)
+            ),
+            None => println!("no caret context"),
+        }
     }
 }
