@@ -129,10 +129,10 @@ Aoide は OpenAI の音声認識形式（`POST {API ベース URL}/audio/transcr
 | `ui_language` | `auto` | 表示言語：`auto`（システムに合わせる）/ `zh` / `en` / `ja` |
 | `hotkey` | `right alt` | 録音の開始・停止（1 回押しで動作）。macOS の既定は `right option`、日本語（JIS）キーボードでは Windows が `convert`（変換）、macOS が `right command` |
 | `revise_hotkey` | `right alt+space` | 音声で修正を開始。`<メインのキー>+<キー>` は、メインのキーを押したままそのキーを押すことを表します |
-| `revise_stop_hotkey` | `right alt` | 音声で修正を終了（`hotkey` と同じ場合は 1 回押しの動作にまとめます） |
-| `cancel_hotkey` | `esc` | 録音中・認識中の処理をキャンセル。処理中だけこのキーを横取りします |
 | `translate_hotkey` | `right alt+t` | 音声翻訳を開始（メインのキーを押したままこのキーを押す）。メインのキーを押して終了 |
 | `translate_language` | `English` | 音声翻訳の翻訳先の言語。任意の言語名を指定できます |
+| `revise_stop_hotkey` | `right alt` | 音声で修正を終了（`hotkey` と同じ場合は 1 回押しの動作にまとめます） |
+| `cancel_hotkey` | `esc` | 録音中・認識中の処理をキャンセル。処理中だけこのキーを横取りします |
 | `speech_source` | `local` | 音声認識の方法：`local`（ローカルモデル）/ `api`（OpenAI 互換の音声認識 API） |
 | `speech_api` / `speech_api_key` / `speech_api_model` | *（空）* | `speech_source` が `api` のときに使う API ベース URL、Key、モデル名 |
 | `model` | `sense-voice` | SenseVoice：`sense-voice`（中・英・日・韓・粵）/ `sense-voice-yue`（広東語強化版）。Whisper：`tiny` / `base` / `small` / `medium` / `large-v3-turbo-q5_0` / `large-v3-turbo` / `large-v2` / `large-v3` |
