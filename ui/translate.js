@@ -9,20 +9,31 @@ let busy = false;
 const pickerLang = languagePicker($("picker-lang"), $("picker-list"), {
   autoWidth: true,
   anchor: $("picker"),
+  up: true,
+  onToggle: reportShape,
   onPick: (language) => invoke("set_translate_language", { language, restoreFocus: true }).catch((e) => console.error(e)),
   onCancel: () => invoke("set_translate_language", { language: view.language, restoreFocus: true }).catch(() => {}),
-  grow,
 });
 
-// 核对（翻译输出后）：换语言只记下，点「重新翻译」时生效。
-// 卡片里语言框上方的空间放得下整个列表，就在卡片里往上展开、不改窗口大小：
-// WebView 窗口改尺寸时旧画面会先按新尺寸显示一帧，整个小窗会闪一下
-const reviewLang = languagePicker($("review-lang"), $("review-list"));
+// 核对（翻译输出后）：换语言只记下，点「重新翻译」时生效
+const reviewLang = languagePicker($("review-lang"), $("review-list"), { up: true, onToggle: reportShape });
 
-/** 选语言的小条只有一行高，放不下列表：小窗向上长高，列表超出原来的上边界（底边不动） */
-function grow(extra) {
-  invoke("resize_translate_popup", { extra }).catch(() => {});
+/**
+ * 告诉程序小窗的哪些部分是可见的：小条 / 卡片，加上展开着的候选列表（各留出阴影的位置）。
+ * 小窗上方一开始就给列表留好了空间，展开、收起时只改有效形状，不改窗口大小，不会闪烁；
+ * 没用到的透明部分不挡鼠标，点击落到下面的程序
+ */
+function reportShape() {
+  const shadow = 8;
+  const main = view?.mode === "review" ? document.querySelector(".card") : $("picker");
+  const parts = [main, ...[$("picker-list"), $("review-list")].filter((l) => !l.hidden)];
+  const rects = parts.map((el) => {
+    const r = el.getBoundingClientRect();
+    return [r.left - shadow, r.top - shadow, r.width + shadow * 2, r.height + shadow * 2];
+  });
+  invoke("set_translate_shape", { rects }).catch(() => {});
 }
+addEventListener("resize", () => requestAnimationFrame(reportShape));
 
 function setStatus(key, vars, isError = false) {
   const el = $("status");
@@ -35,6 +46,7 @@ function render(v) {
   document.body.className = v.mode;
   pickerLang.set(v.language);
   reviewLang.set(v.language);
+  requestAnimationFrame(reportShape);
   if (v.mode !== "review") return;
   $("original").value = v.original;
   $("translation").textContent = v.translation;

@@ -3,6 +3,7 @@
 use super::overlay;
 use tauri::{PhysicalPosition, PhysicalSize, WebviewWindow};
 use windows::Win32::Foundation::HWND;
+use windows::Win32::Graphics::Gdi::{CombineRgn, CreateRectRgn, DeleteObject, SetWindowRgn, RGN_OR};
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, SetForegroundWindow, SetWindowPos, ShowWindow, SWP_FRAMECHANGED,
     SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_SHOWNOACTIVATE,
@@ -24,6 +25,24 @@ pub fn show(window: &WebviewWindow, width: f64, height: f64, bottom_gap: f64) {
             // 边框不会重新计算，系统标题栏会露出来。强制重算一次（不抢走当前窗口的焦点）
             let _ = SetWindowPos(hwnd, None, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
         }
+    }
+}
+
+/// 窗口的有效形状：只有这些矩形（逻辑像素，相对窗口左上角）会显示、接收鼠标，其余部分的点击落到下面的程序。
+/// 用窗口区域实现：只改形状、不改窗口大小，WebView 不用重新排版，不会闪烁
+pub fn set_shape(window: &WebviewWindow, rects: &[[f64; 4]]) {
+    let Ok(hwnd) = window.hwnd() else { return };
+    let scale = window.scale_factor().unwrap_or(1.0);
+    let px = |v: f64| (v * scale).round() as i32;
+    unsafe {
+        let region = CreateRectRgn(0, 0, 0, 0);
+        for r in rects {
+            let part = CreateRectRgn(px(r[0]), px(r[1]), px(r[0] + r[2]), px(r[1] + r[3]));
+            CombineRgn(Some(region), Some(region), Some(part), RGN_OR);
+            let _ = DeleteObject(part.into());
+        }
+        // 区域交给系统管理，之后不能再释放
+        SetWindowRgn(hwnd, Some(region), true);
     }
 }
 

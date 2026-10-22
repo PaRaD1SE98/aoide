@@ -41,12 +41,12 @@ const LIST_MIN_WIDTH = 240;
 
 /**
  * 把 input 变成语言选择框：input 显示和编辑语言名，list（一个空的容器）放候选列表。
- * onPick(value) 在选定时调用（点选候选、或输入后按回车）；onCancel() 在按 Esc 收起时调用。
- * 候选列表默认往下面放得下的一侧展开（下面不够就往上）；grow 用于翻译小窗这种放不下的小窗口：
- * 总是往上展开，并调用 grow(需要向上多出的高度) 让窗口向上长高（收起时调用 grow(0)）。
+ * onPick(value) 在选定时调用（点选候选、或输入后按回车）；onCancel() 在按 Esc 收起时调用；
+ * onToggle(open) 在列表展开、收起后调用（翻译小窗据此更新窗口的有效形状）。
+ * 候选列表默认往下面放得下的一侧展开（下面不够就往上）；up：总是往上（翻译小窗上方留好了空间）。
  * anchor：列表按哪个元素水平对齐（默认输入框），列表居中于它
  */
-function languagePicker(input, list, { onPick, onCancel, grow, anchor = input, autoWidth = false } = {}) {
+function languagePicker(input, list, { onPick, onCancel, onToggle, up: alwaysUp = false, anchor = input, autoWidth = false } = {}) {
   let items = [];
   let active = -1;
   const canvas = autoWidth && document.createElement("canvas");
@@ -127,12 +127,10 @@ function languagePicker(input, list, { onPick, onCancel, grow, anchor = input, a
     Object.assign(list.style, { left: `${left}px`, width: `${width}px`, top: "", bottom: "" });
     const below = innerHeight - box.bottom - LIST_GAP - 8;
     const above = box.top - LIST_GAP - 8;
-    // 用 bottom 定位往上展开：内容贴着窗口底部，窗口向上长高后列表跟输入框的相对位置不变
-    const up = grow || (below < Math.min(LIST_MAX, list.scrollHeight) && above > below);
+    const up = alwaysUp || (below < Math.min(LIST_MAX, list.scrollHeight) && above > below);
     if (up) {
       list.style.bottom = `${innerHeight - box.top + LIST_GAP}px`;
-      list.style.maxHeight = `${grow ? LIST_MAX : Math.min(LIST_MAX, above)}px`;
-      grow?.(Math.max(0, Math.ceil(LIST_MAX - above)));
+      list.style.maxHeight = `${Math.min(LIST_MAX, above)}px`;
     } else {
       list.style.top = `${box.bottom + LIST_GAP}px`;
       list.style.maxHeight = `${Math.min(LIST_MAX, below)}px`;
@@ -144,17 +142,18 @@ function languagePicker(input, list, { onPick, onCancel, grow, anchor = input, a
     list.hidden = false;
     render();
     place();
+    onToggle?.(true);
   }
 
   function hide() {
     if (!open()) return;
     list.hidden = true;
-    grow?.(0);
+    onToggle?.(false);
   }
 
   // 列表浮在页面上，不随页面滚动：页面滚动或窗口大小改变时跟着输入框重新定位（列表自己滚动不算）。
   // 点进输入框时浏览器可能把它滚进视野，这时不能收起列表
-  const follow = (e) => open() && !grow && e?.target !== list && place();
+  const follow = (e) => open() && e?.target !== list && place();
   document.addEventListener("scroll", follow, true);
   addEventListener("resize", follow);
 
