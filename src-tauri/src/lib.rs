@@ -541,7 +541,7 @@ pub fn run() {
             translate_card::get_translate,
             translate_card::set_translate_language,
             translate_card::retranslate,
-            translate_card::resize_translate_popup,
+            translate_card::set_translate_shape,
             translate_card::copy_translation,
             translate_card::close_translate,
             get_permissions,

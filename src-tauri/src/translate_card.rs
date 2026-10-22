@@ -21,6 +21,10 @@ const PICKER_HEIGHT: f64 = 60.0;
 const REVIEW_WIDTH: f64 = 480.0;
 pub const REVIEW_HEIGHT: f64 = 320.0;
 const BOTTOM_GAP: f64 = 8.0;
+/// 小窗上方给候选语言列表留的空间：窗口一开始就留出来，列表展开时不用改窗口大小
+/// （WebView 窗口改尺寸时旧画面会先错位显示一帧，整个小窗闪一下）。没展开时这部分是透明的，
+/// 用窗口的有效形状（见各平台的 popup::set_shape）让它不挡鼠标
+const LIST_ROOM: f64 = 232.0;
 
 #[derive(Clone, Default, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -58,8 +62,8 @@ pub struct TranslateState(pub Mutex<Session>);
 static REVIEW_OPEN: AtomicBool = AtomicBool::new(false);
 /// 悬浮条换屏时（在悬浮窗线程里）要用来找到小窗
 static APP: OnceLock<AppHandle> = OnceLock::new();
-/// 候选语言列表展开时小窗多出的高度，跟随悬浮条换屏时保持
-static EXTRA: Mutex<f64> = Mutex::new(0.0);
+/// 小窗当前的有效形状（逻辑像素的矩形，相对窗口左上角）：页面按小条 / 卡片和展开的列表算好传过来
+static SHAPE: Mutex<Vec<[f64; 4]>> = Mutex::new(Vec::new());
 
 pub fn is_review_open() -> bool {
     REVIEW_OPEN.load(Ordering::SeqCst)
@@ -69,7 +73,7 @@ pub fn is_review_open() -> bool {
 pub fn show_picker(app: &AppHandle, language: &str) {
     let _ = APP.set(app.clone());
     overlay::on_screen_change(follow_overlay);
-    *EXTRA.lock().unwrap() = 0.0;
+    *SHAPE.lock().unwrap() = default_shape(&Mode::Picker);
     let target = popup::foreground();
     {
         let state = app.state::<TranslateState>();
@@ -80,18 +84,27 @@ pub fn show_picker(app: &AppHandle, language: &str) {
     REVIEW_OPEN.store(false, Ordering::SeqCst);
     crate::refresh_dismiss_key();
     let Some(window) = window(app) else { return };
-    place(&window, Mode::Picker, 0.0);
+    place(&window, &Mode::Picker);
 }
 
 /// 放置小窗。选语言的贴在悬浮条正上方（悬浮条离屏幕底部 BOTTOM_GAP、高 HEIGHT；小窗四周有 8 的阴影留白），
-/// 核对的在悬浮条的位置。extra：候选语言列表向上展开时多出的高度，底边不动、向上长高
-fn place(window: &tauri::WebviewWindow, mode: Mode, extra: f64) {
+/// 核对的在悬浮条的位置；上方多留 LIST_ROOM 给候选列表，只有有效形状里的部分可见、接收鼠标
+fn place(window: &tauri::WebviewWindow, mode: &Mode) {
     match mode {
         Mode::Picker => {
             let gap = (overlay::BOTTOM_GAP + overlay::HEIGHT) as f64 - 2.0;
-            popup::show(window, PICKER_WIDTH, PICKER_HEIGHT + extra, gap);
+            popup::show(window, PICKER_WIDTH, PICKER_HEIGHT + LIST_ROOM, gap);
         }
-        Mode::Review => popup::show(window, REVIEW_WIDTH, REVIEW_HEIGHT + extra, BOTTOM_GAP),
+        Mode::Review => popup::show(window, REVIEW_WIDTH, REVIEW_HEIGHT + LIST_ROOM, BOTTOM_GAP),
+    }
+    popup::set_shape(window, &SHAPE.lock().unwrap());
+}
+
+/// 页面报告形状之前的默认形状：底部的小条 / 卡片
+fn default_shape(mode: &Mode) -> Vec<[f64; 4]> {
+    match mode {
+        Mode::Picker => vec![[0.0, LIST_ROOM, PICKER_WIDTH, PICKER_HEIGHT]],
+        Mode::Review => vec![[0.0, LIST_ROOM, REVIEW_WIDTH, REVIEW_HEIGHT]],
     }
 }
 
@@ -100,8 +113,9 @@ pub fn show_review(app: &AppHandle, view: View) {
     app.state::<TranslateState>().0.lock().unwrap().view = View { mode: Mode::Review, ..view };
     REVIEW_OPEN.store(true, Ordering::SeqCst);
     crate::refresh_dismiss_key();
+    *SHAPE.lock().unwrap() = default_shape(&Mode::Review);
     let Some(window) = window(app) else { return };
-    place(&window, Mode::Review, 0.0);
+    place(&window, &Mode::Review);
     crate::notice::make_room(app);
 }
 
@@ -112,7 +126,7 @@ pub fn follow_overlay() {
         return;
     }
     if let Some(w) = app.get_webview_window(LABEL) {
-        place(&w, Mode::Picker, *EXTRA.lock().unwrap());
+        place(&w, &Mode::Picker);
     }
 }
 
@@ -211,16 +225,12 @@ pub async fn retranslate(ctl: State<'_, Arc<Controller>>, original: String, lang
         .map_err(|e| e.to_string())?
 }
 
-/// 小窗里的候选语言列表向上展开（extra 为多出的高度）/ 收起（extra 为 0）
+/// 页面报告小窗的有效形状：小条 / 卡片，加上展开着的候选列表
 #[tauri::command]
-pub fn resize_translate_popup(app: AppHandle, extra: f64) {
-    let mode = app.state::<TranslateState>().0.lock().unwrap().view.mode.clone();
-    let extra = extra.clamp(0.0, 400.0);
-    if mode == Mode::Picker {
-        *EXTRA.lock().unwrap() = extra;
-    }
+pub fn set_translate_shape(app: AppHandle, rects: Vec<[f64; 4]>) {
+    *SHAPE.lock().unwrap() = rects;
     if let Some(w) = app.get_webview_window(LABEL) {
-        place(&w, mode, extra);
+        popup::set_shape(&w, &SHAPE.lock().unwrap());
     }
 }
 
