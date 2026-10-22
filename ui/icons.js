@@ -42,16 +42,19 @@
     E7A7: "M5 2.5a.5.5 0 0 0-1 0v4.9c0 .33.27.6.6.6h4.9a.5.5 0 0 0 0-1H5.9l3.48-3.02a4 4 0 0 1 5.25 6.04l-8.17 7.1a.5.5 0 0 0 .65.76l8.17-7.1a5 5 0 0 0-6.56-7.55L5 6.46V2.5Z", // arrow_undo
   };
 
-  const style = document.createElement("style");
-  style.textContent = "svg.glyph { width: 1em; height: 1em; vertical-align: -0.15em; fill: currentColor; }";
-  document.head.append(style);
-
+  // 尺寸和颜色直接写在 SVG 上，不插入 <style>：页面自带内联样式时，Tauri 给 CSP 加上样式的哈希，
+  // 'unsafe-inline' 随之失效，脚本插入的 <style> 会被拦下，图标变成 0×0 的黑色（深色底上就看不见了）。
+  // SVG 属性和 element.style 不受这条限制
   function glyph(code) {
     const ns = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(ns, "svg");
     svg.setAttribute("class", "glyph");
     svg.setAttribute("viewBox", "0 0 20 20");
+    svg.setAttribute("width", "1em");
+    svg.setAttribute("height", "1em");
+    svg.setAttribute("fill", "currentColor");
     svg.setAttribute("aria-hidden", "true");
+    svg.style.verticalAlign = "-0.15em";
     const path = document.createElementNS(ns, "path");
     path.setAttribute("d", PATHS[code]);
     svg.append(path);
