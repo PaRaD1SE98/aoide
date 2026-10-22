@@ -8,14 +8,19 @@ let busy = false;
 // 选语言（翻译录音时）：选定后存进设置，并把焦点还给原来的输入框
 const pickerLang = languagePicker($("picker-lang"), $("picker-list"), {
   autoWidth: true,
+  anchor: $("picker"),
   onPick: (language) => invoke("set_translate_language", { language, restoreFocus: true }).catch((e) => console.error(e)),
   onCancel: () => invoke("set_translate_language", { language: view.language, restoreFocus: true }).catch(() => {}),
-  // 候选列表向上展开，窗口跟着长高
-  onOpen: (open) => invoke("resize_translate_picker", { open }),
+  grow,
 });
 
 // 核对（翻译输出后）：换语言只记下，点「重新翻译」时生效
-const reviewLang = languagePicker($("review-lang"), $("review-list"));
+const reviewLang = languagePicker($("review-lang"), $("review-list"), { grow });
+
+/** 候选列表向上展开：小窗向上长高，列表可以超出原来的上边界（底边不动） */
+function grow(extra) {
+  invoke("resize_translate_popup", { extra }).catch(() => {});
+}
 
 function setStatus(key, vars, isError = false) {
   const el = $("status");

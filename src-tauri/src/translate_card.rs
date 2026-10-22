@@ -18,8 +18,6 @@ pub const LABEL: &str = "translate";
 /// 逻辑尺寸（含四周 8 的阴影留白），按显示器缩放
 const PICKER_WIDTH: f64 = 240.0;
 const PICKER_HEIGHT: f64 = 60.0;
-/// 候选语言列表展开时，选语言的小窗向上长出的高度
-const PICKER_LIST_HEIGHT: f64 = 232.0;
 const REVIEW_WIDTH: f64 = 480.0;
 pub const REVIEW_HEIGHT: f64 = 320.0;
 const BOTTOM_GAP: f64 = 8.0;
@@ -75,15 +73,19 @@ pub fn show_picker(app: &AppHandle, language: &str) {
     REVIEW_OPEN.store(false, Ordering::SeqCst);
     crate::refresh_dismiss_key();
     let Some(window) = window(app) else { return };
-    place_picker(&window, false);
+    place(&window, Mode::Picker, 0.0);
 }
 
-/// 贴在悬浮条正上方（悬浮条离屏幕底部 BOTTOM_GAP、高 HEIGHT；小窗四周有 8 的阴影留白）；
-/// 展开候选列表时底边不动，向上长高
-fn place_picker(window: &tauri::WebviewWindow, list_open: bool) {
-    let gap = (overlay::BOTTOM_GAP + overlay::HEIGHT) as f64 - 2.0;
-    let height = if list_open { PICKER_HEIGHT + PICKER_LIST_HEIGHT } else { PICKER_HEIGHT };
-    popup::show(window, PICKER_WIDTH, height, gap);
+/// 放置小窗。选语言的贴在悬浮条正上方（悬浮条离屏幕底部 BOTTOM_GAP、高 HEIGHT；小窗四周有 8 的阴影留白），
+/// 核对的在悬浮条的位置。extra：候选语言列表向上展开时多出的高度，底边不动、向上长高
+fn place(window: &tauri::WebviewWindow, mode: Mode, extra: f64) {
+    match mode {
+        Mode::Picker => {
+            let gap = (overlay::BOTTOM_GAP + overlay::HEIGHT) as f64 - 2.0;
+            popup::show(window, PICKER_WIDTH, PICKER_HEIGHT + extra, gap);
+        }
+        Mode::Review => popup::show(window, REVIEW_WIDTH, REVIEW_HEIGHT + extra, BOTTOM_GAP),
+    }
 }
 
 /// 翻译完成（或失败）：在悬浮条的位置显示原文和译文，供核对、修改后重新翻译
@@ -92,7 +94,7 @@ pub fn show_review(app: &AppHandle, view: View) {
     REVIEW_OPEN.store(true, Ordering::SeqCst);
     crate::refresh_dismiss_key();
     let Some(window) = window(app) else { return };
-    popup::show(&window, REVIEW_WIDTH, REVIEW_HEIGHT, BOTTOM_GAP);
+    place(&window, Mode::Review, 0.0);
     crate::notice::make_room(app);
 }
 
@@ -191,12 +193,12 @@ pub async fn retranslate(ctl: State<'_, Arc<Controller>>, original: String, lang
         .map_err(|e| e.to_string())?
 }
 
-/// 选语言的小窗展开 / 收起候选列表
+/// 小窗里的候选语言列表向上展开（extra 为多出的高度）/ 收起（extra 为 0）
 #[tauri::command]
-pub fn resize_translate_picker(app: AppHandle, open: bool) {
-    let picker = app.state::<TranslateState>().0.lock().unwrap().view.mode == Mode::Picker;
-    if let (true, Some(w)) = (picker, app.get_webview_window(LABEL)) {
-        place_picker(&w, open);
+pub fn resize_translate_popup(app: AppHandle, extra: f64) {
+    let mode = app.state::<TranslateState>().0.lock().unwrap().view.mode.clone();
+    if let Some(w) = app.get_webview_window(LABEL) {
+        place(&w, mode, extra.clamp(0.0, 400.0));
     }
 }
 
