@@ -43,6 +43,7 @@ Aoide 是一款 Windows 和 macOS 平台的语音输入应用，是 Typeless、W
 | **语音转写** | 单击 `右Alt` → 说话 → 再单击 `右Alt` | 转录 + 润色后填入当前输入框 |
 | **取消** | 录音或识别过程中按 `Esc` | 放弃本次任务，不输出任何内容 |
 | **语音修订** | 选中一段文本 → 按住 `右Alt` 再按 `Space` → 口述修改意见 → 单击 `右Alt` | LLM 按你的意见改写选中文本并替换 |
+| **语音翻译** | 按住 `右Alt` 再按 `T` → 说话 → 单击 `右Alt` | LLM 把你说的话翻译成目标语言后输入。随后弹出的小窗里显示识别出的原文：有识别错误可以直接改，点 **重新翻译** 就会替换输入框里的译文。目标语言可以在录音时于悬浮条上方选择，也可以在设置里改 |
 
 > macOS 上默认快捷键是 `右Option`，托盘图标在菜单栏里。日文（JIS）键盘上往往没有这两个键，默认改为 Windows 的 `変換` 键、macOS 的 `右Command`；语音修订是该键加 `Space`。
 
@@ -130,6 +131,8 @@ Aoide 使用 OpenAI 的语音识别格式（`POST {API 地址}/audio/transcripti
 | `revise_hotkey` | `right alt+space` | 开始语音修订。`<主快捷键>+<某键>` 表示按住主快捷键再按该键 |
 | `revise_stop_hotkey` | `right alt` | 停止语音修订（与 `hotkey` 相同时合并为单击逻辑） |
 | `cancel_hotkey` | `esc` | 取消本次录音或识别；只在任务进行中拦截该键 |
+| `translate_hotkey` | `right alt+t` | 开始语音翻译（按住主快捷键再按该键），单击主快捷键结束 |
+| `translate_language` | `English` | 语音翻译的目标语言，可填任意语言名 |
 | `speech_source` | `local` | 语音识别方式：`local`（本地模型）/ `api`（OpenAI 格式的语音识别 API） |
 | `speech_api` / `speech_api_key` / `speech_api_model` | *（空）* | `speech_source` 为 `api` 时使用的 API 地址、Key 和模型名 |
 | `model` | `sense-voice` | SenseVoice：`sense-voice`（中英日韩粤）/ `sense-voice-yue`（粤语增强）。Whisper：`tiny` / `base` / `small` / `medium` / `large-v3-turbo-q5_0` / `large-v3-turbo` / `large-v2` / `large-v3` |
@@ -151,7 +154,7 @@ Aoide 使用 OpenAI 的语音识别格式（`POST {API 地址}/audio/transcripti
 | `vocab_enabled` | `true` | 用词库纠正识别结果：反复出现的误识别直接替换，其余连同相关词条交给 LLM |
 | `learn_from_edits` | `true` | 识别结果输入后你手动改正的词，自动加入词库（并弹出可撤销的提示） |
 | `auto_check_updates` | `true` | 每天检查一次新版本并通知你；是否更新始终由你决定 |
-| `polish_prompt` / `revise_prompt` / `insert_prompt` | *（空）* | 自定义润色提示词（含 `{text}`）、修订提示词（含 `{original}`、`{instruction}`）和插入提示词（含 `{before}`、`{after}`、`{text}`），留空使用内置提示词，可在设置页编辑 |
+| `polish_prompt` / `revise_prompt` / `insert_prompt` / `translate_prompt` | *（空）* | 自定义润色提示词（含 `{text}`）、修订提示词（含 `{original}`、`{instruction}`）、插入提示词（含 `{before}`、`{after}`、`{text}`）和翻译提示词（含 `{language}`、`{text}`），留空使用内置提示词，可在设置页编辑 |
 
 词库保存在 `%APPDATA%\Aoide\vocabulary.json`。日志文件为 `%APPDATA%\Aoide\logs\app.log`（超过 1 MB 自动轮转）。macOS 上分别是 `~/Library/Application Support/Aoide/vocabulary.json` 和 `~/Library/Application Support/Aoide/logs/app.log`。日志包含你的转录内容，只保存在本机。
 

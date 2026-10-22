@@ -15,6 +15,7 @@ pub const FLAG_FN: u64 = 0x0080_0000;
 pub const CAPS_LOCK: u16 = 0x39;
 pub const KEY_COMMAND: u16 = 0x37;
 pub const KEY_DELETE: u16 = 0x33;
+pub const KEY_LEFT: u16 = 0x7B;
 
 /// 修饰键：(键码, 虚拟键码, 区分左右的标志位, 通用标志位)。fn 没有区分左右的位
 const MODIFIERS: &[(u16, u32, u64, u64)] = &[

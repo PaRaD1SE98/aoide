@@ -7,8 +7,8 @@ use crate::hotkeys::{self, HotkeyEvent};
 use crate::transcriber::Transcriber;
 use crate::tray::{self, TrayState};
 use crate::overlay::{self, Mode};
-use crate::{learned_card, notice, result_card};
-use crate::mute;
+use crate::{learned_card, notice, result_card, translate_card};
+use crate::{input, mute};
 use crate::i18n::tr;
 use crate::{clipboard, focus, learn, llm, models, trf, vocab};
 use crate::focus::Typable;
@@ -16,12 +16,14 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Default)]
 struct RecState {
     recording: bool,
     recorder: Option<Arc<Recorder>>,
+    /// 这次录音是语音翻译
+    translate: bool,
 }
 
 #[derive(Default)]
@@ -113,6 +115,7 @@ impl Controller {
             r.task.take()
         };
         drop(rev_task); // 修订录音中被取消时，停止修订的流程不会再走到，由这里结束任务
+        translate_card::close_picker(&self.app);
         mute::end();
         overlay::set(Mode::Hidden);
         self.set_tray(TrayState::Idle);
@@ -172,7 +175,7 @@ impl Controller {
         let (tx, rx) = mpsc::channel();
         hotkeys::install(tx);
         let cfg = self.config();
-        hotkeys::update(&cfg.hotkey, &cfg.revise_hotkey, &cfg.revise_stop_hotkey, &cfg.cancel_hotkey);
+        hotkeys::update(&cfg.hotkey, &cfg.revise_hotkey, &cfg.revise_stop_hotkey, &cfg.cancel_hotkey, &cfg.translate_hotkey);
 
         let me = self.clone();
         thread::spawn(move || {
@@ -184,7 +187,13 @@ impl Controller {
                         if me.rev.lock().unwrap().active {
                             thread::spawn(move || me2.stop_revision());
                         } else {
-                            thread::spawn(move || me2.toggle_recording());
+                            thread::spawn(move || me2.toggle_recording(false));
+                        }
+                    }
+                    HotkeyEvent::Translate => {
+                        // 开始翻译录音；已在录音时同单击，结束录音
+                        if !me.rev.lock().unwrap().active {
+                            thread::spawn(move || me2.toggle_recording(true));
                         }
                     }
                     HotkeyEvent::Revise => {
@@ -201,6 +210,9 @@ impl Controller {
                     HotkeyEvent::Dismiss => {
                         result_card::close(&me.app);
                         learned_card::close(&me.app);
+                        if translate_card::is_review_open() {
+                            translate_card::close(&me.app);
+                        }
                         notice::close(&me.app);
                     }
                 }
@@ -237,7 +249,7 @@ impl Controller {
     /// 设置页保存后调用：就地生效，无需重启
     pub fn apply_config(self: &Arc<Self>, new: Config) {
         let old = std::mem::replace(&mut *self.config.write().unwrap(), new.clone());
-        hotkeys::update(&new.hotkey, &new.revise_hotkey, &new.revise_stop_hotkey, &new.cancel_hotkey);
+        hotkeys::update(&new.hotkey, &new.revise_hotkey, &new.revise_stop_hotkey, &new.cancel_hotkey, &new.translate_hotkey);
         if (&old.speech_source, &old.model, &old.model_dir, &old.device) != (&new.speech_source, &new.model, &new.model_dir, &new.device) {
             self.transcriber.reset();
             self.preload_model();
@@ -265,8 +277,9 @@ impl Controller {
         }
     }
 
-    // === 普通录音 ===
-    fn toggle_recording(self: &Arc<Self>) {
+    // === 普通录音 / 语音翻译 ===
+    /// translate：开始的是语音翻译录音（结束录音时不看这个参数，按开始时的类型处理）
+    fn toggle_recording(self: &Arc<Self>, translate: bool) {
         let (rec, task) = {
             let mut s = self.rec.lock().unwrap();
             if s.recording {
@@ -277,12 +290,21 @@ impl Controller {
                     r.stop();
                 }
                 s.recording = false;
+                if s.translate {
+                    translate_card::close_picker(&self.app);
+                }
                 overlay::set(Mode::Processing);
                 return; // 转录由正在等待录音结束的那个线程处理
             }
             s.recording = true;
+            s.translate = translate;
             self.set_tray(TrayState::Recording);
-            overlay::set(Mode::Recording);
+            if translate {
+                overlay::set(Mode::Translating);
+                translate_card::show_picker(&self.app, &self.config().translate_language);
+            } else {
+                overlay::set(Mode::Recording);
+            }
             // 开始音播完才开录：提示音不会被录进去
             sound::play_sync(Cue::Start);
             let r = Recorder::start();
@@ -306,6 +328,9 @@ impl Controller {
             drop(s);
             mute::end();
             sound::play(Cue::Stop);
+            if translate {
+                translate_card::close_picker(&self.app);
+            }
             overlay::set(Mode::Processing);
         }
 
@@ -324,6 +349,11 @@ impl Controller {
             Ok(text) if text.trim().is_empty() => {
                 log::info!("Empty transcription");
                 self.set_tray(TrayState::Idle);
+            }
+            Ok(text) if translate => {
+                log::info!("Transcribed (to translate): {text}");
+                self.output_translation(text, &cfg, &task);
+                self.flash_done();
             }
             Ok(text) => {
                 log::info!("Transcribed: {text}");
@@ -347,6 +377,112 @@ impl Controller {
             }
         }
         self.finish_overlay();
+    }
+
+    // === 语音翻译 ===
+    /// 把转写结果翻译成设置的目标语言并输出，再在悬浮条的位置弹出核对小窗（原文可改，改完重新翻译）
+    fn output_translation(self: &Arc<Self>, text: String, cfg: &Config, task: &Task) {
+        let (text, glossary) = self.apply_vocab(text, cfg);
+        let language = cfg.translate_language.trim().to_string();
+        let mut view = translate_card::View { language: language.clone(), original: text.clone(), ..Default::default() };
+        if cfg.polish_api.trim().is_empty() {
+            sound::play(Cue::Error);
+            view.error = tr("翻译要用到 LLM：请先在设置的「LLM 润色与修订」里填写 API", "Translation uses the LLM: set up its API under Settings → LLM polish & edit first", "翻訳には LLM を使います。先に設定の「LLM による整形と修正」で API を入力してください").into();
+        } else {
+            overlay::set(Mode::Polishing);
+            match llm::translate_text(&text, &language, glossary.as_deref(), cfg) {
+                Ok(t) if !t.trim().is_empty() => {
+                    if task.canceled() {
+                        return;
+                    }
+                    log::info!("Translated into {language}: {t}");
+                    view.pasted = self.paste_translation(&t);
+                    view.translation = t;
+                }
+                Ok(_) => {
+                    sound::play(Cue::Error);
+                    view.error = tr("LLM 没有返回译文", "The LLM returned no translation", "LLM から訳文が返されませんでした").into();
+                }
+                Err(e) => {
+                    log::error!("Translate error: {e}");
+                    sound::play(Cue::Error);
+                    view.error = trf!("翻译失败：{e}", "Translation failed: {e}", "翻訳に失敗しました: {e}");
+                }
+            }
+        }
+        if task.canceled() {
+            return;
+        }
+        translate_card::show_review(&self.app, view);
+    }
+
+    /// 焦点在输入框时粘贴译文；没有输入框时不粘贴（译文显示在核对小窗里，由用户复制）
+    fn paste_translation(&self, text: &str) -> bool {
+        thread::sleep(Duration::from_millis(200));
+        match focus::can_type_here() {
+            Typable::Yes => clipboard::paste_text(text),
+            Typable::Unknown => clipboard::paste_text_keep(text),
+            Typable::No => false,
+        }
+    }
+
+    /// 更改翻译的目标语言并存进设置；设置页开着时通知它同步
+    pub fn set_translate_language(&self, language: &str) -> Result<(), String> {
+        let saved = {
+            let mut cfg = self.config.write().unwrap();
+            if cfg.translate_language == language {
+                return Ok(());
+            }
+            cfg.translate_language = language.to_string();
+            cfg.save()
+        };
+        saved.map_err(|e| trf!("保存失败：{e}", "Failed to save: {e}", "保存できませんでした: {e}"))?;
+        log::info!("Translate language: {language}");
+        let _ = self.app.emit("translate-language-changed", language);
+        Ok(())
+    }
+
+    /// 核对小窗里改了原文（或换了语言）后重新翻译。译文之前已粘贴进输入框时，回到那个输入框把它替换掉；
+    /// 替换不了（输入框里的文字变了）时把新译文放进剪贴板，返回 Err 说明原因
+    pub fn retranslate(self: &Arc<Self>, original: &str, language: &str) -> Result<String, String> {
+        let original = original.trim();
+        let language = language.trim();
+        if original.is_empty() {
+            return Err(tr("原文是空的", "The original text is empty", "原文が空です").into());
+        }
+        if language.is_empty() {
+            return Err(tr("请填写目标语言", "Enter a target language", "翻訳先の言語を入力してください").into());
+        }
+        self.set_translate_language(language)?;
+        let cfg = self.config();
+        let glossary = if cfg.vocab_enabled { vocab::glossary(&vocab::relevant(original)) } else { None };
+        let new = llm::translate_text(original, language, glossary.as_deref(), &cfg)
+            .map_err(|e| trf!("翻译失败：{e}", "Translation failed: {e}", "翻訳に失敗しました: {e}"))?;
+        if new.trim().is_empty() {
+            return Err(tr("LLM 没有返回译文", "The LLM returned no translation", "LLM から訳文が返されませんでした").into());
+        }
+        log::info!("Retranslated into {language}: {new}");
+
+        let state = self.app.state::<translate_card::TranslateState>();
+        let (old, pasted) = {
+            let s = state.0.lock().unwrap();
+            (s.view.translation.clone(), s.view.pasted)
+        };
+        let replaced = if pasted && !old.is_empty() {
+            translate_card::restore_target(&self.app);
+            thread::sleep(Duration::from_millis(250));
+            replace_before_caret(&old, &new)
+        } else {
+            Ok(())
+        };
+        {
+            let mut s = state.0.lock().unwrap();
+            s.view.original = original.to_string();
+            s.view.language = language.to_string();
+            s.view.translation = new.clone();
+            s.view.error.clear();
+        }
+        replaced.map(|_| new)
     }
 
     /// 词库：高置信度的误识别写法直接替换；其余与识别结果相关的词条整理成给 LLM 的说明
@@ -457,7 +593,7 @@ impl Controller {
 
     /// 聚焦在输入框时粘贴输出（粘完恢复原剪贴板），返回 true；无处可粘贴时弹出结果卡片，由用户决定复制。
     /// 判断不了时（macOS 浏览器的网页内容读不到）照样粘贴，文字留在剪贴板里，没粘上的话用户可以自己粘贴
-    fn output_text(&self, text: &str) -> bool {
+    pub(crate) fn output_text(&self, text: &str) -> bool {
         thread::sleep(Duration::from_millis(200));
         let pasted = match focus::can_type_here() {
             Typable::Yes => clipboard::paste_text(text),
@@ -577,4 +713,31 @@ impl Controller {
         self.finish_overlay();
         self.flash_done();
     }
+}
+
+/// 把光标前刚粘贴的 old 换成 new：按 Shift+← 选中 old 再粘贴。
+/// 读得到光标前的文字时先核对它确实以 old 结尾（只比较末尾一段、忽略空白），对不上就不动输入框，
+/// 把 new 放进剪贴板并返回 Err；读不到（如浏览器网页）时直接替换
+fn replace_before_caret(old: &str, new: &str) -> Result<(), String> {
+    if let Some(ctx) = focus::caret_context() {
+        let squeeze = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<Vec<_>>();
+        let before = squeeze(&ctx.before);
+        let old_tail = squeeze(old);
+        let old_tail = &old_tail[old_tail.len().saturating_sub(200)..];
+        if !before.ends_with(old_tail) {
+            log::info!("Retranslate: text before the cursor changed, copying instead of replacing");
+            clipboard::set_text(new);
+            return Err(tr(
+                "输入框里的文字已经变了，没有替换；新译文已复制，可以自己粘贴",
+                "The text in the input box has changed, so it was not replaced. The new translation is on the clipboard",
+                "入力欄のテキストが変わっているため置き換えませんでした。新しい訳文をコピーしたので、貼り付けてください",
+            )
+            .into());
+        }
+    }
+    // 光标每次移动一个字符；粘贴时的 \r\n 在输入框里也只算一个位置
+    input::select_back(old.chars().filter(|&c| c != '\r').count());
+    thread::sleep(Duration::from_millis(80));
+    clipboard::paste_text(new);
+    Ok(())
 }

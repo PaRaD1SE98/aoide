@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aoide</title>
+  <link rel="stylesheet" href="result.css">
+  <link rel="stylesheet" href="langpick.css">
+  <style>
+    /* 选语言：贴在悬浮条上方的小条，候选列表向上展开（窗口同时向上长高） */
+    body.picker { display: flex; flex-direction: column; justify-content: flex-end; }
+    body.picker .card { display: none; }
+    body.review #picker { display: none; }
+    #picker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 40px;
+      padding: 0 6px 0 12px;
+      background: rgba(24, 24, 27, 0.92);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+    }
+    #picker .ico { font: 14px "Segoe Fluent Icons", "Segoe MDL2 Assets"; color: #34d399; }
+    #picker .label { font-size: 12px; color: #c5c5c5; white-space: nowrap; }
+    #picker .combo { flex: 1; }
+    #picker input {
+      width: 100%;
+      height: 28px;
+      padding: 0 10px;
+      font: inherit;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 14px;
+      outline: none;
+    }
+    #picker input:focus { border-color: #34d399; }
+    #picker .lang-list { left: -40px; right: -6px; }
+
+    /* 核对：原文（可修改）、目标语言、译文 */
+    .body { flex: 1; display: flex; flex-direction: column; gap: 6px; padding: 2px 14px 4px; min-height: 0; }
+    .field-label { font-size: 12px; color: var(--muted); }
+    textarea {
+      flex: 1.2;
+      min-height: 54px;
+      resize: none;
+      padding: 6px 8px;
+      font: inherit;
+      color: var(--text);
+      background: var(--control);
+      border: 1px solid var(--control-stroke);
+      border-radius: 6px;
+      outline: none;
+      user-select: text;
+    }
+    textarea:focus { border-color: var(--accent); }
+    .lang-row { display: flex; align-items: center; gap: 8px; }
+    .lang-row .combo { width: 200px; }
+    .lang-row input {
+      width: 100%;
+      height: 28px;
+      padding: 0 8px;
+      font: inherit;
+      color: var(--text);
+      background: var(--control);
+      border: 1px solid var(--control-stroke);
+      border-radius: 4px;
+      outline: none;
+    }
+    .lang-row input:focus { border-color: var(--accent); }
+    #translation {
+      flex: 1;
+      min-height: 40px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      user-select: text;
+      cursor: text;
+    }
+    footer { justify-content: space-between; align-items: center; gap: 8px; }
+    #status { flex: 1; color: var(--muted); font-size: 12px; }
+    #status.error { color: #e5484d; }
+    .buttons { display: flex; gap: 8px; }
+    button:disabled { opacity: 0.5; }
+  </style>
+</head>
+<body class="picker">
+  <div id="picker">
+    <span class="ico">&#xE8C1;</span>
+    <span class="label" data-i18n="translate.into">译成</span>
+    <div class="combo">
+      <input id="picker-lang" spellcheck="false" autocomplete="off">
+      <div class="lang-list above" id="picker-list"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <header data-tauri-drag-region>
+      <img src="icon.png" alt="" data-tauri-drag-region>
+      <span data-tauri-drag-region data-i18n="translate.title">语音翻译</span>
+      <span style="flex: 1" data-tauri-drag-region></span>
+      <button id="close" class="icon-btn" title="关闭 (Esc)" aria-label="关闭" data-i18n-title="result.closeTitle" data-i18n-aria="result.close">&#xE711;</button>
+    </header>
+    <div class="body">
+      <span class="field-label" data-i18n="translate.original">识别出的原文（有识别错误可以直接修改）</span>
+      <textarea id="original" spellcheck="false"></textarea>
+      <div class="lang-row">
+        <span class="field-label" data-i18n="translate.into">译成</span>
+        <div class="combo">
+          <input id="review-lang" spellcheck="false" autocomplete="off">
+          <div class="lang-list below" id="review-list"></div>
+        </div>
+      </div>
+      <div id="translation"></div>
+    </div>
+    <footer>
+      <span id="status"></span>
+      <div class="buttons">
+        <button id="copy" class="btn" data-i18n="translate.copy">复制译文</button>
+        <button id="retranslate" class="btn accent" data-i18n="translate.retranslate">重新翻译</button>
+      </div>
+    </footer>
+  </div>
+  <script src="icons.js"></script>
+  <script src="i18n.js"></script>
+  <script src="langpick.js"></script>
+  <script src="translate.js"></script>
+</body>
+</html>

@@ -5,7 +5,7 @@
 //! 和结果卡片、词条入库提示一样是不抢焦点的 WebView 小窗；底部已有这两种小窗时放在它们上方
 
 use crate::platform::popup;
-use crate::{learned_card, result_card};
+use crate::{learned_card, result_card, translate_card};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
@@ -89,9 +89,11 @@ pub fn show(app: &AppHandle, message: &str) {
     place(&window);
 }
 
-/// 放到输入焦点所在屏幕的底部中间；那里已有结果卡片或词条提示时，放在它上方
+/// 放到输入焦点所在屏幕的底部中间；那里已有翻译核对、结果卡片或词条提示时，放在它上方
 fn place(window: &tauri::WebviewWindow) {
-    let below = if result_card::is_open() {
+    let below = if translate_card::is_review_open() {
+        translate_card::REVIEW_HEIGHT
+    } else if result_card::is_open() {
         result_card::HEIGHT
     } else if learned_card::is_open() {
         learned_card::HEIGHT

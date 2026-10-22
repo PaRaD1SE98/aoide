@@ -12,6 +12,7 @@ let downloading = null;
 let systemLanguage = "zh";
 let defaultPrompts = {};
 let defaults = null; // 默认值 { config, autostart }
+let translateLanguage = { set() {} }; // 翻译目标语言的选择框（bind 时创建）
 
 // === 恢复默认 ===
 const getValue = (key) => (key === "autostart" ? state.autostart : state.config[key]);
@@ -159,6 +160,7 @@ function render() {
     el.value = c[el.dataset.prompt] || defaultPrompts[el.dataset.prompt];
   });
   $("model-dir").placeholder = defaultModelDir;
+  translateLanguage.set(c.translate_language);
   renderModels();
   renderSource();
   updateResetButtons();
@@ -210,6 +212,7 @@ function applyLanguage() {
   applyI18n(resolveLang(state.config.ui_language));
   renderModels();
   renderSource();
+  translateLanguage.set(state.config.translate_language); // 语言名按新的界面语言显示
   renderVocab();
   renderPermissions();
   setUpdateStatus(updateStatus.key, updateStatus.vars, updateStatus.cls);
@@ -434,6 +437,22 @@ function bind() {
     el.addEventListener("change", () => save());
   });
 
+  // 翻译目标语言：从列表选或直接填写（见 langpick.js）
+  translateLanguage = languagePicker($("translate-language"), $("translate-language-list"), {
+    onPick: (language) => {
+      state.config.translate_language = language;
+      scheduleSave();
+    },
+  });
+  translateLanguage.set(state.config.translate_language);
+  // 在语音翻译的小窗里换了语言：同步到界面和已保存的状态
+  listen("translate-language-changed", ({ payload }) => {
+    state.config.translate_language = payload;
+    saved.config.translate_language = payload;
+    translateLanguage.set(payload);
+    updateResetButtons();
+  });
+
   $("update-check").addEventListener("click", checkUpdate);
   $("update-install").addEventListener("click", installUpdate);
   $("update-notes").addEventListener("click", () => update && invoke("open_url", { url: update.url }));
@@ -570,6 +589,7 @@ async function init() {
   PLATFORM = s.platform;
   defaultPrompts = {
     polish_prompt: s.default_polish_prompt,
+    translate_prompt: s.default_translate_prompt,
     revise_prompt: s.default_revise_prompt,
     insert_prompt: s.default_insert_prompt,
   };

@@ -16,6 +16,10 @@ pub struct Config {
     pub revise_stop_hotkey: String,
     /// 取消本次任务（录音或识别中）；只在任务进行中拦截该键
     pub cancel_hotkey: String,
+    /// 开始语音翻译（说完后用 LLM 翻译成 translate_language 再输出）；写法同 revise_hotkey，用主快捷键结束
+    pub translate_hotkey: String,
+    /// 翻译的目标语言（任意语言名称，原样填进翻译提示词）
+    pub translate_language: String,
     /// 语音识别方式：local（本地模型）/ api（OpenAI 格式的语音识别 API，见 speech_api.rs）
     pub speech_source: String,
     /// 语音识别 API 的地址，如 https://api.openai.com/v1
@@ -66,6 +70,8 @@ pub struct Config {
     pub revise_prompt: String,
     /// 自定义插入提示词（光标前后已有文字时使用），{before} / {after} 为光标前后文字、{text} 为转写结果；留空使用内置
     pub insert_prompt: String,
+    /// 自定义翻译提示词，{language} 为目标语言、{text} 为转写结果；留空使用内置
+    pub translate_prompt: String,
 }
 
 /// 默认的主快捷键：选一个紧挨空格、大拇指够得着、平时又很少单独按的键。
@@ -89,6 +95,8 @@ impl Default for Config {
             revise_hotkey: format!("{}+space", default_hotkey()),
             revise_stop_hotkey: default_hotkey().into(),
             cancel_hotkey: "esc".into(),
+            translate_hotkey: format!("{}+t", default_hotkey()),
+            translate_language: "English".into(),
             speech_source: "local".into(),
             speech_api: String::new(),
             speech_api_key: String::new(),
@@ -116,6 +124,7 @@ impl Default for Config {
             polish_prompt: String::new(),
             revise_prompt: String::new(),
             insert_prompt: String::new(),
+            translate_prompt: String::new(),
         }
     }
 }

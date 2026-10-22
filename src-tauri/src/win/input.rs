@@ -1,8 +1,8 @@
 //! 模拟键盘输入（Windows：SendInput）
 
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
-    KEYEVENTF_UNICODE, VIRTUAL_KEY, VK_BACK, VK_CONTROL,
+    SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_EXTENDEDKEY,
+    KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, VIRTUAL_KEY, VK_BACK, VK_CONTROL, VK_LEFT, VK_SHIFT,
 };
 
 /// 写在 Aoide 自己模拟的按键上（dwExtraInfo），键盘钩子据此跳过它们（见 hook.rs）。
@@ -39,6 +39,18 @@ pub fn shortcut(letter: char) {
 /// 等用户松开修饰键：Windows 上不需要（钩子吞掉了热键，模拟的 Ctrl+C 不受影响）
 pub fn wait_modifiers_released(_timeout: std::time::Duration) -> bool {
     true
+}
+
+/// 按住 Shift 按 n 次 ←：从光标往前选中 n 个字符（重新翻译时选中之前粘贴的译文）。
+/// 方向键要带「扩展键」标志，否则会被当成小键盘上的 4，NumLock 打开时 Shift 会失效
+pub fn select_back(n: usize) {
+    let mut inputs = vec![key(VK_SHIFT, 0, KEYBD_EVENT_FLAGS(0))];
+    for _ in 0..n {
+        inputs.push(key(VK_LEFT, 0, KEYEVENTF_EXTENDEDKEY));
+        inputs.push(key(VK_LEFT, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP));
+    }
+    inputs.push(key(VK_SHIFT, 0, KEYEVENTF_KEYUP));
+    send(&inputs);
 }
 
 pub fn backspace() {
