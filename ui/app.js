@@ -130,8 +130,9 @@ function renderModelStatus() {
   $("model-desc").textContent = parts.join(" · ");
   $("download-btn").hidden = m.downloaded || downloading !== null;
 
-  // SenseVoice 固定在 CPU 上运行
+  // SenseVoice 固定在 CPU 上运行（速度已足够快），没有可选的，整项隐藏；Whisper 才显示
   const cpuOnly = m.engine === "sense_voice";
+  $("device-seg").closest(".card").hidden = cpuOnly;
   $("device-seg").classList.toggle("disabled", cpuOnly);
   $("device-seg").querySelectorAll("button").forEach((b) =>
     b.classList.toggle("on", b.dataset.value === (cpuOnly ? "cpu" : state.config.device)));
