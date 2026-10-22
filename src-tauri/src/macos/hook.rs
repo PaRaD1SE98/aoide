@@ -54,7 +54,13 @@ pub fn install() {
             let events = 1u64 << KEY_DOWN | 1 << KEY_UP | 1 << FLAGS_CHANGED;
             let mut warned = false;
             let tap = loop {
-                let tap = CGEventTapCreate(SESSION_EVENT_TAP, HEAD_INSERT, TAP_DEFAULT, events, tap_proc, std::ptr::null_mut());
+                // 没有辅助功能权限时不去创建：创建失败会让系统弹出授权提示，和启动时按顺序弹出的提示撞在一起
+                // （见 permissions.rs 的 request_at_startup）。授权后再创建
+                let tap = if super::accessibility_trusted(false) {
+                    CGEventTapCreate(SESSION_EVENT_TAP, HEAD_INSERT, TAP_DEFAULT, events, tap_proc, std::ptr::null_mut())
+                } else {
+                    std::ptr::null()
+                };
                 if !tap.is_null() {
                     break tap;
                 }
