@@ -64,6 +64,8 @@ pub struct Config {
     pub learn_from_edits: bool,
     /// 定期检查新版本（发现后通知，由用户一键更新）
     pub auto_check_updates: bool,
+    /// 自定义输出风格提示词（润色、插入、修订、翻译共用的排版和措辞规则）；留空使用内置提示词
+    pub style_prompt: String,
     /// 自定义润色提示词，{text} 为转写结果；留空使用内置提示词
     pub polish_prompt: String,
     /// 自定义修订提示词，{original} 为选中原文、{instruction} 为修改意见；留空使用内置提示词
@@ -121,6 +123,7 @@ impl Default for Config {
             vocab_enabled: true,
             learn_from_edits: true,
             auto_check_updates: true,
+            style_prompt: String::new(),
             polish_prompt: String::new(),
             revise_prompt: String::new(),
             insert_prompt: String::new(),

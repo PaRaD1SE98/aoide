@@ -588,6 +588,7 @@ async function init() {
   systemLanguage = s.system_language;
   PLATFORM = s.platform;
   defaultPrompts = {
+    style_prompt: s.default_style_prompt,
     polish_prompt: s.default_polish_prompt,
     translate_prompt: s.default_translate_prompt,
     revise_prompt: s.default_revise_prompt,

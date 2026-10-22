@@ -141,6 +141,7 @@ struct SettingsPayload {
     /// 各项设置的默认值（设置页「恢复默认」用）
     defaults: Config,
     /// 内置提示词（自定义为空时显示和使用）
+    default_style_prompt: &'static str,
     default_polish_prompt: &'static str,
     default_revise_prompt: &'static str,
     default_insert_prompt: &'static str,
@@ -160,6 +161,7 @@ fn get_settings(app: AppHandle, ctl: State<Arc<Controller>>) -> SettingsPayload 
         platform: std::env::consts::OS,
         system_language: i18n::system_language(),
         defaults: Config::default(),
+        default_style_prompt: llm::STYLE_PROMPT,
         default_polish_prompt: llm::POLISH_PROMPT,
         default_revise_prompt: llm::REVISE_PROMPT,
         default_insert_prompt: llm::INSERT_PROMPT,

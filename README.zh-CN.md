@@ -154,6 +154,7 @@ Aoide 使用 OpenAI 的语音识别格式（`POST {API 地址}/audio/transcripti
 | `vocab_enabled` | `true` | 用词库纠正识别结果：反复出现的误识别直接替换，其余连同相关词条交给 LLM |
 | `learn_from_edits` | `true` | 识别结果输入后你手动改正的词，自动加入词库（并弹出可撤销的提示） |
 | `auto_check_updates` | `true` | 每天检查一次新版本并通知你；是否更新始终由你决定 |
+| `style_prompt` | *（空）* | 自定义输出风格：润色、插入、修订、翻译共用的排版（分点、分段）和措辞规则，留空使用内置；下面各任务的提示词只写各自的任务 |
 | `polish_prompt` / `revise_prompt` / `insert_prompt` / `translate_prompt` | *（空）* | 自定义润色提示词（含 `{text}`）、修订提示词（含 `{original}`、`{instruction}`）、插入提示词（含 `{before}`、`{after}`、`{text}`）和翻译提示词（含 `{language}`、`{text}`），留空使用内置提示词，可在设置页编辑 |
 
 词库保存在 `%APPDATA%\Aoide\vocabulary.json`。日志文件为 `%APPDATA%\Aoide\logs\app.log`（超过 1 MB 自动轮转）。macOS 上分别是 `~/Library/Application Support/Aoide/vocabulary.json` 和 `~/Library/Application Support/Aoide/logs/app.log`。日志包含你的转录内容，只保存在本机。

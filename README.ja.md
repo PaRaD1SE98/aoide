@@ -154,6 +154,7 @@ Aoide は OpenAI の音声認識形式（`POST {API ベース URL}/audio/transcr
 | `vocab_enabled` | `true` | 辞書で文字起こし結果を補正する。繰り返し出る誤認識はそのまま置き換え、それ以外は関連する項目と一緒に LLM に渡します |
 | `learn_from_edits` | `true` | 入力後に手動で直した言葉を辞書に追加する（元に戻せる通知付き） |
 | `auto_check_updates` | `true` | 1 日 1 回新しいバージョンを確認して知らせる。更新するかどうかは常にユーザーが決めます |
+| `style_prompt` | *（空）* | 出力スタイルのカスタムプロンプト：整形・挿入・音声で修正・翻訳に共通する体裁（箇条書き、段落）と言葉づかいのルール。空欄 = 内蔵。以下の各プロンプトにはそれぞれの作業だけを書きます |
 | `polish_prompt` / `revise_prompt` / `insert_prompt` / `translate_prompt` | *（空）* | 整形（`{text}`）、音声で修正（`{original}`、`{instruction}`）、文脈に合わせた挿入（`{before}`、`{after}`、`{text}`）、音声翻訳（`{language}`、`{text}`）用のカスタム LLM プロンプト。空欄 = 内蔵のプロンプト。設定画面で編集できます |
 
 辞書は `%APPDATA%\Aoide\vocabulary.json` に保存されます。ログファイルは `%APPDATA%\Aoide\logs\app.log`（1 MB を超えるとローテーション）です。macOS ではそれぞれ `~/Library/Application Support/Aoide/vocabulary.json` と `~/Library/Application Support/Aoide/logs/app.log` です。ログには文字起こしの内容が含まれ、手元のパソコンにだけ保存されます。

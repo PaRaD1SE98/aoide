@@ -154,6 +154,7 @@ Settings are stored in `%APPDATA%\Aoide\config.json` (macOS: `~/Library/Applicat
 | `vocab_enabled` | `true` | Correct transcripts with your vocabulary: repeated misrecognitions are replaced directly, others go to the LLM with the related entries |
 | `learn_from_edits` | `true` | When you correct a word after it is typed, add the correction to the vocabulary (with an Undo notice) |
 | `auto_check_updates` | `true` | Check for a new version once a day and notify you; updating is always your choice |
+| `style_prompt` | *(empty)* | Custom output style shared by polishing, insertion, voice edit and translation: how the text is laid out (lists, paragraphs) and worded. Empty = built-in. The task prompts below only describe their own task |
 | `polish_prompt` / `revise_prompt` / `insert_prompt` / `translate_prompt` | *(empty)* | Custom LLM prompts for polishing (`{text}`), voice edit (`{original}`, `{instruction}`), context-aware insertion (`{before}`, `{after}`, `{text}`) and voice translation (`{language}`, `{text}`). Empty = built-in prompt. Edit them in Settings |
 
 The vocabulary is stored in `%APPDATA%\Aoide\vocabulary.json`. The log file is `%APPDATA%\Aoide\logs\app.log` (rotated at 1 MB). On macOS they are `~/Library/Application Support/Aoide/vocabulary.json` and `~/Library/Application Support/Aoide/logs/app.log`. It contains your transcripts and stays on your machine.
