@@ -170,6 +170,7 @@ fn on_frame(hwnd: HWND, v: &mut View) {
         let mon = focus_monitor();
         if mon.0 as isize != v.monitor {
             place(v, mon);
+            overlay::moved_screen();
         }
     }
     render(hwnd, v);

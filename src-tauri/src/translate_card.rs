@@ -11,7 +11,7 @@ use crate::overlay;
 use crate::platform::popup;
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
 pub const LABEL: &str = "translate";
@@ -56,6 +56,10 @@ pub struct TranslateState(pub Mutex<Session>);
 
 /// 核对小窗开着（提示小窗据此放到它上方，Esc 用来关闭它）
 static REVIEW_OPEN: AtomicBool = AtomicBool::new(false);
+/// 悬浮条换屏时（在悬浮窗线程里）要用来找到小窗
+static APP: OnceLock<AppHandle> = OnceLock::new();
+/// 候选语言列表展开时小窗多出的高度，跟随悬浮条换屏时保持
+static EXTRA: Mutex<f64> = Mutex::new(0.0);
 
 pub fn is_review_open() -> bool {
     REVIEW_OPEN.load(Ordering::SeqCst)
@@ -63,6 +67,9 @@ pub fn is_review_open() -> bool {
 
 /// 翻译录音开始：在悬浮条上方显示目标语言
 pub fn show_picker(app: &AppHandle, language: &str) {
+    let _ = APP.set(app.clone());
+    overlay::on_screen_change(follow_overlay);
+    *EXTRA.lock().unwrap() = 0.0;
     let target = popup::foreground();
     {
         let state = app.state::<TranslateState>();
@@ -96,6 +103,17 @@ pub fn show_review(app: &AppHandle, view: View) {
     let Some(window) = window(app) else { return };
     place(&window, Mode::Review, 0.0);
     crate::notice::make_room(app);
+}
+
+/// 悬浮条跟随输入焦点换到另一块屏幕：选语言的小窗贴着它一起过去（两者按同一个焦点屏幕定位）
+pub fn follow_overlay() {
+    let Some(app) = APP.get() else { return };
+    if is_review_open() || app.state::<TranslateState>().0.lock().unwrap().view.mode != Mode::Picker {
+        return;
+    }
+    if let Some(w) = app.get_webview_window(LABEL) {
+        place(&w, Mode::Picker, *EXTRA.lock().unwrap());
+    }
 }
 
 /// 收起选语言的小窗（翻译录音被取消时）
@@ -197,8 +215,12 @@ pub async fn retranslate(ctl: State<'_, Arc<Controller>>, original: String, lang
 #[tauri::command]
 pub fn resize_translate_popup(app: AppHandle, extra: f64) {
     let mode = app.state::<TranslateState>().0.lock().unwrap().view.mode.clone();
+    let extra = extra.clamp(0.0, 400.0);
+    if mode == Mode::Picker {
+        *EXTRA.lock().unwrap() = extra;
+    }
     if let Some(w) = app.get_webview_window(LABEL) {
-        place(&w, mode, extra.clamp(0.0, 400.0));
+        place(&w, mode, extra);
     }
 }
 

@@ -145,8 +145,12 @@ fn run() {
         if overlay::current() != overlay::Mode::Hidden && last_follow.elapsed().as_millis() >= FOLLOW_MS {
             last_follow = Instant::now();
             if let Some(p) = place_at_focus() {
-                if place.as_ref().is_none_or(|old| old.screen != p.screen) {
+                let moved = place.as_ref().is_some_and(|old| old.screen != p.screen);
+                if moved || place.is_none() {
                     place = Some(p);
+                }
+                if moved {
+                    overlay::moved_screen();
                 }
             }
         }
