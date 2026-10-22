@@ -129,10 +129,10 @@ Aoide 使用 OpenAI 的语音识别格式（`POST {API 地址}/audio/transcripti
 | `ui_language` | `auto` | 显示语言：`auto`（跟随系统）/ `zh` / `en` / `ja` |
 | `hotkey` | `right alt` | 开始/停止录音（单击触发）。macOS 上默认为 `right option`；日文（JIS）键盘上 Windows 默认为 `convert`（変換），macOS 默认为 `right command` |
 | `revise_hotkey` | `right alt+space` | 开始语音修订。`<主快捷键>+<某键>` 表示按住主快捷键再按该键 |
-| `revise_stop_hotkey` | `right alt` | 停止语音修订（与 `hotkey` 相同时合并为单击逻辑） |
-| `cancel_hotkey` | `esc` | 取消本次录音或识别；只在任务进行中拦截该键 |
 | `translate_hotkey` | `right alt+t` | 开始语音翻译（按住主快捷键再按该键），单击主快捷键结束 |
 | `translate_language` | `English` | 语音翻译的目标语言，可填任意语言名 |
+| `revise_stop_hotkey` | `right alt` | 停止语音修订（与 `hotkey` 相同时合并为单击逻辑） |
+| `cancel_hotkey` | `esc` | 取消本次录音或识别；只在任务进行中拦截该键 |
 | `speech_source` | `local` | 语音识别方式：`local`（本地模型）/ `api`（OpenAI 格式的语音识别 API） |
 | `speech_api` / `speech_api_key` / `speech_api_model` | *（空）* | `speech_source` 为 `api` 时使用的 API 地址、Key 和模型名 |
 | `model` | `sense-voice` | SenseVoice：`sense-voice`（中英日韩粤）/ `sense-voice-yue`（粤语增强）。Whisper：`tiny` / `base` / `small` / `medium` / `large-v3-turbo-q5_0` / `large-v3-turbo` / `large-v2` / `large-v3` |

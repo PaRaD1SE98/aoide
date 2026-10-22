@@ -129,10 +129,10 @@ Settings are stored in `%APPDATA%\Aoide\config.json` (macOS: `~/Library/Applicat
 | `ui_language` | `auto` | Display language: `auto` (follow the system) / `zh` / `en` / `ja` |
 | `hotkey` | `right alt` | Start/stop recording (triggered on tap). The macOS default is `right option`; on Japanese (JIS) keyboards it is `convert` (変換) on Windows and `right command` on macOS |
 | `revise_hotkey` | `right alt+space` | Start a voice edit. `<main hotkey>+<key>` means: hold the main hotkey, then press the key |
-| `revise_stop_hotkey` | `right alt` | Stop a voice edit (merged into the tap logic when equal to `hotkey`) |
-| `cancel_hotkey` | `esc` | Cancel the current recording or transcription. Only intercepted while a task is in progress |
 | `translate_hotkey` | `right alt+t` | Start a voice translation (hold the main hotkey, then press the key); tap the main hotkey to finish |
 | `translate_language` | `English` | Target language of voice translation; any language name |
+| `revise_stop_hotkey` | `right alt` | Stop a voice edit (merged into the tap logic when equal to `hotkey`) |
+| `cancel_hotkey` | `esc` | Cancel the current recording or transcription. Only intercepted while a task is in progress |
 | `speech_source` | `local` | Speech recognition: `local` (local model) / `api` (OpenAI-compatible speech-to-text API) |
 | `speech_api` / `speech_api_key` / `speech_api_model` | *(empty)* | API base, key and model name used when `speech_source` is `api` |
 | `model` | `sense-voice` | SenseVoice: `sense-voice` (zh/en/ja/ko/yue) / `sense-voice-yue` (Cantonese-tuned). Whisper: `tiny` / `base` / `small` / `medium` / `large-v3-turbo-q5_0` / `large-v3-turbo` / `large-v2` / `large-v3` |
