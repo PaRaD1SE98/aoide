@@ -61,6 +61,21 @@ pub fn set_deadline(deadline: Option<Instant>) {
     *DEADLINE.lock().unwrap() = deadline;
 }
 
+/// 悬浮条换屏时要调用的函数（贴在它上方的小窗用来跟过去，见 translate_card.rs）。
+/// 用登记回调而不是直接调用：悬浮条的代码不牵进 WebView 窗口的代码（单元测试程序没有加载它们需要的系统组件）
+static ON_SCREEN_CHANGE: std::sync::OnceLock<fn()> = std::sync::OnceLock::new();
+
+pub fn on_screen_change(f: fn()) {
+    let _ = ON_SCREEN_CHANGE.set(f);
+}
+
+/// 悬浮条跟随输入焦点换到了另一块屏幕（各平台的悬浮窗线程调用）
+pub(crate) fn moved_screen() {
+    if let Some(f) = ON_SCREEN_CHANGE.get() {
+        f();
+    }
+}
+
 /// 当前要求的状态
 pub(crate) fn current() -> Mode {
     *MODE.lock().unwrap()
