@@ -1,0 +1,29 @@
+/* 所有窗口共用的滚动条样式：每个页面都引用这个文件，页面里任何滚动区域（窗口、列表、文本框）都会自动套用。
+   仿 Windows 11：没有箭头和轨道，细的圆角滑块，鼠标移上去变粗。
+   透明边框留出边距，background-clip 让颜色只画在边框以内 */
+:root {
+  --scroll-thumb: rgba(0, 0, 0, 0.26);
+  --scroll-thumb-hover: rgba(0, 0, 0, 0.45);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --scroll-thumb: rgba(255, 255, 255, 0.22);
+    --scroll-thumb-hover: rgba(255, 255, 255, 0.42);
+  }
+}
+
+::-webkit-scrollbar { width: 12px; height: 12px; background: transparent; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+::-webkit-scrollbar-thumb {
+  min-height: 40px;
+  background-color: var(--scroll-thumb);
+  background-clip: padding-box;
+  border: 4px solid transparent;
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active {
+  background-color: var(--scroll-thumb-hover);
+  border-width: 3px;
+}
