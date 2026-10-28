@@ -118,6 +118,23 @@ pub const TRANSLATE_PROMPT: &str = r#"TASK: Below is a raw speech-to-text transc
 {text}
 </transcript>"#;
 
+/// 连续短语音（见 controller.rs 的 earlier_attempts）：接在润色 / 插入的任务提示词后面，附上用户之前几次的识别结果。
+/// 用户多半是因为识别错了才重说，几次的结果对照着看，更容易推断出想说的词
+const EARLIER_PROMPT: &str = r#"NOTE: Just before this, the user dictated something short that came out as the transcript(s) below, oldest first. If the current transcript sounds like the same words said again, the user is probably repeating themselves because speech recognition got it wrong, and it may have got this one wrong too. Compare the attempts, including how the words sound, and write what the user most likely meant to say. If the current transcript is about something else, ignore the earlier ones. Either way, output only the text for the current dictation.
+
+<earlier>
+{earlier}
+</earlier>"#;
+
+/// 有之前几次的识别结果时，接在任务提示词后面（见 EARLIER_PROMPT）
+fn with_earlier(prompt: String, earlier: &[String]) -> String {
+    if earlier.is_empty() {
+        return prompt;
+    }
+    let lines: Vec<String> = earlier.iter().map(|t| t.split_whitespace().collect::<Vec<_>>().join(" ")).collect();
+    format!("{prompt}\n\n{}", EARLIER_PROMPT.replace("{earlier}", &lines.join("\n")))
+}
+
 /// 词库纠正提示词：识别结果较短、不值得整段润色时，只按词库修正误识别的词
 const CORRECT_PROMPT: &str = r#"Below is a speech recognition result. Using only the user vocabulary, fix words in it that were misrecognized, and leave everything else (punctuation, tone and wording included) exactly as it is. If nothing needs fixing, output the text unchanged. Output only the result, with no explanation, quotes or labels.
 
@@ -286,12 +303,13 @@ fn style_system(glossary: Option<&str>, cfg: &Config) -> String {
 }
 
 /// 根据光标前后文，把口述内容整理成要插入光标处的文字；调用失败返回 Err，由调用方决定回退。
-/// glossary：相关的用户词库（见 vocab::glossary）
-pub fn insert_text(text: &str, before: &str, after: &str, glossary: Option<&str>, cfg: &Config) -> Result<String, String> {
+/// earlier：连续短语音时之前几次的识别结果（见 EARLIER_PROMPT）；glossary：相关的用户词库（见 vocab::glossary）
+pub fn insert_text(text: &str, before: &str, after: &str, earlier: &[String], glossary: Option<&str>, cfg: &Config) -> Result<String, String> {
     let prompt = prompt_or_default(&cfg.insert_prompt, INSERT_PROMPT)
         .replace("{before}", before)
         .replace("{after}", after)
         .replace("{text}", text);
+    let prompt = with_earlier(prompt, earlier);
     let out = Api::from(cfg)?.call_with(Some(&style_system(glossary, cfg)), &prompt)?;
     let out = strip_context_echo(&out, before, after);
     if out.is_empty() {
@@ -370,12 +388,13 @@ pub fn fit_spacing(text: &str, before: &str, after: &str) -> String {
     out
 }
 
-/// 润色转录文本；调用失败返回 Err，由调用方决定回退
-pub fn polish_text(text: &str, glossary: Option<&str>, cfg: &Config) -> Result<String, String> {
+/// 润色转录文本；调用失败返回 Err，由调用方决定回退。earlier：连续短语音时之前几次的识别结果（见 EARLIER_PROMPT）
+pub fn polish_text(text: &str, earlier: &[String], glossary: Option<&str>, cfg: &Config) -> Result<String, String> {
     if text.trim().is_empty() {
         return Ok(text.to_string());
     }
-    Api::from(cfg)?.call_with(Some(&style_system(glossary, cfg)), &prompt_or_default(&cfg.polish_prompt, POLISH_PROMPT).replace("{text}", text))
+    let prompt = with_earlier(prompt_or_default(&cfg.polish_prompt, POLISH_PROMPT).replace("{text}", text), earlier);
+    Api::from(cfg)?.call_with(Some(&style_system(glossary, cfg)), &prompt)
 }
 
 /// 把转写结果翻译成 language；调用失败返回 Err
@@ -426,6 +445,21 @@ mod tests {
     /// 手动运行（会用本机配置里的 LLM API 发几条示例请求）：
     /// cargo test --lib insert_with_real_llm -- --ignored --nocapture
     #[test]
+    fn appends_earlier_attempts() {
+        assert_eq!(with_earlier("TASK".into(), &[]), "TASK");
+        let p = with_earlier("TASK".into(), &["思维到图".into(), "四维导图
+吧".into()]);
+        assert!(p.starts_with("TASK
+
+NOTE:"), "{p}");
+        // 每次一行，多行的结果并成一行
+        assert!(p.ends_with("<earlier>
+思维到图
+四维导图 吧
+</earlier>"), "{p}");
+    }
+
+    #[test]
     #[ignore]
     fn insert_with_real_llm() {
         let cfg = Config::load();
@@ -437,7 +471,7 @@ mod tests {
         ];
         for (before, after, spoken) in cases {
             let start = std::time::Instant::now();
-            match insert_text(spoken, before, after, None, &cfg) {
+            match insert_text(spoken, before, after, &[], None, &cfg) {
                 Ok(insert) => println!("[{:?}] insert={insert:?}\n    result={:?}", start.elapsed(), format!("{before}{insert}{after}")),
                 Err(e) => println!("error: {e}"),
             }
@@ -457,7 +491,7 @@ mod tests {
         ];
         for text in cases {
             let start = std::time::Instant::now();
-            match insert_text(text, before, "", None, &cfg) {
+            match insert_text(text, before, "", &[], None, &cfg) {
                 Ok(insert) => println!("[{:?}]\n{before}{insert}\n----------", start.elapsed()),
                 Err(e) => println!("error: {e}"),
             }
@@ -479,10 +513,32 @@ mod tests {
         ];
         for text in cases {
             let start = std::time::Instant::now();
-            match polish_text(text, None, &cfg) {
+            match polish_text(text, &[], None, &cfg) {
                 Ok(out) => println!("[{:?}]\n{out}\n----------", start.elapsed()),
                 Err(e) => println!("error: {e}"),
             }
+        }
+    }
+
+    /// 手动运行（会用本机配置里的 LLM API）：连续短语音，附上之前几次的识别结果
+    /// cargo test --lib repeat_with_real_llm -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn repeat_with_real_llm() {
+        let cfg = Config::load();
+        let cases: [(&str, &[&str]); 5] = [
+            ("四维导图怎么画", &["思维到图怎么画"]),
+            ("帮我打开get hub", &["帮我打开geitar"]),
+            ("Cloud扣的很好用", &["克劳德code很好用", "cloud code很好用"]),
+            ("我们用套瑞写的", &["我们用tori写的"]),
+            ("今天天气不错", &["帮我打开geitar"]),
+        ];
+        for (text, earlier) in cases {
+            let earlier: Vec<String> = earlier.iter().map(|s| s.to_string()).collect();
+            let start = std::time::Instant::now();
+            let out = polish_text(text, &earlier, None, &cfg);
+            println!("[{:?}] {earlier:?} + {text:?}
+    -> {out:?}", start.elapsed());
         }
     }
 

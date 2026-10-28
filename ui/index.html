@@ -411,6 +411,16 @@
           </div>
         </div>
         <div class="card">
+          <span class="ico">&#xE895;</span>
+          <div class="text">
+            <div class="title" data-i18n="repeat.title">连续短语音时润色</div>
+            <div class="desc" data-i18n="repeat.desc">上一句短语音出结果后这么多秒内又说了一句短语音，就把这次也交给 LLM，并附上前几次的识别结果，方便纠正识别错误；填 0 关闭</div>
+          </div>
+          <div class="control">
+            <label class="num"><input type="number" min="0" max="600" data-key="polish_repeat_seconds" data-type="int"><span data-i18n="unit.sec">秒</span></label>
+          </div>
+        </div>
+        <div class="card">
           <span class="ico">&#xE8C3;</span>
           <div class="text">
             <div class="title" data-i18n="insert.title">按上下文插入</div>
