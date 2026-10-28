@@ -15,7 +15,7 @@ use crate::focus::Typable;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex, RwLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Default)]
@@ -65,6 +65,8 @@ pub struct Controller {
     epoch: AtomicU64,
     /// 进行中的任务数
     in_flight: AtomicUsize,
+    /// 连着的几次短语音：(出结果的时间, 识别结果)，最近的在最后（见 earlier_attempts）
+    recent_short: Mutex<Vec<(Instant, String)>>,
 }
 
 impl Controller {
@@ -77,6 +79,7 @@ impl Controller {
             rev: Mutex::default(),
             epoch: AtomicU64::new(0),
             in_flight: AtomicUsize::new(0),
+            recent_short: Mutex::default(),
         })
     }
 
@@ -318,13 +321,14 @@ impl Controller {
         };
 
         // 锁已释放，等待录音结束（第二次按键可以进入上面的分支停止）
+        let started = Instant::now();
         let cfg = self.config();
         if cfg.mute_while_recording {
             mute::begin(); // 在开始提示音之后静音，提示音本身也不受影响
         }
         // 悬浮条在最后 20 秒显示倒计时
         let limit = Duration::from_secs(cfg.max_duration.into());
-        overlay::set_deadline(Some(std::time::Instant::now() + limit));
+        overlay::set_deadline(Some(Instant::now() + limit));
         let stopped_by_user = rec.wait(limit);
         overlay::set_deadline(None);
         if !stopped_by_user && !task.canceled() {
@@ -368,14 +372,24 @@ impl Controller {
             Ok(text) => {
                 log::info!("Transcribed: {text}");
                 let (text, glossary) = self.apply_vocab(text, &cfg);
-                let text = match self.caret_context(&cfg) {
-                    Some(ctx) => self.insert_in_context(text, seconds, &ctx, glossary.as_deref(), &cfg),
-                    None => self.maybe_polish(text, seconds, glossary.as_deref(), &cfg),
+                let ctx = self.caret_context(&cfg);
+                let short = match &ctx {
+                    Some(_) => too_short(&text, seconds, cfg.insert_min_seconds, cfg.insert_min_chars),
+                    None => too_short(&text, seconds, cfg.polish_min_seconds, cfg.polish_min_chars),
+                };
+                // 连续短语音：前面连着几次也是短语音时，这次也交给 LLM，并附上之前的识别结果
+                let earlier = if short.is_some() { self.earlier_attempts(started, &cfg) } else { Vec::new() };
+                let transcript = short.is_some().then(|| text.clone());
+                let text = match ctx {
+                    Some(ctx) => self.insert_in_context(text, short.as_deref(), &earlier, &ctx, glossary.as_deref(), &cfg),
+                    None => self.maybe_polish(text, short.as_deref(), &earlier, glossary.as_deref(), &cfg),
                 };
                 if task.canceled() {
                     return;
                 }
-                if self.output_text(&text) && cfg.learn_from_edits {
+                let pasted = self.output_text(&text);
+                self.remember_attempt(transcript, !earlier.is_empty());
+                if pasted && cfg.learn_from_edits {
                     learn::watch(self.app.clone(), text, cfg.clone());
                 }
                 self.flash_done();
@@ -511,6 +525,32 @@ impl Controller {
         (text, glossary)
     }
 
+    /// 连续短语音：这次是短语音，上一次也是、且上一次出结果到这次开始录音不超过设定的秒数时，
+    /// 返回之前连着的识别结果（最近两次）；否则返回空
+    fn earlier_attempts(&self, started: Instant, cfg: &Config) -> Vec<String> {
+        let window = Duration::from_secs(cfg.polish_repeat_seconds.into());
+        let recent = self.recent_short.lock().unwrap();
+        match recent.last() {
+            Some((at, _)) if !window.is_zero() && started.saturating_duration_since(*at) <= window => {
+                recent[recent.len().saturating_sub(2)..].iter().map(|(_, t)| t.clone()).collect()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// 记下这次语音：短语音（short 为识别结果）接在连着的记录后面，没连上时重新开始；不是短语音时清空
+    fn remember_attempt(&self, short: Option<String>, chained: bool) {
+        let mut recent = self.recent_short.lock().unwrap();
+        if !chained {
+            recent.clear();
+        }
+        if let Some(text) = short {
+            recent.push((Instant::now(), text));
+            let extra = recent.len().saturating_sub(3);
+            recent.drain(..extra);
+        }
+    }
+
     /// 文字较短、不值得整段润色时，若有相关词条，只按词库修正误识别的词
     fn correct_terms(&self, text: String, glossary: Option<&str>, cfg: &Config) -> String {
         let Some(glossary) = glossary.filter(|_| !cfg.polish_api.trim().is_empty()) else {
@@ -547,21 +587,28 @@ impl Controller {
     }
 
     /// 光标在已有文字中间：让 LLM 根据前后文生成要插入的文字。
-    /// 输出仍是在光标处粘贴，前后原文不会被改动；录音太短、文字太少或调用失败时直接插入转写结果
-    fn insert_in_context(&self, text: String, seconds: f32, ctx: &focus::CaretContext, glossary: Option<&str>, cfg: &Config) -> String {
-        let plain = text.chars().filter(|c| !c.is_whitespace()).count();
-        if seconds < cfg.insert_min_seconds as f32 || plain < cfg.insert_min_chars {
-            log::info!(
-                "Context insertion skipped (short: {seconds:.1}s, {plain} chars; need {}s, {} chars)",
-                cfg.insert_min_seconds,
-                cfg.insert_min_chars
-            );
-            // 不走 LLM 插入（命中词库时仍按词库修正），西文单词之间的空格按前后文补上
-            let text = self.correct_terms(text, glossary, cfg);
-            return llm::fit_spacing(text.trim(), &ctx.before, &ctx.after);
+    /// 输出仍是在光标处粘贴，前后原文不会被改动；短语音（short 为原因，见 too_short）或调用失败时直接插入转写结果，
+    /// 连续短语音（earlier 非空）除外
+    fn insert_in_context(
+        &self,
+        text: String,
+        short: Option<&str>,
+        earlier: &[String],
+        ctx: &focus::CaretContext,
+        glossary: Option<&str>,
+        cfg: &Config,
+    ) -> String {
+        if let Some(why) = short {
+            if earlier.is_empty() {
+                log::info!("Context insertion skipped ({why})");
+                // 不走 LLM 插入（命中词库时仍按词库修正），西文单词之间的空格按前后文补上
+                let text = self.correct_terms(text, glossary, cfg);
+                return llm::fit_spacing(text.trim(), &ctx.before, &ctx.after);
+            }
+            log::info!("Repeated short dictation ({why}): inserting with the LLM, {} earlier attempt(s)", earlier.len());
         }
         overlay::set(Mode::Polishing);
-        match llm::insert_text(&text, &ctx.before, &ctx.after, glossary, cfg) {
+        match llm::insert_text(&text, &ctx.before, &ctx.after, earlier, glossary, cfg) {
             Ok(fragment) => {
                 log::info!("Insert in context: {fragment}");
                 fragment
@@ -573,22 +620,21 @@ impl Controller {
         }
     }
 
-    /// LLM 润色（如果启用且已配置 API）；录音太短或文字太少都不值得润色，此时只按词库修正（有相关词条时）
-    fn maybe_polish(&self, text: String, seconds: f32, glossary: Option<&str>, cfg: &Config) -> String {
+    /// LLM 润色（如果启用且已配置 API）；短语音（short 为原因，见 too_short）不值得润色，此时只按词库修正
+    /// （有相关词条时）。连续短语音（earlier 非空）照样润色，并附上之前几次的识别结果
+    fn maybe_polish(&self, text: String, short: Option<&str>, earlier: &[String], glossary: Option<&str>, cfg: &Config) -> String {
         if !cfg.polish || cfg.polish_api.trim().is_empty() {
             return self.correct_terms(text, glossary, cfg);
         }
-        if seconds < cfg.polish_min_seconds as f32 {
-            log::info!("Polish skipped (short recording: {seconds:.1}s < {}s)", cfg.polish_min_seconds);
-            return self.correct_terms(text, glossary, cfg);
-        }
-        let plain = text.chars().filter(|c| !c.is_whitespace()).count();
-        if plain < cfg.polish_min_chars {
-            log::info!("Polish skipped (short text: {plain} < {} chars)", cfg.polish_min_chars);
-            return self.correct_terms(text, glossary, cfg);
+        if let Some(why) = short {
+            if earlier.is_empty() {
+                log::info!("Polish skipped ({why})");
+                return self.correct_terms(text, glossary, cfg);
+            }
+            log::info!("Repeated short dictation ({why}): polishing, {} earlier attempt(s)", earlier.len());
         }
         overlay::set(Mode::Polishing);
-        match llm::polish_text(&text, glossary, cfg) {
+        match llm::polish_text(&text, earlier, glossary, cfg) {
             Ok(p) if !p.is_empty() && p != text => {
                 log::info!("Polished: {p}");
                 p
@@ -750,4 +796,13 @@ fn replace_before_caret(old: &str, new: &str) -> Result<(), String> {
     thread::sleep(Duration::from_millis(80));
     clipboard::paste_text(new);
     Ok(())
+}
+
+/// 录音太短或文字太少、不值得交给 LLM 整段处理时，返回原因（写日志用）
+fn too_short(text: &str, seconds: f32, min_seconds: u32, min_chars: usize) -> Option<String> {
+    if seconds < min_seconds as f32 {
+        return Some(format!("short recording: {seconds:.1}s < {min_seconds}s"));
+    }
+    let plain = text.chars().filter(|c| !c.is_whitespace()).count();
+    (plain < min_chars).then(|| format!("short text: {plain} < {min_chars} chars"))
 }

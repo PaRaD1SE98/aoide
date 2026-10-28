@@ -52,6 +52,8 @@ pub struct Config {
     pub polish_min_chars: usize,
     /// 录音短于此秒数跳过润色直接输出（润色主要用来整理大段口述，短句不值得花 LLM 的时间）
     pub polish_min_seconds: u32,
+    /// 连续短语音：上一次短语音出结果后这么多秒内又说了一句短语音，这次也交给 LLM（0 = 关闭，见 controller.rs）
+    pub polish_repeat_seconds: u32,
     /// 光标前后已有文字时，用 LLM 把口述内容接进光标处
     pub insert_smart: bool,
     /// 录音短于此秒数时不走 LLM 插入，直接粘贴转写结果
@@ -119,6 +121,7 @@ impl Default for Config {
             polish_no_think: true,
             polish_min_chars: 12,
             polish_min_seconds: 10,
+            polish_repeat_seconds: 30,
             insert_smart: true,
             insert_min_seconds: 10,
             insert_min_chars: 12,
