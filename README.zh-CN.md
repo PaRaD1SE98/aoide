@@ -150,7 +150,7 @@ Aoide 使用 OpenAI 的语音识别格式（`POST {API 地址}/audio/transcripti
 | `polish_min_seconds` | `10` | 录音短于此秒数时不润色，直接输出转写结果 |
 | `polish_min_chars` | `12` | 转录结果短于此字符数（去空格）时不润色直接输出；语音修订不受影响 |
 | `polish_repeat_seconds` | `30` | 上一句短语音出结果后这么多秒内又说了一句短语音，这次照样交给 LLM，并附上前几次的识别结果，方便纠正识别错误；`0` 关闭 |
-| `screen_context` | `false` | 开始录音时截取当前窗口，连同识别结果发给 LLM，让它参照屏幕上的内容写对人名和专有名词。截图会发给你配置的 LLM 服务，模型需要支持图片 |
+| `screen_context` | `false` | 开始录音时截取当前窗口，作为输入框附近的上下文，连同识别结果一起发给 LLM。截图会发给你配置的 LLM 服务；模型不支持图片时自动不带截图 |
 | `insert_smart` | `true` | 光标前后有文字时按上下文插入 |
 | `insert_min_seconds` / `insert_min_chars` | `10` / `12` | 录音 / 转写结果短于此值时直接插入，不调用 LLM |
 | `vocab_enabled` | `true` | 用词库纠正识别结果：反复出现的误识别直接替换，其余连同相关词条交给 LLM |

@@ -285,7 +285,8 @@ impl<'a> Api<'a> {
                     }
                     break v;
                 }
-                Err(e) if matches!(e.status, Some(400 | 422)) && with_image => {
+                // 不收图片的模型多回 400 / 422，图片太大时有的服务回 413 / 415
+                Err(e) if matches!(e.status, Some(400 | 413 | 415 | 422)) && with_image => {
                     log::info!("Request with the screenshot rejected, retrying without it: {}", e.message);
                     with_image = false;
                     dropped_at = Some(level);
