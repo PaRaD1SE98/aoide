@@ -19,6 +19,23 @@ pub fn show(window: &WebviewWindow, width: f64, height: f64, bottom_gap: f64) {
         let _ = window.set_size(LogicalSize::new(width, height));
         let _ = window.set_position(LogicalPosition::new(x.round(), top.round()));
     }
+    present(window);
+}
+
+/// 放到输入焦点所在屏幕的右下角，离边缘 gap（逻辑尺寸），显示但不抢焦点：不挡住屏幕中间的输入框
+pub fn show_corner(window: &WebviewWindow, width: f64, height: f64, gap: f64) {
+    if let Some((screen, primary_height)) = super::focus_screen() {
+        let visible = screen.visible;
+        let x = visible.origin.x + visible.size.width - width - gap;
+        let top = primary_height - (visible.origin.y + gap + height);
+        let _ = window.set_size(LogicalSize::new(width, height));
+        let _ = window.set_position(LogicalPosition::new(x.round(), top.round()));
+    }
+    present(window);
+}
+
+/// 显示但不抢焦点
+fn present(window: &WebviewWindow) {
     // Tauri 的 show() 会让窗口成为焦点窗口、激活 Aoide；只把窗口放到最前
     let Ok(ns_window) = window.ns_window() else { return };
     let ns_window = ns_window as usize;

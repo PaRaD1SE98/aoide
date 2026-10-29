@@ -1,4 +1,4 @@
-//! 屏幕底部的小窗（结果卡片、词条入库提示）：定位、不抢焦点地显示、关闭时把焦点还回去（Windows）
+//! 屏幕底部的小窗（结果卡片、提示、词条入库提示）：定位、不抢焦点地显示、关闭时把焦点还回去（Windows）
 
 use super::overlay;
 use tauri::{PhysicalPosition, PhysicalSize, WebviewWindow};
@@ -15,6 +15,19 @@ pub fn show(window: &WebviewWindow, width: f64, height: f64, bottom_gap: f64) {
     let (w, h) = ((width * scale).round() as i32, (height * scale).round() as i32);
     let x = work.left + (work.right - work.left - w) / 2;
     let y = work.bottom - h - (bottom_gap * scale).round() as i32;
+    present(window, x, y, w, h);
+}
+
+/// 放到输入焦点所在屏幕的右下角，离边缘 gap（逻辑尺寸），显示但不抢焦点：不挡住屏幕中间的输入框
+pub fn show_corner(window: &WebviewWindow, width: f64, height: f64, gap: f64) {
+    let (work, scale) = overlay::focus_work_area();
+    let (w, h) = ((width * scale).round() as i32, (height * scale).round() as i32);
+    let gap = (gap * scale).round() as i32;
+    present(window, work.right - w - gap, work.bottom - h - gap, w, h);
+}
+
+/// 放到 (x, y)、定好尺寸（物理像素），显示但不抢焦点
+fn present(window: &WebviewWindow, x: i32, y: i32, w: i32, h: i32) {
     // 先移到目标屏幕再定尺寸，避免跨 DPI 移动时被系统按旧缩放改尺寸
     let _ = window.set_position(PhysicalPosition::new(x, y));
     let _ = window.set_size(PhysicalSize::new(w as u32, h as u32));

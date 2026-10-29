@@ -1,4 +1,5 @@
-//! 词条入库提示：从用户的修改中学到纠正后，在屏幕底部弹出小窗列出学到的词条，提供「撤销」
+//! 词条入库提示：从用户的修改中学到纠正后，在屏幕右下角弹出小条列出学到的词条，提供「撤销」。
+//! 放在角落、做得很小：用户这时多半还在输入框里打字，不能挡住它
 //!
 //! 和结果卡片一样是不抢焦点的 WebView 窗口；点按钮会激活它，所以关闭时把焦点还给之前的窗口，
 //! 用户可以接着打字。页面在约 8 秒后自动关闭（鼠标悬停时暂停）
@@ -12,10 +13,17 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub const LABEL: &str = "learned";
-/// 逻辑尺寸（含阴影留白），按显示器缩放
-const WIDTH: f64 = 400.0;
-pub const HEIGHT: f64 = 156.0;
-const BOTTOM_GAP: f64 = 8.0;
+/// 逻辑尺寸（含四周 8 像素的阴影留白），按显示器缩放；高度随词条数增加，超过 MAX_ROWS 条时滚动
+const WIDTH: f64 = 304.0;
+const BASE_HEIGHT: f64 = 52.0;
+const ROW_HEIGHT: f64 = 20.0;
+const MAX_ROWS: usize = 4;
+/// 离屏幕右下角的距离（加上阴影留白，卡片离边缘约 12 像素）
+const CORNER_GAP: f64 = 4.0;
+
+fn height(rows: usize) -> f64 {
+    BASE_HEIGHT + ROW_HEIGHT * rows.clamp(1, MAX_ROWS) as f64
+}
 
 #[derive(Clone, Serialize)]
 pub struct Item {
@@ -73,7 +81,7 @@ pub fn show(app: &AppHandle, learned: Vec<(Correction, vocab::Change)>) {
         }
         None => match WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("learned.html".into()))
             .title("Aoide")
-            .inner_size(WIDTH, HEIGHT)
+            .inner_size(WIDTH, height(items.len()))
             .decorations(false)
             .transparent(true)
             .shadow(false)
@@ -104,9 +112,8 @@ pub fn show(app: &AppHandle, learned: Vec<(Correction, vocab::Change)>) {
     OPEN.store(true, Ordering::SeqCst);
     crate::refresh_dismiss_key();
 
-    // 输入焦点所在屏幕的底部中间
-    popup::show(&window, WIDTH, HEIGHT, BOTTOM_GAP);
-    crate::notice::make_room(app);
+    // 输入焦点所在屏幕的右下角
+    popup::show_corner(&window, WIDTH, height(items.len()), CORNER_GAP);
 }
 
 pub fn items(app: &AppHandle) -> Vec<Item> {
