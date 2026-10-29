@@ -14,6 +14,7 @@ mod notice;
 mod overlay;
 mod phonetic;
 mod result_card;
+mod screen;
 mod sound;
 mod speech_api;
 mod transcriber;

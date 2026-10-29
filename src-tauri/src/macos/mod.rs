@@ -14,6 +14,7 @@ pub mod mute;
 pub mod overlay;
 pub mod permissions;
 pub mod popup;
+pub mod screen;
 pub mod sound;
 
 use cf::{CFTypeRef, CF};

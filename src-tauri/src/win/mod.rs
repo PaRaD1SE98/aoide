@@ -7,6 +7,7 @@ pub mod input;
 pub mod mute;
 pub mod overlay;
 pub mod popup;
+pub mod screen;
 pub mod sound;
 
 use tauri::{App, AppHandle, Manager};

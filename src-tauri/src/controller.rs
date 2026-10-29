@@ -10,7 +10,7 @@ use crate::overlay::{self, Mode};
 use crate::{learned_card, notice, result_card, translate_card};
 use crate::{input, mute};
 use crate::i18n::tr;
-use crate::{clipboard, focus, learn, llm, models, trf, vocab};
+use crate::{clipboard, focus, learn, llm, models, screen, trf, vocab};
 use crate::focus::Typable;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex, RwLock};
@@ -31,6 +31,8 @@ struct RevState {
     active: bool,
     recorder: Option<Arc<Recorder>>,
     selected: Option<String>,
+    /// 开始修订录音时在后台截的屏幕上下文（见 screen.rs）
+    screen: Option<screen::Pending>,
     /// 修订跨两个线程（开始 / 停止），任务凭证存在这里交接
     task: Option<Task>,
 }
@@ -323,6 +325,8 @@ impl Controller {
         // 锁已释放，等待录音结束（第二次按键可以进入上面的分支停止）
         let started = Instant::now();
         let cfg = self.config();
+        // 屏幕上下文：趁录音时在后台截取前台窗口（用户正在操作的程序）
+        let shot = screen::begin(&cfg);
         if cfg.mute_while_recording {
             mute::begin(); // 在开始提示音之后静音，提示音本身也不受影响
         }
@@ -359,6 +363,7 @@ impl Controller {
         if task.canceled() {
             return;
         }
+        let shot = shot.take();
         match result {
             Ok(text) if text.trim().is_empty() => {
                 log::info!("Empty transcription");
@@ -366,7 +371,7 @@ impl Controller {
             }
             Ok(text) if translate => {
                 log::info!("Transcribed (to translate): {text}");
-                self.output_translation(text, &cfg, &task);
+                self.output_translation(text, shot.as_ref(), &cfg, &task);
                 self.flash_done();
             }
             Ok(text) => {
@@ -381,8 +386,8 @@ impl Controller {
                 let earlier = if short.is_some() { self.earlier_attempts(started, &cfg) } else { Vec::new() };
                 let transcript = short.is_some().then(|| text.clone());
                 let text = match ctx {
-                    Some(ctx) => self.insert_in_context(text, short.as_deref(), &earlier, &ctx, glossary.as_deref(), &cfg),
-                    None => self.maybe_polish(text, short.as_deref(), &earlier, glossary.as_deref(), &cfg),
+                    Some(ctx) => self.insert_in_context(text, short.as_deref(), &earlier, shot.as_ref(), &ctx, glossary.as_deref(), &cfg),
+                    None => self.maybe_polish(text, short.as_deref(), &earlier, shot.as_ref(), glossary.as_deref(), &cfg),
                 };
                 if task.canceled() {
                     return;
@@ -405,7 +410,7 @@ impl Controller {
 
     // === 语音翻译 ===
     /// 把转写结果翻译成设置的目标语言并输出，再在悬浮条的位置弹出核对小窗（原文可改，改完重新翻译）
-    fn output_translation(self: &Arc<Self>, text: String, cfg: &Config, task: &Task) {
+    fn output_translation(self: &Arc<Self>, text: String, shot: Option<&screen::Shot>, cfg: &Config, task: &Task) {
         let (text, glossary) = self.apply_vocab(text, cfg);
         let language = cfg.translate_language.trim().to_string();
         let mut view = translate_card::View { language: language.clone(), original: text.clone(), ..Default::default() };
@@ -414,7 +419,7 @@ impl Controller {
             view.error = tr("翻译要用到 LLM：请先在设置的「LLM 润色与修订」里填写 API", "Translation uses the LLM: set up its API under Settings → LLM polish & edit first", "翻訳には LLM を使います。先に設定の「LLM による整形と修正」で API を入力してください").into();
         } else {
             overlay::set(Mode::Polishing);
-            match llm::translate_text(&text, &language, glossary.as_deref(), cfg) {
+            match llm::translate_text(&text, &language, shot, glossary.as_deref(), cfg) {
                 Ok(t) if !t.trim().is_empty() => {
                     if task.canceled() {
                         return;
@@ -480,7 +485,7 @@ impl Controller {
         self.set_translate_language(language)?;
         let cfg = self.config();
         let glossary = if cfg.vocab_enabled { vocab::glossary(&vocab::relevant(original)) } else { None };
-        let new = llm::translate_text(original, language, glossary.as_deref(), &cfg)
+        let new = llm::translate_text(original, language, None, glossary.as_deref(), &cfg)
             .map_err(|e| trf!("翻译失败：{e}", "Translation failed: {e}", "翻訳に失敗しました: {e}"))?;
         if new.trim().is_empty() {
             return Err(tr("LLM 没有返回译文", "The LLM returned no translation", "LLM から訳文が返されませんでした").into());
@@ -589,11 +594,13 @@ impl Controller {
     /// 光标在已有文字中间：让 LLM 根据前后文生成要插入的文字。
     /// 输出仍是在光标处粘贴，前后原文不会被改动；短语音（short 为原因，见 too_short）或调用失败时直接插入转写结果，
     /// 连续短语音（earlier 非空）除外
+    #[allow(clippy::too_many_arguments)]
     fn insert_in_context(
         &self,
         text: String,
         short: Option<&str>,
         earlier: &[String],
+        shot: Option<&screen::Shot>,
         ctx: &focus::CaretContext,
         glossary: Option<&str>,
         cfg: &Config,
@@ -608,7 +615,7 @@ impl Controller {
             log::info!("Repeated short dictation ({why}): inserting with the LLM, {} earlier attempt(s)", earlier.len());
         }
         overlay::set(Mode::Polishing);
-        match llm::insert_text(&text, &ctx.before, &ctx.after, earlier, glossary, cfg) {
+        match llm::insert_text(&text, &ctx.before, &ctx.after, earlier, shot, glossary, cfg) {
             Ok(fragment) => {
                 log::info!("Insert in context: {fragment}");
                 fragment
@@ -622,7 +629,15 @@ impl Controller {
 
     /// LLM 润色（如果启用且已配置 API）；短语音（short 为原因，见 too_short）不值得润色，此时只按词库修正
     /// （有相关词条时）。连续短语音（earlier 非空）照样润色，并附上之前几次的识别结果
-    fn maybe_polish(&self, text: String, short: Option<&str>, earlier: &[String], glossary: Option<&str>, cfg: &Config) -> String {
+    fn maybe_polish(
+        &self,
+        text: String,
+        short: Option<&str>,
+        earlier: &[String],
+        shot: Option<&screen::Shot>,
+        glossary: Option<&str>,
+        cfg: &Config,
+    ) -> String {
         if !cfg.polish || cfg.polish_api.trim().is_empty() {
             return self.correct_terms(text, glossary, cfg);
         }
@@ -634,7 +649,7 @@ impl Controller {
             log::info!("Repeated short dictation ({why}): polishing, {} earlier attempt(s)", earlier.len());
         }
         overlay::set(Mode::Polishing);
-        match llm::polish_text(&text, earlier, glossary, cfg) {
+        match llm::polish_text(&text, earlier, shot, glossary, cfg) {
             Ok(p) if !p.is_empty() && p != text => {
                 log::info!("Polished: {p}");
                 p
@@ -689,6 +704,7 @@ impl Controller {
                 sound::play_sync(Cue::ReviseStart);
                 r.selected = Some(selected.clone());
                 r.recorder = Some(Recorder::start());
+                r.screen = Some(screen::begin(&self.config()));
             }
         }
         if selected.is_empty() {
@@ -713,6 +729,7 @@ impl Controller {
             r.active = false;
             (r.recorder.take(), r.selected.take().unwrap_or_default(), r.task.take())
         };
+        let shot = self.rev.lock().unwrap().screen.take();
         let canceled = || task.as_ref().is_some_and(Task::canceled);
         if let Some(r) = &rec {
             r.stop();
@@ -734,7 +751,8 @@ impl Controller {
             let (instruction, _) = if cfg.vocab_enabled { vocab::apply_confident(&instruction) } else { (instruction, vec![]) };
             let glossary = cfg.vocab_enabled.then(|| vocab::glossary(&vocab::relevant(&format!("{selected}\n{instruction}")))).flatten();
             overlay::set(Mode::Polishing);
-            let revised = llm::revise_text(&selected, &instruction, glossary.as_deref(), &cfg)?;
+            let shot = shot.and_then(screen::Pending::take);
+            let revised = llm::revise_text(&selected, &instruction, shot.as_ref(), glossary.as_deref(), &cfg)?;
             if canceled() {
                 return Ok(());
             }

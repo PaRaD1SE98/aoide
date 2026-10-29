@@ -114,9 +114,11 @@ name = "aoide"
 version = "0.5.8"
 dependencies = [
  "arboard",
+ "base64 0.22.1",
  "block2",
  "cpal",
  "dispatch2",
+ "image",
  "jieba-rs",
  "log",
  "objc2",
@@ -2220,6 +2222,8 @@ dependencies = [
  "num-traits",
  "png 0.18.1",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
