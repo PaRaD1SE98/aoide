@@ -54,6 +54,8 @@ pub struct Config {
     pub polish_min_seconds: u32,
     /// 连续短语音：上一次短语音出结果后这么多秒内又说了一句短语音，这次也交给 LLM（0 = 关闭，见 controller.rs）
     pub polish_repeat_seconds: u32,
+    /// 屏幕上下文：开始录音时截取前台窗口，连同转写结果发给 LLM（见 screen.rs）
+    pub screen_context: bool,
     /// 光标前后已有文字时，用 LLM 把口述内容接进光标处
     pub insert_smart: bool,
     /// 录音短于此秒数时不走 LLM 插入，直接粘贴转写结果
@@ -122,6 +124,7 @@ impl Default for Config {
             polish_min_chars: 12,
             polish_min_seconds: 10,
             polish_repeat_seconds: 30,
+            screen_context: false,
             insert_smart: true,
             insert_min_seconds: 10,
             insert_min_chars: 12,

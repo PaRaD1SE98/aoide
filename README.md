@@ -150,6 +150,7 @@ Settings are stored in `%APPDATA%\Aoide\config.json` (macOS: `~/Library/Applicat
 | `polish_min_seconds` | `10` | Recordings shorter than this (in seconds) are output as transcribed, without polishing |
 | `polish_min_chars` | `12` | Transcripts shorter than this (ignoring spaces) are output as-is without polishing. Doesn't apply to voice edits |
 | `polish_repeat_seconds` | `30` | A short dictation within this many seconds of the last short one is polished anyway, with the earlier transcripts given to the LLM so it can fix misrecognized words. `0` turns this off |
+| `screen_context` | `false` | When you start dictating, take a screenshot of the current window and send it to the LLM with the transcript, as context from around the input box. The screenshot goes to the LLM service you set up; if the model doesn't accept images, it is left out |
 | `insert_smart` | `true` | Context-aware insertion when there is text around the cursor |
 | `insert_min_seconds` / `insert_min_chars` | `10` / `12` | Shorter recordings / transcripts are inserted as-is without calling the LLM |
 | `vocab_enabled` | `true` | Correct transcripts with your vocabulary: repeated misrecognitions are replaced directly, others go to the LLM with the related entries |

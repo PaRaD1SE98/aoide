@@ -33,6 +33,13 @@ jieba-rs = "0.11.0"
 similar = "3.2.0"
 strsim = "0.11.1"
 tauri-plugin-updater = "2.14.0"
+# 屏幕上下文：截图缩放后编码成 JPEG、转成 base64 发给 LLM（见 screen.rs）
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+base64 = "0.22"
+
+# 手动测试读 PNG 截图（见 llm.rs 的 screen_with_real_llm）
+[dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 # whisper.cpp 的 GPU 后端：Windows 用 Vulkan，Apple 芯片的 Mac 用 Metal；Intel Mac 只用 CPU
 # （Metal 后端主要面向 Apple 芯片，在 Intel Mac 的显卡上不可靠）
@@ -55,6 +62,7 @@ version = "0.62"
 features = [
     "Win32_Foundation",
     "Win32_Globalization",
+    "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
     "Win32_Media_Audio",
     "Win32_Security",
@@ -64,6 +72,7 @@ features = [
     "Win32_System_Variant",
     "Win32_System_Ole",
     "Win32_System_LibraryLoader",
+    "Win32_Storage_Xps",
     "Win32_System_Threading",
     "Win32_UI_Accessibility",
     "Win32_UI_HiDpi",
