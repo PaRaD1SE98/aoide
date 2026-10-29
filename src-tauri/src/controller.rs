@@ -260,6 +260,19 @@ impl Controller {
             vocab::set_size_limit(u64::from(new.vocab_max_kb) * 1024);
             let _ = self.app.emit("vocab-changed", ());
         }
+        // 打开屏幕上下文时请求截图的权限（macOS 的屏幕录制），没有的话提示用户去开
+        if !old.screen_context && new.screen_context {
+            let ctl = self.clone();
+            thread::spawn(move || {
+                if !crate::platform::screen::request_access() {
+                    ctl.notify(tr(
+                        "屏幕上下文需要屏幕录制权限：在系统设置 → 隐私与安全性 → 屏幕录制里打开 Aoide，然后重新打开 Aoide",
+                        "Screen context needs the Screen Recording permission: turn on Aoide in System Settings → Privacy & Security → Screen Recording, then reopen Aoide",
+                        "画面のコンテキストには画面収録の権限が必要です。システム設定 →「プライバシーとセキュリティ」→「画面収録」で Aoide をオンにしてから、Aoide を開き直してください",
+                    ));
+                }
+            });
+        }
         if (&old.speech_source, &old.model, &old.model_dir, &old.device) != (&new.speech_source, &new.model, &new.model_dir, &new.device) {
             self.transcriber.reset();
             self.preload_model();

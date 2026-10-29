@@ -17,6 +17,11 @@ use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect
 /// 让 DirectComposition 渲染的内容（Chromium、UWP 等）也画出来
 const PW_RENDERFULLCONTENT: u32 = 2;
 
+/// 截图不需要额外的权限（和 macOS 的接口一致）
+pub fn request_access() -> bool {
+    true
+}
+
 pub fn capture_window() -> Option<Shot> {
     capture(unsafe { GetForegroundWindow() })
 }
