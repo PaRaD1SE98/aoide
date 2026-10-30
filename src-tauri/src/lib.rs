@@ -108,17 +108,26 @@ pub(crate) struct Permissions {
     /// granted / denied / undetermined（还没问过）
     pub microphone: &'static str,
     pub accessibility: bool,
+    /// 屏幕录制（屏幕上下文要用）；没开屏幕上下文时不需要，算作有
+    pub screen_recording: bool,
 }
 
 impl Permissions {
     fn all_granted(&self) -> bool {
-        self.microphone == "granted" && self.accessibility
+        self.microphone == "granted" && self.accessibility && self.screen_recording
     }
 }
 
+/// 现在的权限状态：开着屏幕上下文时还要屏幕录制权限
+fn permissions(cfg: &Config) -> Permissions {
+    let mut p = platform::permissions::status();
+    p.screen_recording = !cfg.screen_context || platform::screen::has_access();
+    p
+}
+
 #[tauri::command]
-fn get_permissions() -> Permissions {
-    platform::permissions::status()
+fn get_permissions(ctl: State<Arc<Controller>>) -> Permissions {
+    permissions(&ctl.config())
 }
 
 /// 设置页上点了授权按钮：弹出系统对话框或打开系统设置的对应页面（麦克风对话框会等到用户回答）
@@ -579,14 +588,15 @@ pub fn run() {
             updater::start(app.handle().clone());
             // 用户手动启动时打开主窗口；开机自启时只在托盘运行（除非语音识别还不能用、缺少系统权限）
             let autostarted = std::env::args().any(|a| a == AUTOSTART_ARG);
-            if !autostarted || !ctl.speech_ready() || !platform::permissions::status().all_granted() {
-                // macOS：先按顺序请求缺少的权限（麦克风 → 辅助功能），用户都处理完后再打开窗口，
-                // 免得窗口盖住系统的对话框
+            if !autostarted || !ctl.speech_ready() || !permissions(&cfg).all_granted() {
+                // macOS：先按顺序请求缺少的权限（麦克风 → 辅助功能 → 开着屏幕上下文时的屏幕录制），
+                // 用户都处理完后再打开窗口，免得窗口盖住系统的对话框
                 #[cfg(target_os = "macos")]
                 {
                     let app = app.handle().clone();
+                    let screen = cfg.screen_context;
                     std::thread::spawn(move || {
-                        platform::permissions::request_at_startup();
+                        platform::permissions::request_at_startup(screen);
                         open_settings(&app);
                     });
                 }

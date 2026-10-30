@@ -53,8 +53,8 @@ pub fn has_access() -> bool {
     unsafe { CGPreflightScreenCaptureAccess() }
 }
 
-/// 请求屏幕录制权限（打开屏幕上下文时调用）：没有的话系统会提示用户去系统设置里打开，并把 Aoide 加进列表。
-/// 返回现在是否有权限
+/// 请求屏幕录制权限（打开屏幕上下文、启动时、设置页点按钮时调用）：没有的话系统会提示用户去系统设置里打开，
+/// 并把 Aoide 加进列表。返回现在是否有权限。系统设置里打开后，要重新打开 Aoide 才生效
 pub fn request_access() -> bool {
     has_access() || unsafe { CGRequestScreenCaptureAccess() }
 }

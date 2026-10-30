@@ -18,6 +18,10 @@ use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect
 const PW_RENDERFULLCONTENT: u32 = 2;
 
 /// 截图不需要额外的权限（和 macOS 的接口一致）
+pub fn has_access() -> bool {
+    true
+}
+
 pub fn request_access() -> bool {
     true
 }

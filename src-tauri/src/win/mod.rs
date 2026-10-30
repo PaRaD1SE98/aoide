@@ -43,7 +43,7 @@ pub mod permissions {
     use crate::Permissions;
 
     pub fn status() -> Permissions {
-        Permissions { microphone: "granted", accessibility: true }
+        Permissions { microphone: "granted", accessibility: true, screen_recording: true }
     }
 
     pub fn request(_kind: &str) {}

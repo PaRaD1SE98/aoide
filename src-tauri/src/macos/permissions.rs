@@ -39,6 +39,7 @@ const SETTINGS_WAIT: Duration = Duration::from_secs(600);
 
 const PANE_ACCESSIBILITY: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
 const PANE_MICROPHONE: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone";
+const PANE_SCREEN_RECORDING: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture";
 
 /// 麦克风授权状态：granted / denied / undetermined（还没问过）
 fn microphone() -> &'static str {
@@ -51,7 +52,8 @@ fn microphone() -> &'static str {
 }
 
 pub fn status() -> Permissions {
-    Permissions { microphone: microphone(), accessibility: super::accessibility_trusted(false) }
+    // 屏幕录制只在开着屏幕上下文时需要，由调用方按设置补上（见 lib.rs 的 permissions）
+    Permissions { microphone: microphone(), accessibility: super::accessibility_trusted(false), screen_recording: true }
 }
 
 /// 还没问过麦克风权限时弹出系统对话框，并等到用户回答（阻塞调用线程）。
@@ -70,16 +72,26 @@ pub fn request_microphone() {
     log::info!("Microphone permission: granted={}", rx.recv().unwrap_or(false));
 }
 
-/// 是否已经弹过辅助功能的系统提示（每次运行只弹一次，之后直接打开系统设置）
+/// 是否已经弹过辅助功能 / 屏幕录制的系统提示（每次运行只弹一次，之后直接打开系统设置）
 static PROMPTED: AtomicBool = AtomicBool::new(false);
+static SCREEN_PROMPTED: AtomicBool = AtomicBool::new(false);
 
 /// 启动时按顺序请求缺少的权限：先麦克风，回答后再辅助功能，等用户处理完提示框（以及点了「打开系统设置」后
-/// 在那里的操作）才返回。阻塞调用线程；返回后再打开设置窗口
-pub fn request_at_startup() {
+/// 在那里的操作）才返回；开着屏幕上下文（screen）时最后请求屏幕录制。阻塞调用线程；返回后再打开设置窗口
+pub fn request_at_startup(screen: bool) {
     request_microphone();
-    if !super::in_app_bundle() || super::accessibility_trusted(false) {
-        return;
+    if super::in_app_bundle() && !super::accessibility_trusted(false) {
+        request_accessibility_at_startup();
     }
+    if screen && super::in_app_bundle() && !super::screen::has_access() {
+        // 系统弹出提示（提供「打开系统设置」），同时把 Aoide 加进屏幕录制列表；授权后要重新打开 Aoide 才生效
+        log::info!("Screen Recording permission missing, asking for it");
+        super::screen::request_access();
+    }
+}
+
+/// 辅助功能：弹出系统提示框，等用户处理完
+fn request_accessibility_at_startup() {
     let before = window_owners();
     PROMPTED.store(true, Ordering::SeqCst);
     // 弹出系统提示框，同时把 Aoide 加进辅助功能列表
@@ -148,6 +160,12 @@ pub fn request(kind: &str) {
             // 第一次：系统提示框会把 Aoide 加进辅助功能列表，并提供「打开系统设置」按钮
             if PROMPTED.swap(true, Ordering::SeqCst) || super::accessibility_trusted(true) {
                 let _ = super::open(PANE_ACCESSIBILITY);
+            }
+        }
+        "screen" => {
+            // 第一次：系统提示框会把 Aoide 加进屏幕录制列表；之后直接打开系统设置的对应页面
+            if SCREEN_PROMPTED.swap(true, Ordering::SeqCst) || super::screen::request_access() {
+                let _ = super::open(PANE_SCREEN_RECORDING);
             }
         }
         _ => {}
