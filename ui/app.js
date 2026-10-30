@@ -281,12 +281,14 @@ window.addEventListener("keyup", suppressKey, true);
 const PERMISSIONS = [
   { kind: "accessibility", icon: "&#xE765;" },
   { kind: "microphone", icon: "&#xE720;" },
+  { kind: "screen", icon: "&#xE7B3;" },
 ];
 let permissions = null;
 
 function renderPermissions() {
   if (!permissions) return;
-  const granted = (kind) => (kind === "microphone" ? permissions.microphone === "granted" : permissions.accessibility);
+  const granted = (kind) =>
+    kind === "microphone" ? permissions.microphone === "granted" : kind === "screen" ? permissions.screen_recording : permissions.accessibility;
   const missing = PERMISSIONS.filter(({ kind }) => !granted(kind));
   $("perm").hidden = missing.length === 0;
   $("perm-list").replaceChildren(...missing.map(({ kind, icon }) => {

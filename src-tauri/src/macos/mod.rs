@@ -56,26 +56,29 @@ pub fn setup(app: &mut App) {
     // 键盘钩子会一直等到授权（见 hook.rs）
     if !accessibility_trusted(false) {
         log::warn!("Accessibility permission not granted yet");
-        remove_stale_accessibility_entry();
+        remove_stale_entry("Accessibility");
+    }
+    if !screen::has_access() {
+        remove_stale_entry("ScreenCapture");
     }
 }
 
-/// 清掉系统设置「辅助功能」列表里 Aoide 失效的旧条目。
+/// 清掉系统设置里 Aoide 失效的旧授权条目（service：「辅助功能」是 Accessibility，「屏幕录制」是 ScreenCapture）。
 ///
 /// 程序是临时签名（ad hoc）的，每个版本的签名都不同，而系统按签名认授权：更新后旧条目还在列表里、
-/// 开关也开着，却对新版本无效，用户会看到「明明开着却还要授权」。没有授权时先删掉旧条目，
-/// 用户在设置页点授权时系统会为新版本重新加一条（见 permissions.rs）。
+/// 开关也开着，却对新版本无效，用户会看到「明明开着却还要授权」，在旧条目上开关也没用。
+/// 没有授权时先删掉旧条目，用户在设置页点授权时系统会为新版本重新加一条（见 permissions.rs）。
 /// 没有授权时列表里 Aoide 的条目都是无效的，删掉没有损失
-fn remove_stale_accessibility_entry() {
+fn remove_stale_entry(service: &str) {
     let Some(id) = bundle_identifier() else { return };
     match std::process::Command::new("/usr/bin/tccutil")
-        .args(["reset", "Accessibility", &id])
+        .args(["reset", service, &id])
         .stdin(std::process::Stdio::null())
         .output()
     {
-        Ok(out) if out.status.success() => log::info!("Reset Accessibility entry for {id}"),
-        Ok(out) => log::warn!("tccutil reset failed: {}", String::from_utf8_lossy(&out.stderr).trim()),
-        Err(e) => log::warn!("tccutil reset failed: {e}"),
+        Ok(out) if out.status.success() => log::info!("Reset {service} entry for {id}"),
+        Ok(out) => log::warn!("tccutil reset {service} failed: {}", String::from_utf8_lossy(&out.stderr).trim()),
+        Err(e) => log::warn!("tccutil reset {service} failed: {e}"),
     }
 }
 
