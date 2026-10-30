@@ -1,12 +1,14 @@
 //! 悬浮条窗口（macOS）
 //!
-//! 不激活（NSWindowStyleMaskNonactivatingPanel）、鼠标穿透、出现在所有桌面和全屏程序之上的 NSPanel，
+//! 不激活（NSWindowStyleMaskNonactivatingPanel）、出现在所有桌面和全屏程序之上的 NSPanel，
 //! 内容是窗口图层上的一张图片。绘制线程逐帧用 tiny-skia 画好（见 overlay.rs），
-//! 交给主线程贴到窗口上（AppKit 只能在主线程操作）；主线程卡顿时只是少画几帧
+//! 交给主线程贴到窗口上（AppKit 只能在主线程操作）；主线程卡顿时只是少画几帧。
+//! 平时鼠标穿透；鼠标移到胶囊或展开后的按钮上时才接收鼠标（点了也不会激活 Aoide、抢走输入框的焦点）。
+//! 悬停和点击按每帧读到的鼠标位置、左键状态判断（见 overlay.rs 的 Anim::pointer）
 
 use super::cf::{CFDataCreate, CFTypeRef, CF};
-use super::{on_main, CGRect, Screen};
-use crate::overlay::{self, Anim, BOTTOM_GAP, FOLLOW_MS, FRAME_MS, HEIGHT, WIDTH};
+use super::{on_main, CGPoint, CGRect, Screen};
+use crate::overlay::{self, Anim, BOTTOM_GAP, FOLLOW_MS, FRAME_MS, HEIGHT, WINDOW_WIDTH};
 use dispatch2::DispatchQueue;
 use objc2::runtime::AnyObject;
 use objc2::{class, msg_send};
@@ -26,6 +28,9 @@ const ALPHA_PREMULTIPLIED_LAST: u32 = 1;
 extern "C" {
     static kCGColorSpaceSRGB: CFTypeRef;
     fn CGColorSpaceCreateWithName(name: CFTypeRef) -> CFTypeRef;
+    fn CGEventCreate(source: CFTypeRef) -> CFTypeRef;
+    fn CGEventGetLocation(event: CFTypeRef) -> CGPoint;
+    fn CGEventSourceButtonState(state: i32, button: u32) -> bool;
     fn CGDataProviderCreateWithCFData(data: CFTypeRef) -> CFTypeRef;
     fn CGImageCreate(
         width: usize,
@@ -44,6 +49,9 @@ extern "C" {
 
 /// 悬浮窗（NSPanel），在主线程创建
 static PANEL: AtomicUsize = AtomicUsize::new(0);
+
+const COMBINED_SESSION_STATE: i32 = 0;
+const MOUSE_BUTTON_LEFT: u32 = 0;
 /// 状态变化的通知：隐藏期间绘制线程在这里等待
 static WAKE: (Mutex<bool>, Condvar) = (Mutex::new(false), Condvar::new());
 
@@ -64,7 +72,7 @@ pub fn refresh() {
 }
 
 unsafe fn create_panel() -> *mut AnyObject {
-    let rect = CGRect::new(0.0, 0.0, WIDTH as f64, HEIGHT as f64);
+    let rect = CGRect::new(0.0, 0.0, WINDOW_WIDTH as f64, HEIGHT as f64);
     let panel: *mut AnyObject = msg_send![class!(NSPanel), alloc];
     let panel: *mut AnyObject = msg_send![
         panel,
@@ -98,15 +106,38 @@ struct Place {
     screen: CGRect,
     frame: CGRect,
     scale: f64,
+    /// 主屏高度：CoreGraphics 坐标（原点在左上）换算成 AppKit 坐标（原点在左下）用
+    primary_height: f64,
 }
 
 /// 输入焦点所在屏幕可用区域的底部中间
 fn place_at_focus() -> Option<Place> {
-    let (Screen { frame, visible, scale }, _) = super::focus_screen()?;
-    let (w, h) = (WIDTH as f64, HEIGHT as f64);
+    let (Screen { frame, visible, scale }, primary_height) = super::focus_screen()?;
+    let (w, h) = (WINDOW_WIDTH as f64, HEIGHT as f64);
     let x = visible.origin.x + (visible.size.width - w) / 2.0;
     let y = visible.origin.y + BOTTOM_GAP as f64;
-    Some(Place { screen: frame, frame: CGRect::new(x.round(), y.round(), w, h), scale })
+    Some(Place { screen: frame, frame: CGRect::new(x.round(), y.round(), w, h), scale, primary_height })
+}
+
+/// 鼠标在窗口里的位置（逻辑坐标，原点在窗口左上角）和左键是否按着。CoreGraphics 的这两个调用不必在主线程
+fn pointer(p: &Place) -> Option<(f32, f32, bool)> {
+    unsafe {
+        let event = CF::owned(CGEventCreate(std::ptr::null()))?;
+        let at = CGEventGetLocation(event.as_ptr());
+        let x = at.x - p.frame.origin.x;
+        let y = (p.frame.origin.y + p.frame.size.height) - (p.primary_height - at.y);
+        Some((x as f32, y as f32, CGEventSourceButtonState(COMBINED_SESSION_STATE, MOUSE_BUTTON_LEFT)))
+    }
+}
+
+/// 窗口是否接收鼠标（不接收时点击落到下面的程序）
+fn accept_mouse(accept: bool) {
+    DispatchQueue::main().exec_async(move || unsafe {
+        let panel = PANEL.load(Ordering::SeqCst) as *mut AnyObject;
+        if !panel.is_null() {
+            let _: () = msg_send![panel, setIgnoresMouseEvents: !accept];
+        }
+    });
 }
 
 /// 绘制线程：隐藏时等待状态变化，显示期间每帧画一张图交给主线程
@@ -115,6 +146,7 @@ fn run() {
     let mut place: Option<Place> = None;
     let mut last_follow = Instant::now();
     let mut raise = false;
+    let mut accepting = false;
     loop {
         if !anim.visible {
             let (flag, cvar) = &WAKE;
@@ -133,6 +165,10 @@ fn run() {
             continue;
         }
         if !anim.frame() {
+            if accepting {
+                accepting = false;
+                accept_mouse(false);
+            }
             on_main(|| unsafe {
                 let panel = PANEL.load(Ordering::SeqCst) as *mut AnyObject;
                 if !panel.is_null() {
@@ -155,6 +191,17 @@ fn run() {
             }
         }
         if let Some(p) = &place {
+            // 鼠标悬停、点按钮；只在鼠标落在胶囊或按钮上时接收鼠标
+            if let Some((x, y, down)) = pointer(p) {
+                if let Some(part) = anim.pointer(x, y, down) {
+                    overlay::clicked(part);
+                }
+                let accept = anim.hit(x, y).is_some();
+                if accept != accepting {
+                    accepting = accept;
+                    accept_mouse(accept);
+                }
+            }
             anim.scale = p.scale as f32;
             if let Some(image) = anim.draw().and_then(|pm| image(&pm)) {
                 present(image, p.frame, p.scale, anim.alpha as f64, std::mem::take(&mut raise));

@@ -5,9 +5,11 @@
 //! 窗口幽灵化（ghosting）机制就会接管并画出带关闭按钮的默认外壳。这里改用纯 WS_POPUP
 //! 分层窗口：根本没有非客户区可画；在独立线程里跑自己的消息循环，主线程卡顿也不影响；
 //! 用 UpdateLayeredWindow 逐像素透明输出。
-//! 窗口不抢焦点（WS_EX_NOACTIVATE）、鼠标穿透（WS_EX_TRANSPARENT），不影响打字和粘贴。
+//! 窗口不抢焦点（WS_EX_NOACTIVATE + MA_NOACTIVATE），点上面的按钮也不会，不影响打字和粘贴。
+//! 只有胶囊和展开后的按钮接收鼠标（WM_NCHITTEST），其余地方鼠标穿透。
+//! 悬停和点击按每帧读到的鼠标位置、左键状态判断（见 overlay.rs 的 Anim::pointer）
 
-use crate::overlay::{self, Anim, BOTTOM_GAP, FOLLOW_MS, FRAME_MS, HEIGHT, WIDTH};
+use crate::overlay::{self, Anim, BOTTOM_GAP, FOLLOW_MS, FRAME_MS, HEIGHT, WINDOW_WIDTH};
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicIsize, Ordering};
 use std::time::Instant;
@@ -21,14 +23,15 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetCursorPos, GetForegroundWindow,
-    GetGUIThreadInfo, GetMessageW, GetWindowThreadProcessId, KillTimer, GUITHREADINFO,
-    PostMessageW, RegisterClassW, SetTimer, SetWindowPos, ShowWindow, TranslateMessage,
-    UpdateLayeredWindow, HTTRANSPARENT, HWND_TOPMOST, MA_NOACTIVATE, MSG, SWP_NOACTIVATE,
-    SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE, ULW_ALPHA, WM_APP, WM_MOUSEACTIVATE,
-    WM_NCHITTEST, WM_TIMER, WNDCLASSW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-    WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+    GetGUIThreadInfo, GetMessageW, GetSystemMetrics, GetWindowThreadProcessId, KillTimer, LoadCursorW,
+    SetCursor, GUITHREADINFO, PostMessageW, RegisterClassW, SetTimer, SetWindowPos, ShowWindow,
+    TranslateMessage, UpdateLayeredWindow, HTCLIENT, HTTRANSPARENT, HWND_TOPMOST, IDC_ARROW, IDC_HAND,
+    MA_NOACTIVATE, MSG, SM_SWAPBUTTON, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE,
+    ULW_ALPHA, WM_APP, WM_MOUSEACTIVATE, WM_NCHITTEST, WM_SETCURSOR, WM_TIMER, WNDCLASSW, WS_EX_LAYERED,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_POPUP,
 };
 
 const WM_APP_UPDATE: u32 = WM_APP + 1;
@@ -50,7 +53,7 @@ pub fn init() {
                 ..Default::default()
             });
             let hwnd = match CreateWindowExW(
-                WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
+                WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST,
                 class,
                 w!("Aoide"),
                 WS_POPUP,
@@ -136,8 +139,22 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam:
             VIEW.with_borrow_mut(|v| on_frame(hwnd, v));
             LRESULT(0)
         }
-        // 不接受点击、不被激活
-        WM_NCHITTEST => LRESULT(HTTRANSPARENT as isize),
+        // 只有胶囊和按钮接收鼠标，其余地方穿透
+        WM_NCHITTEST => {
+            let (x, y) = ((lparam.0 & 0xFFFF) as i16 as i32, ((lparam.0 >> 16) & 0xFFFF) as i16 as i32);
+            // 窗口状态正被别处借用（显示、定位时系统同步发来的消息）时按穿透处理
+            let hit = VIEW.with(|v| v.try_borrow().ok().and_then(|v| v.anim.hit((x - v.pos.x) as f32 / v.anim.scale, (y - v.pos.y) as f32 / v.anim.scale)));
+            LRESULT(if hit.is_some() { HTCLIENT as isize } else { HTTRANSPARENT as isize })
+        }
+        // 按钮上显示手形光标
+        WM_SETCURSOR => {
+            let over = VIEW.with(|v| v.try_borrow().is_ok_and(|v| v.anim.over_button()));
+            if let Ok(cursor) = LoadCursorW(None, if over { IDC_HAND } else { IDC_ARROW }) {
+                SetCursor(Some(cursor));
+            }
+            LRESULT(1)
+        }
+        // 点击不激活窗口：焦点留在原来的输入框
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }
@@ -171,6 +188,17 @@ fn on_frame(hwnd: HWND, v: &mut View) {
         if mon.0 as isize != v.monitor {
             place(v, mon);
             overlay::moved_screen();
+        }
+    }
+    // 鼠标悬停、点按钮
+    let mut cursor = POINT::default();
+    if unsafe { GetCursorPos(&mut cursor) }.is_ok() {
+        let s = v.anim.scale;
+        // 左右键互换时，主按钮是右键
+        let primary = if unsafe { GetSystemMetrics(SM_SWAPBUTTON) } != 0 { VK_RBUTTON } else { VK_LBUTTON };
+        let down = unsafe { GetAsyncKeyState(primary.0 as i32) } as u16 & 0x8000 != 0;
+        if let Some(part) = v.anim.pointer((cursor.x - v.pos.x) as f32 / s, (cursor.y - v.pos.y) as f32 / s, down) {
+            overlay::clicked(part);
         }
     }
     render(hwnd, v);
@@ -235,7 +263,7 @@ fn place(v: &mut View, mon: HMONITOR) {
         v.monitor = mon.0 as isize;
         v.anim.scale = dpi_x as f32 / 96.0;
         let work = info.rcWork;
-        let w = (WIDTH * v.anim.scale).round() as i32;
+        let w = (WINDOW_WIDTH * v.anim.scale).round() as i32;
         let h = (HEIGHT * v.anim.scale).round() as i32;
         v.pos = POINT {
             x: work.left + (work.right - work.left - w) / 2,
@@ -376,7 +404,7 @@ mod tests {
                 assert!(((r.left + r.right) / 2 - (wa.left + wa.right) / 2).abs() <= 1);
                 let gap = (BOTTOM_GAP * scale).round() as i32;
                 assert!((wa.bottom - r.bottom - gap).abs() <= 1);
-                assert_eq!(r.right - r.left, (WIDTH * scale).round() as i32);
+                assert_eq!(r.right - r.left, (WINDOW_WIDTH * scale).round() as i32);
                 // 留时间给外部截图
                 std::thread::sleep(Duration::from_millis(2500));
             }

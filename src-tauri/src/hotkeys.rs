@@ -26,6 +26,8 @@ pub enum HotkeyEvent {
     Translate,
     /// 取消本次任务（只在任务进行中触发）
     Cancel,
+    /// 结束录音、开始识别（悬浮条上的完成按钮，见 overlay.rs）：同正在录音时再按一次热键，没在录音时什么都不做
+    Confirm,
     /// 关闭屏幕底部的小窗（结果卡片、词条入库提示）：小窗不抢焦点、收不到按键，由钩子代为处理 Esc
     Dismiss,
 }
@@ -99,6 +101,13 @@ struct Shared {
 }
 
 static SHARED: OnceLock<Shared> = OnceLock::new();
+
+/// 从热键以外的地方发出事件（悬浮条上的按钮，见 overlay.rs）
+pub fn send(ev: HotkeyEvent) {
+    if let Some(shared) = SHARED.get() {
+        let _ = shared.tx.send(ev);
+    }
+}
 
 /// 安装钩子（整个进程只调用一次）；事件通过 tx 发出
 pub fn install(tx: Sender<HotkeyEvent>) {
