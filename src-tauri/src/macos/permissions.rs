@@ -30,6 +30,8 @@ extern "C" {
 const WINDOW_LIST_ON_SCREEN_ONLY: u32 = 1;
 /// 显示辅助功能授权提示框的系统进程
 const ACCESSIBILITY_PROMPT_OWNER: &str = "universalAccessAuthWarn";
+/// 可能显示屏幕录制授权提示框的系统进程（不确定，认不出时按新出现的窗口判断，见 wait_for_prompt）
+const SCREEN_PROMPT_OWNERS: [&str; 2] = ["universalAccessAuthWarn", "UserNotificationCenter"];
 /// 系统设置（旧版叫系统偏好设置）
 const SYSTEM_SETTINGS: &str = "com.apple.systempreferences";
 /// 等待提示框出现、用户在提示框上点按钮、用户在系统设置里操作的最长时间：判断不了时也不至于一直不开窗口
@@ -83,10 +85,10 @@ pub fn request_at_startup(screen: bool) {
     if super::in_app_bundle() && !super::accessibility_trusted(false) {
         request_accessibility_at_startup();
     }
+    // 首次安装时屏幕上下文默认关着，不会走到这里；更新后（旧条目已在 setup 时清掉）开着的话，
+    // 也要等用户处理完提示框再打开窗口，免得提示框被窗口盖住
     if screen && super::in_app_bundle() && !super::screen::has_access() {
-        // 系统弹出提示（提供「打开系统设置」），同时把 Aoide 加进屏幕录制列表；授权后要重新打开 Aoide 才生效
-        log::info!("Screen Recording permission missing, asking for it");
-        super::screen::request_access();
+        request_screen_at_startup();
     }
 }
 
@@ -96,35 +98,57 @@ fn request_accessibility_at_startup() {
     PROMPTED.store(true, Ordering::SeqCst);
     // 弹出系统提示框，同时把 Aoide 加进辅助功能列表
     super::accessibility_trusted(true);
-    wait_for_accessibility_prompt(&before);
+    wait_for_prompt("Accessibility", &before, &[ACCESSIBILITY_PROMPT_OWNER], || super::accessibility_trusted(false));
     log::info!("Accessibility permission after the startup prompt: {}", super::accessibility_trusted(false));
 }
 
-/// 等用户处理完辅助功能的提示框
-fn wait_for_accessibility_prompt(before: &[String]) {
-    let trusted = || super::accessibility_trusted(false);
+/// 屏幕录制：弹出系统提示框（提供「打开系统设置」），同时把 Aoide 加进屏幕录制列表，等用户处理完。
+/// 在系统设置里打开后，要重新打开 Aoide 才生效（has_access 在这次运行里一直是 false），所以按提示框关掉、
+/// 用户离开系统设置来判断处理完了
+fn request_screen_at_startup() {
+    log::info!("Screen Recording permission missing, asking for it");
+    let before = window_owners();
+    SCREEN_PROMPTED.store(true, Ordering::SeqCst);
+    super::screen::request_access();
+    wait_for_prompt("Screen Recording", &before, &SCREEN_PROMPT_OWNERS, super::screen::has_access);
+}
+
+/// 等用户处理完系统的授权提示框，以及点了「打开系统设置」后在那里的操作。
+/// 提示框认 owners 里的进程名；都不是时，把请求后新出现窗口的进程当作提示框（提示框换了进程名也能等）。
+/// granted：是否已经授权（授权了就不用再等）
+fn wait_for_prompt(name: &str, before: &[String], owners: &[&str], granted: impl Fn() -> bool) {
+    let me = super::bundle_name();
+    let find = || {
+        let now = window_owners();
+        now.iter()
+            .find(|o| owners.contains(&o.as_str()))
+            .or_else(|| now.iter().find(|o| !before.contains(o) && Some(o.as_str()) != me.as_deref()))
+            .cloned()
+    };
     let start = Instant::now();
-    while !has_window_of(ACCESSIBILITY_PROMPT_OWNER) {
-        if trusted() {
+    let prompt = loop {
+        if granted() {
             return;
         }
+        if let Some(owner) = find() {
+            break owner;
+        }
         if start.elapsed() > PROMPT_APPEAR_WAIT {
-            // 没认出提示框：记下新出现的窗口属于谁，便于排查（提示框可能换了进程名）
-            let new: Vec<String> = window_owners().into_iter().filter(|o| !before.contains(o)).collect();
-            log::warn!("Accessibility prompt not found on screen; new windows from: {new:?}");
+            log::warn!("{name} prompt not found on screen");
             return;
         }
         std::thread::sleep(Duration::from_millis(100));
-    }
+    };
+    log::info!("{name} prompt shown by {prompt}, waiting for the user");
     // 提示框还在：用户还没点「打开系统设置」或「拒绝」
     let start = Instant::now();
-    while has_window_of(ACCESSIBILITY_PROMPT_OWNER) && !trusted() && start.elapsed() < PROMPT_ANSWER_WAIT {
+    while has_window_of(&prompt) && !granted() && start.elapsed() < PROMPT_ANSWER_WAIT {
         std::thread::sleep(Duration::from_millis(200));
     }
     // 点了「打开系统设置」：等用户在那里打开开关，或者离开系统设置
     std::thread::sleep(Duration::from_millis(800));
     let start = Instant::now();
-    while !trusted() && frontmost_is(SYSTEM_SETTINGS) && start.elapsed() < SETTINGS_WAIT {
+    while !granted() && frontmost_is(SYSTEM_SETTINGS) && start.elapsed() < SETTINGS_WAIT {
         std::thread::sleep(Duration::from_millis(300));
     }
 }

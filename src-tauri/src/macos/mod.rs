@@ -95,6 +95,15 @@ fn bundle_identifier() -> Option<String> {
     }
 }
 
+/// 本程序的进程名（窗口列表里显示的所属程序名）
+pub(super) fn bundle_name() -> Option<String> {
+    unsafe {
+        let info: *mut AnyObject = msg_send![class!(NSProcessInfo), processInfo];
+        let name: *mut AnyObject = msg_send![info, processName];
+        CF::retained(name as CFTypeRef)?.to_string()
+    }
+}
+
 /// 是否作为打包好的 .app 运行
 fn in_app_bundle() -> bool {
     bundle_identifier().is_some()
