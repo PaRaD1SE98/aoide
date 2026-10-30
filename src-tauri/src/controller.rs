@@ -213,6 +213,14 @@ impl Controller {
                     HotkeyEvent::Cancel => {
                         thread::spawn(move || me2.cancel());
                     }
+                    HotkeyEvent::Confirm => {
+                        if me.rev.lock().unwrap().active {
+                            thread::spawn(move || me2.stop_revision());
+                        } else if me.rec.lock().unwrap().recording {
+                            // 正在录音时 toggle 就是结束录音（普通录音和翻译录音都是）
+                            thread::spawn(move || me2.toggle_recording(false));
+                        }
+                    }
                     HotkeyEvent::Dismiss => {
                         result_card::close(&me.app);
                         learned_card::close(&me.app);

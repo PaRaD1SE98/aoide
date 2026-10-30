@@ -1,13 +1,17 @@
 //! 录音提示悬浮条：输入焦点所在屏幕底部居中的胶囊，录音时显示随音量跳动的波形，识别中显示波浪动画
 //! 显示期间持续跟随焦点：切到另一块屏幕上的输入框，悬浮条也换到那块屏幕的同一位置
 //!
-//! 这里是与平台无关的部分：状态、淡入淡出、波形动画和绘制（tiny-skia）。
-//! 窗口本身是各平台的原生窗口（win/overlay.rs、macos/overlay.rs）：不抢焦点、鼠标穿透，不影响打字和粘贴。
+//! 鼠标移到胶囊上时，两侧出现圆形按钮：左边取消（同取消键），右边完成（同再按一次主热键，结束录音开始识别）；
+//! 识别、润色中只有取消。腾不出手按键盘时可以只用鼠标。
+//!
+//! 这里是与平台无关的部分：状态、淡入淡出、波形动画、按钮的悬停和点击、绘制（tiny-skia）。
+//! 窗口本身是各平台的原生窗口（win/overlay.rs、macos/overlay.rs）：不抢焦点，点按钮也不会，不影响打字和粘贴；
+//! 只有胶囊和按钮接收鼠标，窗口其余透明的部分鼠标穿透。
 
 use crate::audio;
 use std::sync::Mutex;
 use std::time::Instant;
-use tiny_skia::{FillRule, Paint, Path, PathBuilder, Pixmap, Transform};
+use tiny_skia::{FillRule, LineCap, LineJoin, Paint, Path, PathBuilder, Pixmap, PixmapPaint, Stroke, Transform};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Mode {
@@ -27,6 +31,14 @@ pub enum Mode {
 /// 胶囊的逻辑尺寸（按显示器缩放）
 pub(crate) const WIDTH: f32 = 120.0;
 pub(crate) const HEIGHT: f32 = 36.0;
+/// 两侧圆形按钮的直径、和胶囊的间距
+const BUTTON: f32 = 28.0;
+const BUTTON_GAP: f32 = 6.0;
+const SIDE: f32 = BUTTON + BUTTON_GAP;
+/// 窗口的逻辑宽度：胶囊居中，两侧留出按钮的位置（不显示按钮时那里是透明的）
+pub(crate) const WINDOW_WIDTH: f32 = WIDTH + 2.0 * SIDE;
+/// 按钮淡入淡出的速度（每帧）
+const HOVER_PER_FRAME: f32 = 0.2;
 /// 距工作区（任务栏上沿 / 程序坞上沿）的距离
 pub(crate) const BOTTOM_GAP: f32 = 16.0;
 const N_BARS: usize = 12;
@@ -81,6 +93,25 @@ pub(crate) fn current() -> Mode {
     *MODE.lock().unwrap()
 }
 
+/// 悬浮条上的部位
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub(crate) enum Part {
+    Capsule,
+    Cancel,
+    Confirm,
+}
+
+/// 点了悬浮条上的按钮（各平台的悬浮窗线程调用）：和按对应的热键一样处理
+pub(crate) fn clicked(part: Part) {
+    let ev = match part {
+        Part::Cancel => crate::hotkeys::HotkeyEvent::Cancel,
+        Part::Confirm => crate::hotkeys::HotkeyEvent::Confirm,
+        Part::Capsule => return,
+    };
+    log::info!("Overlay button clicked: {part:?}");
+    crate::hotkeys::send(ev);
+}
+
 /// 动画状态：只在悬浮窗的绘制线程里访问
 pub(crate) struct Anim {
     pub visible: bool,
@@ -94,6 +125,13 @@ pub(crate) struct Anim {
     start: Instant,
     /// 录音快到最长时长时剩下的秒数（向上取整），显示在胶囊右侧
     countdown: Option<u32>,
+    /// 鼠标停在悬浮条上（两侧显示按钮）；hover_t 是按钮淡入的进度 0..1
+    hover: bool,
+    hover_t: f32,
+    /// 鼠标下的按钮、按下时所在的按钮、上一帧左键是否按着（判断点击）
+    hot: Option<Part>,
+    pressed: Option<Part>,
+    was_down: bool,
 }
 
 impl Anim {
@@ -107,7 +145,62 @@ impl Anim {
             last_shift: Instant::now(),
             start: Instant::now(),
             countdown: None,
+            hover: false,
+            hover_t: 0.0,
+            hot: None,
+            pressed: None,
+            was_down: false,
         }
+    }
+
+    /// 当前状态有哪些按钮（取消，完成）：录音时都有，识别、润色中只有取消
+    fn buttons(&self) -> (bool, bool) {
+        match self.shown_mode {
+            Mode::Recording | Mode::Revising | Mode::Translating => (true, true),
+            Mode::Processing | Mode::Polishing => (true, false),
+            Mode::Hidden => (false, false),
+        }
+    }
+
+    /// 窗口内的逻辑坐标 (x, y) 落在哪个部位。按钮只在展开（鼠标停在悬浮条上）时才算；其余地方鼠标穿透
+    pub(crate) fn hit(&self, x: f32, y: f32) -> Option<Part> {
+        if !self.visible || current() == Mode::Hidden {
+            return None;
+        }
+        let in_button = |cx: f32| (x - cx).powi(2) + (y - HEIGHT / 2.0).powi(2) <= (BUTTON / 2.0).powi(2);
+        let (cancel, confirm) = self.buttons();
+        if self.hover && cancel && in_button(BUTTON / 2.0) {
+            return Some(Part::Cancel);
+        }
+        if self.hover && confirm && in_button(WINDOW_WIDTH - BUTTON / 2.0) {
+            return Some(Part::Confirm);
+        }
+        ((SIDE..=SIDE + WIDTH).contains(&x) && (0.0..=HEIGHT).contains(&y)).then_some(Part::Capsule)
+    }
+
+    /// 每帧调用：鼠标位置（窗口内的逻辑坐标）和左键是否按着。返回被点击（在同一个按钮上按下再松开）的按钮
+    pub(crate) fn pointer(&mut self, x: f32, y: f32, down: bool) -> Option<Part> {
+        let part = self.hit(x, y);
+        let in_window = (0.0..=WINDOW_WIDTH).contains(&x) && (0.0..=HEIGHT).contains(&y);
+        // 移到胶囊上时展开；展开后鼠标在整个窗口（含两侧按钮）内都保持展开
+        self.hover = current() != Mode::Hidden && (part == Some(Part::Capsule) || (self.hover && in_window));
+        self.hot = part.filter(|p| *p != Part::Capsule);
+        let mut clicked = None;
+        if down && !self.was_down {
+            self.pressed = self.hot;
+        } else if !down && self.was_down {
+            if self.pressed.is_some() && self.pressed == self.hot {
+                clicked = self.pressed;
+            }
+            self.pressed = None;
+        }
+        self.was_down = down;
+        clicked
+    }
+
+    /// 鼠标下是不是按钮（各平台据此显示手形光标等）
+    pub(crate) fn over_button(&self) -> bool {
+        self.hot.is_some()
     }
 
     /// 状态改变时调用。返回 true 表示刚从隐藏变为显示：调用方定位窗口、开始逐帧绘制
@@ -142,6 +235,8 @@ impl Anim {
         } else {
             self.alpha = (self.alpha + FADE_PER_FRAME).min(1.0);
         }
+        let target = if self.hover { 1.0 } else { 0.0 };
+        self.hover_t += (target - self.hover_t).clamp(-HOVER_PER_FRAME, HOVER_PER_FRAME);
         self.update_bars();
         true
     }
@@ -186,8 +281,64 @@ impl Anim {
         }
     }
 
-    /// 按 scale 绘制胶囊（预乘 alpha 的 RGBA，不含整体淡入淡出的 alpha）
+    /// 按 scale 绘制整个窗口：居中的胶囊，展开时加上两侧的按钮（预乘 alpha 的 RGBA，不含整体淡入淡出的 alpha）
     pub fn draw(&self) -> Option<Pixmap> {
+        let s = self.scale;
+        let capsule = self.draw_capsule()?;
+        let (w, h) = ((WINDOW_WIDTH * s).round(), (HEIGHT * s).round());
+        let mut pm = Pixmap::new(w as u32, h as u32)?;
+        let x = ((w - capsule.width() as f32) / 2.0).round() as i32;
+        pm.draw_pixmap(x, 0, capsule.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
+        if self.hover_t > 0.01 {
+            let (cancel, confirm) = self.buttons();
+            if cancel {
+                self.draw_button(&mut pm, Part::Cancel, BUTTON / 2.0 * s, h / 2.0);
+            }
+            if confirm {
+                self.draw_button(&mut pm, Part::Confirm, w - BUTTON / 2.0 * s, h / 2.0);
+            }
+        }
+        Some(pm)
+    }
+
+    /// 圆形按钮：深色底、白色图标（取消是 ×，完成是 ✓）；鼠标移上去变成红色 / 绿色底。
+    /// 随 hover_t 淡入，并从胶囊旁边滑出一点
+    fn draw_button(&self, pm: &mut Pixmap, part: Part, cx: f32, cy: f32) -> Option<()> {
+        let (s, a) = (self.scale, self.hover_t);
+        let id = Transform::identity();
+        let toward_capsule = if part == Part::Cancel { 1.0 } else { -1.0 };
+        let cx = cx + toward_capsule * (1.0 - a) * 8.0 * s;
+        let hot = self.hot == Some(part);
+        let pressed = hot && self.pressed == Some(part);
+        let r = (BUTTON / 2.0 * s - 0.5) * if pressed { 0.92 } else { 1.0 };
+        let fill = match (part, hot) {
+            (Part::Cancel, true) => [255, 77, 79],
+            (Part::Confirm, true) => [34, 197, 94],
+            _ => [24, 24, 27],
+        };
+        let circle = PathBuilder::from_circle(cx, cy, r)?;
+        pm.fill_path(&circle, &paint(fill[0], fill[1], fill[2], (240.0 * a) as u8), FillRule::Winding, id, None);
+        pm.stroke_path(&circle, &paint(255, 255, 255, (40.0 * a) as u8), &Stroke { width: s.max(1.0), ..Default::default() }, id, None);
+        let mut pb = PathBuilder::new();
+        if part == Part::Cancel {
+            let k = 4.5 * s;
+            pb.move_to(cx - k, cy - k);
+            pb.line_to(cx + k, cy + k);
+            pb.move_to(cx + k, cy - k);
+            pb.line_to(cx - k, cy + k);
+        } else {
+            pb.move_to(cx - 5.5 * s, cy + 0.3 * s);
+            pb.line_to(cx - 1.8 * s, cy + 4.0 * s);
+            pb.line_to(cx + 5.5 * s, cy - 4.0 * s);
+        }
+        let icon = pb.finish()?;
+        let stroke = Stroke { width: 2.0 * s, line_cap: LineCap::Round, line_join: LineJoin::Round, ..Default::default() };
+        pm.stroke_path(&icon, &paint(255, 255, 255, (240.0 * a) as u8), &stroke, id, None);
+        Some(())
+    }
+
+    /// 按 scale 绘制胶囊本身（README 配图也用它）
+    fn draw_capsule(&self) -> Option<Pixmap> {
         let s = self.scale;
         let (w, h) = ((WIDTH * s).round(), (HEIGHT * s).round());
         let mut pm = Pixmap::new(w as u32, h as u32)?;
@@ -348,7 +499,67 @@ mod tests {
     use std::time::Duration;
 
     fn anim(mode: Mode, bars: [f32; N_BARS], start: Instant) -> Anim {
-        Anim { visible: true, alpha: 1.0, shown_mode: mode, scale: 2.0, bars, last_shift: Instant::now(), start, countdown: None }
+        Anim { shown_mode: mode, scale: 2.0, bars, start, visible: true, alpha: 1.0, ..Anim::new() }
+    }
+
+    #[test]
+    fn buttons_expand_on_hover_and_click() {
+        set(Mode::Recording);
+        let mut v = anim(Mode::Recording, [0.0; N_BARS], Instant::now());
+        let (cy, cancel_x, confirm_x) = (HEIGHT / 2.0, BUTTON / 2.0, WINDOW_WIDTH - BUTTON / 2.0);
+        // 没停在悬浮条上时，按钮的位置是穿透的
+        assert_eq!(v.hit(confirm_x, cy), None);
+        assert_eq!(v.pointer(confirm_x, cy, false), None);
+        // 移到胶囊上展开，再移到按钮上
+        assert_eq!(v.pointer(WINDOW_WIDTH / 2.0, cy, false), None);
+        assert_eq!(v.hit(confirm_x, cy), Some(Part::Confirm));
+        assert_eq!(v.pointer(confirm_x, cy, false), None);
+        assert!(v.over_button());
+        // 按下、松开：点击完成
+        assert_eq!(v.pointer(confirm_x, cy, true), None);
+        assert_eq!(v.pointer(confirm_x, cy, false), Some(Part::Confirm));
+        // 在取消上按下、拖到胶囊上松开：不算点击
+        assert_eq!(v.pointer(cancel_x, cy, true), None);
+        assert_eq!(v.pointer(WINDOW_WIDTH / 2.0, cy, false), None);
+        // 移出窗口收起
+        v.pointer(WINDOW_WIDTH + 20.0, cy, false);
+        assert_eq!(v.hit(cancel_x, cy), None);
+        // 识别中只有取消
+        let mut v = anim(Mode::Processing, [0.0; N_BARS], Instant::now());
+        v.pointer(WINDOW_WIDTH / 2.0, cy, false);
+        assert_eq!(v.hit(confirm_x, cy), None);
+        assert_eq!(v.hit(cancel_x, cy), Some(Part::Cancel));
+        set(Mode::Hidden);
+    }
+
+    /// 手动运行：输出展开了按钮的悬浮条（各状态、鼠标停在完成 / 取消上），看看样子
+    /// VT_IMG_DIR=… cargo test --lib export_overlay_buttons -- --ignored
+    #[test]
+    #[ignore]
+    fn export_overlay_buttons() {
+        let dir = std::path::PathBuf::from(std::env::var("VT_IMG_DIR").unwrap_or_else(|_| "target/readme".into()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let speech = [0.18, 0.4, 0.72, 0.95, 0.6, 0.38, 0.82, 1.0, 0.58, 0.3, 0.52, 0.22];
+        let cy = HEIGHT / 2.0;
+        for (name, mode, at) in [
+            ("idle", Mode::Recording, None),
+            ("hover", Mode::Recording, Some(WINDOW_WIDTH / 2.0)),
+            ("confirm", Mode::Recording, Some(WINDOW_WIDTH - BUTTON / 2.0)),
+            ("cancel", Mode::Recording, Some(BUTTON / 2.0)),
+            ("processing", Mode::Processing, Some(WINDOW_WIDTH / 2.0)),
+        ] {
+            set(mode);
+            let mut v = anim(mode, speech, Instant::now() - Duration::from_millis(400));
+            if let Some(x) = at {
+                v.pointer(WINDOW_WIDTH / 2.0, cy, false);
+                v.pointer(x, cy, false);
+                v.hover_t = 1.0;
+            }
+            let path = dir.join(format!("overlay-{name}.png"));
+            v.draw().unwrap().save_png(&path).unwrap();
+            println!("wrote {}", path.display());
+        }
+        set(Mode::Hidden);
     }
 
     /// README 配图：用与程序相同的绘制代码把各状态的胶囊输出成 PNG（2 倍分辨率），不涉及真实屏幕。
@@ -374,7 +585,7 @@ mod tests {
                 v.bars = speech; // 录音态的波形来自麦克风，这里用固定样例
             }
             let path = dir.join(format!("capsule-{name}.png"));
-            v.draw().unwrap().save_png(&path).unwrap();
+            v.draw_capsule().unwrap().save_png(&path).unwrap();
             println!("wrote {}", path.display());
         }
         // 快到最长时长时的倒计时
@@ -382,7 +593,7 @@ mod tests {
             let mut v = anim(Mode::Recording, speech, at(0.4));
             v.countdown = Some(secs);
             let path = dir.join(format!("capsule-countdown-{secs}.png"));
-            v.draw().unwrap().save_png(&path).unwrap();
+            v.draw_capsule().unwrap().save_png(&path).unwrap();
             println!("wrote {}", path.display());
         }
     }
@@ -423,7 +634,7 @@ mod tests {
                 } else {
                     v.update_bars();
                 }
-                v.draw().unwrap().save_png(dir.join(format!("{name}-{i:04}.png"))).unwrap();
+                v.draw_capsule().unwrap().save_png(dir.join(format!("{name}-{i:04}.png"))).unwrap();
             }
             println!("wrote {name} ({} frames)", (secs * FPS) as usize);
         }
