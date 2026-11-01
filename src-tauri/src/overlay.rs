@@ -1,7 +1,7 @@
 //! 录音提示悬浮条：输入焦点所在屏幕底部居中的胶囊，录音时显示随音量跳动的波形，识别中显示波浪动画
 //! 显示期间持续跟随焦点：切到另一块屏幕上的输入框，悬浮条也换到那块屏幕的同一位置
 //!
-//! 鼠标移到胶囊上时，两侧出现圆形按钮：左边取消（同取消键），右边完成（同再按一次主热键，结束录音开始识别）；
+//! 鼠标移到胶囊上时，两侧像水滴一样分出圆形按钮：左边取消（同取消键），右边完成（同再按一次主热键，结束录音开始识别）；
 //! 识别、润色中只有取消。腾不出手按键盘时可以只用鼠标。
 //!
 //! 这里是与平台无关的部分：状态、淡入淡出、波形动画、按钮的悬停和点击、绘制（tiny-skia）。
@@ -11,7 +11,7 @@
 use crate::audio;
 use std::sync::Mutex;
 use std::time::Instant;
-use tiny_skia::{FillRule, LineCap, LineJoin, Paint, Path, PathBuilder, Pixmap, PixmapPaint, Stroke, Transform};
+use tiny_skia::{FillRule, LineCap, LineJoin, Paint, Path, PathBuilder, Pixmap, PixmapPaint, PremultipliedColorU8, Stroke, Transform};
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Mode {
@@ -31,14 +31,18 @@ pub enum Mode {
 /// 胶囊的逻辑尺寸（按显示器缩放）
 pub(crate) const WIDTH: f32 = 120.0;
 pub(crate) const HEIGHT: f32 = 36.0;
-/// 两侧圆形按钮的直径、和胶囊的间距
+/// 两侧圆形按钮的直径、展开后和胶囊的间距
 const BUTTON: f32 = 28.0;
-const BUTTON_GAP: f32 = 6.0;
+const BUTTON_GAP: f32 = 10.0;
 const SIDE: f32 = BUTTON + BUTTON_GAP;
 /// 窗口的逻辑宽度：胶囊居中，两侧留出按钮的位置（不显示按钮时那里是透明的）
 pub(crate) const WINDOW_WIDTH: f32 = WIDTH + 2.0 * SIDE;
-/// 按钮淡入淡出的速度（每帧）
-const HOVER_PER_FRAME: f32 = 0.2;
+/// 按钮和胶囊「粘连」的范围（逻辑像素，平滑并集的 k）：间距小于它的一半时两者由一道颈连着，
+/// 越远颈越细，到一半时断开；再远一些两边残留的鼓包也收回去
+const GOO: f32 = 14.0;
+/// 按钮展开 / 收起所需的时间（毫秒）
+const SPREAD_OUT_MS: f32 = 110.0;
+const SPREAD_IN_MS: f32 = 75.0;
 /// 距工作区（任务栏上沿 / 程序坞上沿）的距离
 pub(crate) const BOTTOM_GAP: f32 = 16.0;
 const N_BARS: usize = 12;
@@ -125,9 +129,9 @@ pub(crate) struct Anim {
     start: Instant,
     /// 录音快到最长时长时剩下的秒数（向上取整），显示在胶囊右侧
     countdown: Option<u32>,
-    /// 鼠标停在悬浮条上（两侧显示按钮）；hover_t 是按钮淡入的进度 0..1
+    /// 鼠标停在悬浮条上（两侧显示按钮）；spread 是按钮从胶囊里分出来的进度 0..1（见 bud）
     hover: bool,
-    hover_t: f32,
+    spread: f32,
     /// 鼠标下的按钮、按下时所在的按钮、上一帧左键是否按着（判断点击）
     hot: Option<Part>,
     pressed: Option<Part>,
@@ -146,7 +150,7 @@ impl Anim {
             start: Instant::now(),
             countdown: None,
             hover: false,
-            hover_t: 0.0,
+            spread: 0.0,
             hot: None,
             pressed: None,
             was_down: false,
@@ -235,8 +239,8 @@ impl Anim {
         } else {
             self.alpha = (self.alpha + FADE_PER_FRAME).min(1.0);
         }
-        let target = if self.hover { 1.0 } else { 0.0 };
-        self.hover_t += (target - self.hover_t).clamp(-HOVER_PER_FRAME, HOVER_PER_FRAME);
+        let step = FRAME_MS as f32 / if self.hover { SPREAD_OUT_MS } else { -SPREAD_IN_MS };
+        self.spread = (self.spread + step).clamp(0.0, 1.0);
         self.update_bars();
         true
     }
@@ -281,44 +285,58 @@ impl Anim {
         }
     }
 
-    /// 按 scale 绘制整个窗口：居中的胶囊，展开时加上两侧的按钮（预乘 alpha 的 RGBA，不含整体淡入淡出的 alpha）
+    /// 按 scale 绘制整个窗口：居中的胶囊，展开时加上两侧的按钮（预乘 alpha 的 RGBA，不含整体淡入淡出的 alpha）。
+    /// 胶囊和按钮的底色、描边用距离场逐像素画（draw_body），按钮分出来的过程中能和胶囊连成一体，
+    /// 胶囊里的内容、按钮的图标再画在上面
     pub fn draw(&self) -> Option<Pixmap> {
         let s = self.scale;
-        let capsule = self.draw_capsule()?;
         let (w, h) = ((WINDOW_WIDTH * s).round(), (HEIGHT * s).round());
         let mut pm = Pixmap::new(w as u32, h as u32)?;
-        let x = ((w - capsule.width() as f32) / 2.0).round() as i32;
-        pm.draw_pixmap(x, 0, capsule.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
-        if self.hover_t > 0.01 {
-            let (cancel, confirm) = self.buttons();
-            if cancel {
-                self.draw_button(&mut pm, Part::Cancel, BUTTON / 2.0 * s, h / 2.0);
+        let capsule_w = (WIDTH * s).round();
+        let x = ((w - capsule_w) / 2.0).round();
+
+        let rgba = |c: [u8; 3], a: u8| [c[0] as f32 / 255.0, c[1] as f32 / 255.0, c[2] as f32 / 255.0, a as f32 / 255.0];
+        let (dot, _) = self.palette();
+        let border = if self.shown_mode == Mode::Polishing { rgba(dot, 120) } else { rgba([255, 255, 255], 40) };
+        let r = h / 2.0 - 0.5;
+        let capsule = Blob { x0: x + 0.5 + r, x1: x + capsule_w - 0.5 - r, r, fill: rgba(BASE, 235), border };
+
+        let (cancel, confirm) = if self.spread > 0.0 { self.buttons() } else { (false, false) };
+        let (offset, radius) = bud(self.spread);
+        let mut buttons = Vec::new();
+        for (part, shown, cx) in [(Part::Cancel, cancel, x - offset * s), (Part::Confirm, confirm, x + capsule_w + offset * s)] {
+            if !shown || radius <= 0.0 {
+                continue;
             }
-            if confirm {
-                self.draw_button(&mut pm, Part::Confirm, w - BUTTON / 2.0 * s, h / 2.0);
+            let hot = self.hot == Some(part);
+            let pressed = hot && self.pressed == Some(part);
+            let r = (radius * s - 0.5).max(0.0) * if pressed { 0.92 } else { 1.0 };
+            let fill = match (part, hot) {
+                (Part::Cancel, true) => [255, 77, 79],
+                (Part::Confirm, true) => [34, 197, 94],
+                _ => BASE,
+            };
+            buttons.push((part, Blob { x0: cx, x1: cx, r, fill: rgba(fill, 235), border: rgba([255, 255, 255], 40) }));
+        }
+        let blobs: Vec<&Blob> = buttons.iter().map(|(_, b)| b).collect();
+        draw_body(&mut pm, &capsule, &blobs, GOO * s, s.max(1.0));
+
+        let content = self.draw_capsule(false)?;
+        pm.draw_pixmap(x as i32, 0, content.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
+        // 图标在按钮快要分出来时才出现
+        let icon_alpha = smoothstep(0.45, 0.85, self.spread);
+        if icon_alpha > 0.0 {
+            for (part, b) in &buttons {
+                self.draw_icon(&mut pm, *part, b.x0, h / 2.0, icon_alpha);
             }
         }
         Some(pm)
     }
 
-    /// 圆形按钮：深色底、白色图标（取消是 ×，完成是 ✓）；鼠标移上去变成红色 / 绿色底。
-    /// 随 hover_t 淡入，并从胶囊旁边滑出一点
-    fn draw_button(&self, pm: &mut Pixmap, part: Part, cx: f32, cy: f32) -> Option<()> {
-        let (s, a) = (self.scale, self.hover_t);
+    /// 按钮的图标（取消是 ×，完成是 ✓），白色，不透明度乘 alpha
+    fn draw_icon(&self, pm: &mut Pixmap, part: Part, cx: f32, cy: f32, alpha: f32) -> Option<()> {
+        let (s, a) = (self.scale, alpha);
         let id = Transform::identity();
-        let toward_capsule = if part == Part::Cancel { 1.0 } else { -1.0 };
-        let cx = cx + toward_capsule * (1.0 - a) * 8.0 * s;
-        let hot = self.hot == Some(part);
-        let pressed = hot && self.pressed == Some(part);
-        let r = (BUTTON / 2.0 * s - 0.5) * if pressed { 0.92 } else { 1.0 };
-        let fill = match (part, hot) {
-            (Part::Cancel, true) => [255, 77, 79],
-            (Part::Confirm, true) => [34, 197, 94],
-            _ => [24, 24, 27],
-        };
-        let circle = PathBuilder::from_circle(cx, cy, r)?;
-        pm.fill_path(&circle, &paint(fill[0], fill[1], fill[2], (240.0 * a) as u8), FillRule::Winding, id, None);
-        pm.stroke_path(&circle, &paint(255, 255, 255, (40.0 * a) as u8), &Stroke { width: s.max(1.0), ..Default::default() }, id, None);
         let mut pb = PathBuilder::new();
         if part == Part::Cancel {
             let k = 4.5 * s;
@@ -337,8 +355,19 @@ impl Anim {
         Some(())
     }
 
-    /// 按 scale 绘制胶囊本身（README 配图也用它）
-    fn draw_capsule(&self) -> Option<Pixmap> {
+    /// 各状态的颜色：左侧标记、波形条
+    fn palette(&self) -> ([u8; 3], [u8; 3]) {
+        match self.shown_mode {
+            Mode::Revising => ([167, 139, 250], [221, 214, 254]),
+            Mode::Translating => ([52, 211, 153], [167, 243, 208]),
+            Mode::Processing => ([96, 205, 255], [186, 230, 253]),
+            Mode::Polishing => ([251, 191, 36], [253, 230, 138]),
+            _ => ([255, 77, 79], [255, 255, 255]),
+        }
+    }
+
+    /// 按 scale 绘制胶囊本身（README 配图也用它）。base 为 false 时不画底色和描边（悬浮窗里由 draw_body 画）
+    fn draw_capsule(&self, base: bool) -> Option<Pixmap> {
         let s = self.scale;
         let (w, h) = ((WIDTH * s).round(), (HEIGHT * s).round());
         let mut pm = Pixmap::new(w as u32, h as u32)?;
@@ -346,19 +375,15 @@ impl Anim {
 
         let polishing = self.shown_mode == Mode::Polishing;
         let t = self.start.elapsed().as_secs_f32();
-        let (dot, bar) = match self.shown_mode {
-            Mode::Revising => ([167, 139, 250], [221, 214, 254]),
-            Mode::Translating => ([52, 211, 153], [167, 243, 208]),
-            Mode::Processing => ([96, 205, 255], [186, 230, 253]),
-            Mode::Polishing => ([251, 191, 36], [253, 230, 138]),
-            _ => ([255, 77, 79], [255, 255, 255]),
-        };
+        let (dot, bar) = self.palette();
 
         // 胶囊底 + 细描边（润色中描边换成琥珀色）
-        let pill = rounded_rect(0.5, 0.5, w - 1.0, h - 1.0, h / 2.0)?;
-        pm.fill_path(&pill, &paint(24, 24, 27, 235), FillRule::Winding, id, None);
-        let border = if polishing { paint(dot[0], dot[1], dot[2], 120) } else { paint(255, 255, 255, 40) };
-        pm.stroke_path(&pill, &border, &tiny_skia::Stroke { width: 1.0 * s.max(1.0), ..Default::default() }, id, None);
+        if base {
+            let pill = rounded_rect(0.5, 0.5, w - 1.0, h - 1.0, h / 2.0)?;
+            pm.fill_path(&pill, &paint(BASE[0], BASE[1], BASE[2], 235), FillRule::Winding, id, None);
+            let border = if polishing { paint(dot[0], dot[1], dot[2], 120) } else { paint(255, 255, 255, 40) };
+            pm.stroke_path(&pill, &border, &Stroke { width: 1.0 * s.max(1.0), ..Default::default() }, id, None);
+        }
 
         // 左侧状态标记：录音时呼吸闪烁的圆点；转写中常亮圆点；润色中换成星芒 ✦
         let (cx, cy) = (18.0 * s, h / 2.0);
@@ -413,6 +438,77 @@ impl Anim {
             }
         }
         Some(pm)
+    }
+}
+
+/// 胶囊和按钮的底色
+const BASE: [u8; 3] = [24, 24, 27];
+
+/// 展开进度 p 时按钮的圆心离胶囊侧边多远、半径多大（逻辑像素）：
+/// 先从胶囊侧边鼓出一个小包，边长大边往外移，和胶囊之间的颈越拉越细、断开，最后停在离胶囊 BUTTON_GAP 处
+fn bud(p: f32) -> (f32, f32) {
+    // 圆心从侧边内 6 像素处出发，先快后慢；半径很快长足，鼓包是圆的而不是尖的
+    const START: f32 = -6.0;
+    let r = BUTTON / 2.0 * smoothstep(0.0, 0.3, p);
+    let travel = BUTTON_GAP + BUTTON / 2.0 - START;
+    (START + travel * (p * std::f32::consts::FRAC_PI_2).sin(), r)
+}
+
+fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// 一个水平放置的胶囊形（x0 == x1 时是圆）：两端圆心的横坐标、半径，底色和描边颜色（RGBA，0..1）。坐标是设备像素
+struct Blob {
+    x0: f32,
+    x1: f32,
+    r: f32,
+    fill: [f32; 4],
+    border: [f32; 4],
+}
+
+impl Blob {
+    /// 到边缘的有符号距离（里面为负）
+    fn dist(&self, x: f32, y: f32, cy: f32) -> f32 {
+        let dx = (self.x0 - x).max(x - self.x1).max(0.0);
+        dx.hypot(y - cy) - self.r
+    }
+}
+
+/// 用距离场逐像素画胶囊和按钮的底色、描边（垂直居中）。几个形状用平滑并集（smooth min，范围 k）合在一起：
+/// 离得近时中间长出一道颈连成一体，颜色也按离哪个形状近混合；拉远了颈变细、断开，像水滴分开。
+/// 覆盖率按距离算，边缘自带抗锯齿；stroke 是描边宽度
+fn draw_body(pm: &mut Pixmap, capsule: &Blob, buttons: &[&Blob], k: f32, stroke: f32) {
+    let (w, h) = (pm.width(), pm.height());
+    let cy = h as f32 / 2.0;
+    let mix = |a: [f32; 4], b: [f32; 4], t: f32| std::array::from_fn::<f32, 4, _>(|i| a[i] + (b[i] - a[i]) * t);
+    let to_u8 = |v: f32| (v * 255.0).round().clamp(0.0, 255.0) as u8;
+    let pixels = pm.pixels_mut();
+    for py in 0..h {
+        for px in 0..w {
+            let (x, y) = (px as f32 + 0.5, py as f32 + 0.5);
+            let (mut d, mut fill, mut border) = (capsule.dist(x, y, cy), capsule.fill, capsule.border);
+            for b in buttons {
+                let db = b.dist(x, y, cy);
+                // t = 1：离已有的形状更近；0：离这个按钮更近
+                let t = (0.5 + 0.5 * (db - d) / k).clamp(0.0, 1.0);
+                d = db + (d - db) * t - k * t * (1.0 - t);
+                fill = mix(b.fill, fill, t);
+                border = mix(b.border, border, t);
+            }
+            let fa = fill[3] * (0.5 - d).clamp(0.0, 1.0);
+            let ba = border[3] * (stroke / 2.0 + 0.5 - d.abs()).clamp(0.0, 1.0);
+            if fa <= 0.0 && ba <= 0.0 {
+                continue;
+            }
+            // 描边盖在底色上（预乘 alpha）
+            let a = ba + fa * (1.0 - ba);
+            let c = |i: usize| border[i] * ba + fill[i] * fa * (1.0 - ba);
+            if let Some(p) = PremultipliedColorU8::from_rgba(to_u8(c(0)), to_u8(c(1)), to_u8(c(2)), to_u8(a)) {
+                pixels[(py * w + px) as usize] = p;
+            }
+        }
     }
 }
 
@@ -553,12 +649,27 @@ mod tests {
             if let Some(x) = at {
                 v.pointer(WINDOW_WIDTH / 2.0, cy, false);
                 v.pointer(x, cy, false);
-                v.hover_t = 1.0;
+                v.spread = 1.0;
             }
             let path = dir.join(format!("overlay-{name}.png"));
             v.draw().unwrap().save_png(&path).unwrap();
             println!("wrote {}", path.display());
         }
+        // 按钮分出来的过程：每帧一行，从上往下
+        set(Mode::Recording);
+        let mut v = anim(Mode::Recording, speech, Instant::now() - Duration::from_millis(400));
+        v.pointer(WINDOW_WIDTH / 2.0, cy, false);
+        let frames = (SPREAD_OUT_MS / FRAME_MS as f32).ceil() as usize + 1;
+        let first = v.draw().unwrap();
+        let mut sheet = Pixmap::new(first.width(), first.height() * frames as u32).unwrap();
+        for i in 0..frames {
+            v.spread = (i as f32 * FRAME_MS as f32 / SPREAD_OUT_MS).min(1.0);
+            let frame = v.draw().unwrap();
+            sheet.draw_pixmap(0, (i as u32 * frame.height()) as i32, frame.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
+        }
+        let path = dir.join("overlay-spread.png");
+        sheet.save_png(&path).unwrap();
+        println!("wrote {}", path.display());
         set(Mode::Hidden);
     }
 
@@ -585,7 +696,7 @@ mod tests {
                 v.bars = speech; // 录音态的波形来自麦克风，这里用固定样例
             }
             let path = dir.join(format!("capsule-{name}.png"));
-            v.draw_capsule().unwrap().save_png(&path).unwrap();
+            v.draw_capsule(true).unwrap().save_png(&path).unwrap();
             println!("wrote {}", path.display());
         }
         // 快到最长时长时的倒计时
@@ -593,7 +704,7 @@ mod tests {
             let mut v = anim(Mode::Recording, speech, at(0.4));
             v.countdown = Some(secs);
             let path = dir.join(format!("capsule-countdown-{secs}.png"));
-            v.draw_capsule().unwrap().save_png(&path).unwrap();
+            v.draw_capsule(true).unwrap().save_png(&path).unwrap();
             println!("wrote {}", path.display());
         }
     }
@@ -634,7 +745,7 @@ mod tests {
                 } else {
                     v.update_bars();
                 }
-                v.draw_capsule().unwrap().save_png(dir.join(format!("{name}-{i:04}.png"))).unwrap();
+                v.draw_capsule(true).unwrap().save_png(dir.join(format!("{name}-{i:04}.png"))).unwrap();
             }
             println!("wrote {name} ({} frames)", (secs * FPS) as usize);
         }
