@@ -66,6 +66,11 @@ pub struct Config {
     pub vocab_enabled: bool,
     /// 用户手动修改识别结果时，自动把纠正的词存入词库
     pub learn_from_edits: bool,
+    /// 怎样判断一处修改该不该学（见 learn.rs）："mechanical" 只用本地比对；"hybrid" 本地比对找出候选，
+    /// LLM 把关并整理词条；"llm" 整段修改交给 LLM 判断。后两种没配置 LLM 时按 "mechanical"
+    pub learn_mode: String,
+    /// 学到词条后："accept" 直接入库，提示里可撤销；"reject" 先不入库，用户在提示里点「添加」才加入
+    pub learn_default: String,
     /// 词库文件的大小上限（KB）：超出时删掉最久没用到的自动学习词条（见 vocab.rs）
     pub vocab_max_kb: u32,
     /// 定期检查新版本（发现后通知，由用户一键更新）
@@ -130,6 +135,8 @@ impl Default for Config {
             insert_min_chars: 12,
             vocab_enabled: true,
             learn_from_edits: true,
+            learn_mode: "hybrid".into(),
+            learn_default: "accept".into(),
             vocab_max_kb: 10240,
             auto_check_updates: true,
             style_prompt: String::new(),

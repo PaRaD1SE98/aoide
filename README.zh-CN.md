@@ -154,7 +154,9 @@ Aoide 使用 OpenAI 的语音识别格式（`POST {API 地址}/audio/transcripti
 | `insert_smart` | `true` | 光标前后有文字时按上下文插入 |
 | `insert_min_seconds` / `insert_min_chars` | `10` / `12` | 录音 / 转写结果短于此值时直接插入，不调用 LLM |
 | `vocab_enabled` | `true` | 用词库纠正识别结果：反复出现的误识别直接替换，其余连同相关词条交给 LLM |
-| `learn_from_edits` | `true` | 识别结果输入后你手动改正的词，自动加入词库（并弹出可撤销的提示） |
+| `learn_from_edits` | `true` | 识别结果输入后你手动改正的词，自动加入词库 |
+| `learn_mode` | `"hybrid"` | 怎样判断该学哪些：`"mechanical"` 只用本地比对；`"hybrid"` 本地比对后由 LLM 把关，并把词条整理成完整的词；`"llm"` 整段修改交给 LLM 判断。后两种没配置 LLM 时按 `"mechanical"` |
+| `learn_default` | `"accept"` | `"accept"` 学到后直接入库，提示里可撤销；`"reject"` 先询问，点「添加」才入库 |
 | `vocab_max_kb` | `10240` | 词库文件的大小上限（KB）；超出时删除最久没用到的自动学习词条，手动添加的不会删 |
 | `auto_check_updates` | `true` | 每天检查一次新版本并通知你；是否更新始终由你决定 |
 | `style_prompt` | *（空）* | 自定义输出风格：润色、插入、修订、翻译共用的排版（分点、分段）和措辞规则，留空使用内置；下面各任务的提示词只写各自的任务 |

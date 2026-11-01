@@ -435,8 +435,14 @@ fn set_vocab_enabled(id: u64, enabled: bool) {
 
 /// 词条入库提示：读取当前列出的词条
 #[tauri::command]
-fn get_learned(app: AppHandle) -> Vec<learned_card::Item> {
-    learned_card::items(&app)
+fn get_learned(app: AppHandle) -> learned_card::View {
+    learned_card::view(&app)
+}
+
+/// 词条入库提示（默认拒绝时）：添加
+#[tauri::command]
+fn add_learned(app: AppHandle) {
+    learned_card::add(&app)
 }
 
 /// 词条入库提示：撤销
@@ -491,17 +497,15 @@ pub fn run() {
                 result_card::show(app, i18n::tr("没有检测到输入框，识别结果如下", "No input box detected. Here is the transcript", "入力欄が見つからないため、認識結果をここに表示します"), "这是一段测试文字：今天下午三点的会议改到明天上午十点，请大家提前准备好季度汇报材料。");
                 return;
             }
-            // 仅调试版：带 --demo-learned 时模拟学到一个词条，弹出入库提示。
+            // 仅调试版：带 --demo-learned 时模拟学到一个词条，弹出入库提示（--demo-learned=ask 为默认拒绝的样子）。
             // 延迟一下再弹：等这次启动带出来的临时控制台关掉，小窗记下的「之前的前台窗口」才是真实的
             #[cfg(debug_assertions)]
-            if _args.iter().any(|a| a == "--demo-learned") {
-                let app = app.clone();
+            if let Some(arg) = _args.iter().find(|a| a.starts_with("--demo-learned")) {
+                let (app, ask) = (app.clone(), arg.ends_with("=ask"));
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_millis(1500));
                     let c = learn::Correction { wrong: "思维到图".into(), right: "思维导图".into(), score: 1.0 };
-                    if let Some(change) = vocab::learn(&c.wrong, &c.right) {
-                        learned_card::show(&app, vec![(c, change)]);
-                    }
+                    learned_card::show(&app, vec![c], ask);
                 });
                 return;
             }
@@ -554,6 +558,7 @@ pub fn run() {
             remove_vocab_variant,
             set_vocab_enabled,
             get_learned,
+            add_learned,
             undo_learned,
             close_learned,
             get_notice,

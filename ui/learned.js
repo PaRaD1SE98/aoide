@@ -1,12 +1,18 @@
-// 词条入库提示（屏幕右下角的小条）：列出从用户修改中学到的纠正，提供撤销；约 8 秒后自动关闭，鼠标悬停时暂停
+// 词条入库提示（屏幕右下角的小条）：列出从用户修改中学到的纠正；约 8 秒后自动关闭，鼠标悬停时暂停。
+// 默认同意时已经入库，按钮是「撤销」；默认拒绝时还没入库，按钮是「添加」，没点就关掉的不会加入
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
 const $ = (id) => document.getElementById(id);
 const SHOW_MS = 8000;
 const countdown = createCountdown($("bar"), () => invoke("close_learned"));
+let ask = false;
 
-function render(items) {
+function render(view) {
+  const items = view.items;
+  ask = view.ask;
+  $("title").textContent = t(ask ? "learned.ask" : "learned.title");
+  $("undo").textContent = t(ask ? "learned.add" : "learned.undo");
   $("items").replaceChildren(...items.map(({ wrong, right }) => {
     const row = document.createElement("div");
     row.className = "item";
@@ -22,9 +28,14 @@ function render(items) {
 }
 
 $("undo").addEventListener("click", async () => {
-  await invoke("undo_learned");
-  $("title").textContent = t("learned.undone");
-  $("items").style.opacity = 0.4;
+  if (ask) {
+    await invoke("add_learned");
+    $("title").textContent = t("learned.title");
+  } else {
+    await invoke("undo_learned");
+    $("title").textContent = t("learned.undone");
+    $("items").style.opacity = 0.4;
+  }
   $("undo").disabled = true;
   countdown.stop();
   setTimeout(() => invoke("close_learned"), 900);

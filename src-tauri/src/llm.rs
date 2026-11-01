@@ -146,15 +146,27 @@ const CORRECT_PROMPT: &str = r#"Below is a speech recognition result. Using only
 {text}
 </transcript>"#;
 
-/// 判断用户的一处修改是不是在纠正语音识别错误（读音相似度处于中间地带时才用，见 learn.rs）
-const JUDGE_PROMPT: &str = r#"Below is the output of speech recognition and the version the user edited by hand. The user changed "{wrong}" to "{right}".
-Decide whether this corrects a speech recognition error (a homophone, a similar-sounding word, a misheard name or term) or whether the user rewrote the content (different wording or meaning).
-Answer only "yes" if it corrects a recognition error; otherwise answer only "no".
+/// 从用户的修改中学词条（见 learn.rs）：{task} 为 REVIEW_TASK（本地比对找到的候选交给 LLM 把关）
+/// 或 EXTRACT_TASK（整段修改交给 LLM 找）。LLM 只输出该学的词条，并把词条整理成完整、干净的词
+const LEARN_PROMPT: &str = r#"Below is a speech recognition result and the version the user edited by hand.
+{task}
 
-Recognition output: {old}
-Edited version: {new}
+A recognition error is text that sounds like what the user said but is the wrong word, so it usually reads oddly or makes no sense in the sentence: "静止曲线" for "净值曲线", "tori" for "Tauri", "奥伊德" for "Aoide". If the recognized word is an ordinary word that fits the sentence and does not sound like the correction ("下午" changed to "晚上", "会议" changed to "会面"), the user changed their mind, and that is not a recognition error. Changes that only touch punctuation, letter case or how a number is written are not either. When unsure, leave it out.
 
-Answer:"#;
+Make each entry the whole word, name or term that was misheard, and nothing more: leave out neighbouring words, particles, and grammatical endings such as a possessive "'s". For example, if the user changed "在静止曲线" to "在净值曲线", the entry is "静止曲线 => 净值曲线" (or "静止 => 净值"), not "在静止曲线 => 在净值曲线"; if the user changed "Transancellous" to "Chancellor's", the entry is "Transancellous => Chancellor". Copy the misheard side exactly from the recognition result and the correct side exactly from the edited version.
+
+Output one entry per line as "misheard => correct", and nothing else. If there is none, output only "none".
+
+<recognized>
+{old}
+</recognized>
+<edited>
+{new}
+</edited>"#;
+
+const REVIEW_TASK: &str = "Comparing them found these changes:\n{candidates}For each change, decide whether the user corrected a speech recognition error or rewrote the content, and output an entry for each one that corrects a recognition error.";
+
+const EXTRACT_TASK: &str = "Find every place where the user corrected a speech recognition error, and output an entry for each.";
 
 /// 模型的上下文窗口（prompt + 思考 + 答案的总 token 上限）
 const CONTEXT_TOKENS: usize = 8192;
@@ -481,12 +493,39 @@ pub fn correct_terms(text: &str, glossary: &str, cfg: &Config) -> Result<String,
     Ok(out)
 }
 
-/// 用户把 wrong 改成 right 是不是在纠正识别错误；old / new 为修改前后的整段文字
-pub fn judge_correction(wrong: &str, right: &str, old: &str, new: &str, cfg: &Config) -> Result<bool, String> {
-    let prompt = JUDGE_PROMPT.replace("{wrong}", wrong).replace("{right}", right).replace("{old}", old).replace("{new}", new);
-    let answer = Api::from(cfg)?.call(&prompt)?;
-    let answer = answer.trim().trim_start_matches(['"', '\'']).to_lowercase();
-    Ok(answer.starts_with("yes") || answer.starts_with('是'))
+/// 让 LLM 从一次修改（old → new）里挑出该学的词条，返回「误识别 → 正确写法」。
+/// candidates 是本地比对找到的候选，由 LLM 把关；为 None 时整段修改交给 LLM 找。
+/// 返回的词对还没核对过是否真的出现在修改里，由调用方检查
+pub fn review_corrections(old: &str, new: &str, candidates: Option<&[(String, String)]>, cfg: &Config) -> Result<Vec<(String, String)>, String> {
+    let task = match candidates {
+        Some(list) => {
+            let lines: String = list.iter().map(|(w, r)| format!("- {w} => {r}\n")).collect();
+            REVIEW_TASK.replace("{candidates}", &lines)
+        }
+        None => EXTRACT_TASK.to_string(),
+    };
+    let prompt = LEARN_PROMPT.replace("{task}", &task).replace("{old}", old).replace("{new}", new);
+    Ok(parse_entries(&Api::from(cfg)?.call(&prompt)?))
+}
+
+/// 解析「误识别 => 正确写法」，每行一条；容忍列表符号、编号、引号和其他箭头写法
+fn parse_entries(answer: &str) -> Vec<(String, String)> {
+    let quotes: &[char] = &['"', '\'', '`', '“', '”', '‘', '’', '「', '」'];
+    answer
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim().trim_start_matches(['-', '*', '•']).trim_start();
+            let digits = line.trim_start_matches(|c: char| c.is_ascii_digit());
+            let line = match digits.strip_prefix(['.', ')', '、']) {
+                Some(rest) if digits.len() < line.len() => rest,
+                _ => line,
+            };
+            let (wrong, right) = ["=>", "->", "→"].iter().find_map(|sep| line.split_once(sep))?;
+            let clean = |s: &str| s.trim().trim_matches(quotes).trim().to_string();
+            let (wrong, right) = (clean(wrong), clean(right));
+            (!wrong.is_empty() && !right.is_empty()).then_some((wrong, right))
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -645,13 +684,26 @@ NOTE:"), "{p}");
             let start = std::time::Instant::now();
             println!("[{:?}] {text}\n    -> {:?}", start.elapsed(), correct_terms(text, glossary, &cfg));
         }
-        for (wrong, right, old, new) in [
-            ("tori", "Tauri", "这个应用是用 tori 写的", "这个应用是用 Tauri 写的"),
-            ("明天下午", "明天晚上", "我们明天下午去公司开会", "我们明天晚上去公司开会"),
-            ("会议", "会面", "下周的会议改到周三", "下周的会面改到周三"),
+        for (old, new) in [
+            ("这个应用是用 tori 写的", "这个应用是用 Tauri 写的"),
+            ("我们明天下午去公司开会", "我们明天晚上去公司开会"),
+            ("下周的会议改到周三", "下周的会面改到周三"),
+            ("我们来看一下在静止曲线上的表现", "我们来看一下在净值曲线上的表现"),
+            ("把静值图作为主要的展示", "把净值图作为主要的展示"),
+            ("the Transancellous office said no", "the Chancellor's office said no"),
         ] {
-            println!("judge {wrong} -> {right}: {:?}", judge_correction(wrong, right, old, new, &cfg));
+            let candidates: Vec<(String, String)> = crate::learn::extract_corrections(old, new).into_iter().map(|c| (c.wrong, c.right)).collect();
+            println!("review {candidates:?}: {:?}", review_corrections(old, new, Some(&candidates), &cfg));
+            println!("extract {old} => {new}: {:?}", review_corrections(old, new, None, &cfg));
         }
+    }
+
+    #[test]
+    fn parses_learned_entries() {
+        assert_eq!(parse_entries("静止 => 净值\ntori => Tauri"), [("静止".into(), "净值".into()), ("tori".into(), "Tauri".into())]);
+        assert_eq!(parse_entries("1. \"静止\" -> \"净值\"\n- 「奥伊德」→「Aoide」"), [("静止".into(), "净值".into()), ("奥伊德".into(), "Aoide".into())]);
+        assert!(parse_entries("none").is_empty());
+        assert!(parse_entries("No corrections.").is_empty());
     }
 
     #[test]

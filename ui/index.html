@@ -301,10 +301,37 @@
           <span class="ico">&#xE70F;</span>
           <div class="text">
             <div class="title" data-i18n="learn.title">从我的修改中学习</div>
-            <div class="desc" data-i18n="learn.desc">识别结果输入后，你手动改正的词会自动加入词库，并弹出可撤销的提示</div>
+            <div class="desc" data-i18n="learn.desc">识别结果输入后，找出你手动改正的词，按下面的方式加入词库</div>
           </div>
           <div class="control">
             <label class="toggle"><input type="checkbox" data-key="learn_from_edits"><span></span></label>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE99A;</span>
+          <div class="text">
+            <div class="title" data-i18n="learnMode.title">学习方式</div>
+            <div class="desc" data-i18n="learnMode.desc">本地比对不用 LLM；LLM 把关能挡掉学错的词，并把词条整理成完整的词；完全交给 LLM 最准，但每次修改都会调用 LLM。后两种需要配置 LLM，没配置时按本地比对</div>
+          </div>
+          <div class="control">
+            <select data-key="learn_mode">
+              <option value="mechanical" data-i18n="learnMode.mechanical">1 · 本地比对</option>
+              <option value="hybrid" data-i18n="learnMode.hybrid">2 · 本地比对 + LLM 把关</option>
+              <option value="llm" data-i18n="learnMode.llm">3 · 完全交给 LLM</option>
+            </select>
+          </div>
+        </div>
+        <div class="card">
+          <span class="ico">&#xE73E;</span>
+          <div class="text">
+            <div class="title" data-i18n="learnDefault.title">学到新词时</div>
+            <div class="desc" data-i18n="learnDefault.desc">常学错就选默认不加入，提示出现时对的才点「添加」；大多学对就选默认加入，错的点「撤销」</div>
+          </div>
+          <div class="control">
+            <select data-key="learn_default">
+              <option value="accept" data-i18n="learnDefault.accept">默认加入，可撤销</option>
+              <option value="reject" data-i18n="learnDefault.reject">默认不加入，点「添加」才加入</option>
+            </select>
           </div>
         </div>
         <div class="card">

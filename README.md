@@ -154,7 +154,9 @@ Settings are stored in `%APPDATA%\Aoide\config.json` (macOS: `~/Library/Applicat
 | `insert_smart` | `true` | Context-aware insertion when there is text around the cursor |
 | `insert_min_seconds` / `insert_min_chars` | `10` / `12` | Shorter recordings / transcripts are inserted as-is without calling the LLM |
 | `vocab_enabled` | `true` | Correct transcripts with your vocabulary: repeated misrecognitions are replaced directly, others go to the LLM with the related entries |
-| `learn_from_edits` | `true` | When you correct a word after it is typed, add the correction to the vocabulary (with an Undo notice) |
+| `learn_from_edits` | `true` | When you correct a word after it is typed, add the correction to the vocabulary |
+| `learn_mode` | `"hybrid"` | How to decide what to learn: `"mechanical"` compares locally only; `"hybrid"` compares locally and lets the LLM review each correction and trim it to the whole word; `"llm"` gives the whole edit to the LLM. The last two fall back to `"mechanical"` without an LLM API |
+| `learn_default` | `"accept"` | `"accept"` adds learned words right away, with an Undo notice; `"reject"` asks first and adds them only when you click Add |
 | `vocab_max_kb` | `10240` | Size limit of the vocabulary file in KB. Above it, the learned entries that haven't been used for the longest are removed; entries added by hand are kept |
 | `auto_check_updates` | `true` | Check for a new version once a day and notify you; updating is always your choice |
 | `style_prompt` | *(empty)* | Custom output style shared by polishing, insertion, voice edit and translation: how the text is laid out (lists, paragraphs) and worded. Empty = built-in. The task prompts below only describe their own task |
