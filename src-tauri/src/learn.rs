@@ -9,7 +9,7 @@
 //!    改动太大（整句重写）、纯增删、只改标点大小写、含数字的都不算
 //! 4. 按设置的学习方式（learn_mode）决定学哪些（LLM 给的词条必须真的来自这次修改；没配置 LLM 或调用失败时按本地比对）：
 //!    - 本地比对：读音相似度 ≥ 0.75 的直接学，更低的视为用户改了主意
-//!    - 本地比对 + LLM 把关：相似度 ≥ 0.45 的候选交给 LLM，由它判断该不该学，并把词条整理成完整的词
+//!    - 本地比对 + LLM 把关：本地找出的候选全部交给 LLM，由它判断该不该学，并把词条整理成完整的词
 //!    - 完全交给 LLM：整段修改交给 LLM 找出纠正
 //! 5. 学到的词条按设置（learn_default）直接入库并提供撤销，或者先询问、用户点「添加」才入库
 
@@ -23,10 +23,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tauri::AppHandle;
 
-/// 读音相似度达到这个值直接认定为识别错误
+/// 只用本地比对时：读音相似度达到这个值认定为识别错误，更低的视为用户改了主意
 const ACCEPT: f32 = 0.75;
-/// 低于这个值认定为用户改了主意；中间的交给 LLM 判断
-const REJECT: f32 = 0.45;
 /// 常见的虚词用字：以它们开头或结尾的词（在于、作为、服务于）不并进词条
 const FUNCTION_CHARS: &[char] = &['在', '于', '为', '的', '了', '和', '与', '及', '对', '把', '被', '从', '向', '是', '给', '让', '将', '而', '或', '也', '都', '就', '又', '还', '很', '着', '过'];
 
@@ -146,6 +144,9 @@ fn observe(src: &impl Source, inserted: &str, counter: &AtomicU64, generation: u
             last_read = Instant::now();
             let located = src.text().and_then(|s| region(&s, &prefix, &suffix).map(str::to_string));
             match located.filter(|r| !r.trim().is_empty()) {
+                // 和上一版几乎没有相同的内容：多半是消息发出去、输入框清空后显示的占位文字
+                // （如「Queue another message」），不是用户改的。当作文字已消失，保留最后一次看到的版本
+                Some(r) if rewritten(&current, &r) => gone_since = gone_since.or(Some(Instant::now())),
                 Some(r) => {
                     if r != current {
                         current = r;
@@ -187,7 +188,7 @@ fn region<'a>(s: &'a str, prefix: &str, suffix: &str) -> Option<&'a str> {
 
 /// 怎样判断一处修改该不该学（config.learn_mode）
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum Mode {
+pub(crate) enum Mode {
     /// 只用本地比对：读音相似度够高的直接学
     Mechanical,
     /// 本地比对找出候选，LLM 把关并整理词条
@@ -219,12 +220,16 @@ fn process(app: &AppHandle, old: &str, new: &str, cfg: &Config) {
 
 /// 决定从一次修改里学哪些词条。review 是 LLM 审查：传入本地比对的候选（纯 LLM 方式为 None），
 /// 返回 LLM 整理好的词对；LLM 调用失败时退回本地比对的结果
-fn decide(
+pub(crate) fn decide(
     old: &str,
     new: &str,
     mode: Mode,
     review: impl FnOnce(Option<&[(String, String)]>) -> Result<Vec<(String, String)>, String>,
 ) -> Vec<Correction> {
+    if rewritten(old, new) {
+        log::info!("Learn: the text was mostly rewritten or replaced, nothing to learn");
+        return Vec::new();
+    }
     let candidates = extract_corrections(old, new);
     for c in &candidates {
         log::info!("Learn: candidate {:?} -> {:?} (score {:.2})", c.wrong, c.right, c.score);
@@ -233,11 +238,11 @@ fn decide(
     let reviewed = match mode {
         Mode::Mechanical => return log_result(mode, mechanical()),
         Mode::Hybrid => {
-            // 读音差得太远的视为用户改了主意，不必问 LLM
-            let asked: Vec<(String, String)> = candidates.iter().filter(|c| c.score >= REJECT).map(|c| (c.wrong.clone(), c.right.clone())).collect();
-            if asked.is_empty() {
+            // 候选全部交给 LLM：本地的读音相似度对音译（克劳德 → Claude）估得偏低，不能先用它筛掉
+            if candidates.is_empty() {
                 return Vec::new();
             }
+            let asked: Vec<(String, String)> = candidates.iter().map(|c| (c.wrong.clone(), c.right.clone())).collect();
             review(Some(&asked))
         }
         Mode::Llm => {
@@ -308,7 +313,8 @@ fn grounded(old: &str, new: &str, wrong: &str, right: &str) -> bool {
     covers(old, &co, wrong) && covers(new, &cn, right)
 }
 
-/// 词对本身能不能当词条：不是只改大小写、数字写法，长度为 2~12 个汉字，或 2 个字母以上、不超过 4 个单词
+/// 词对本身能不能当词条：不是只改大小写、数字写法；两边都不超过 12 个汉字、4 个单词，不含标点（不是整句），
+/// 正确写法至少 2 个汉字或 2 个字母
 fn acceptable(wrong: &str, right: &str) -> bool {
     if wrong.is_empty() || right.is_empty() || wrong == right {
         return false;
@@ -316,10 +322,12 @@ fn acceptable(wrong: &str, right: &str) -> bool {
     if wrong.to_lowercase() == right.to_lowercase() || wrong.chars().chain(right.chars()).any(|c| c.is_ascii_digit()) {
         return false;
     }
-    let cjk = right.chars().filter(|&c| is_cjk(c)).count();
+    let cjk = |s: &str| s.chars().filter(|&c| is_cjk(c)).count();
+    let words = |s: &str| s.split_whitespace().count();
+    // 词条里可以有连字符、撇号、点（LS-DYNA、Chancellor's、Node.js），其他标点说明是一句话
+    let sentence = |s: &str| s.chars().any(|c| !(c.is_alphanumeric() || is_cjk(c) || c.is_whitespace() || "-'’.".contains(c)));
     let letters = right.chars().filter(|c| c.is_ascii_alphabetic()).count();
-    let words = right.split_whitespace().count();
-    cjk <= 12 && words <= 4 && (cjk >= 2 || letters >= 2)
+    [wrong, right].iter().all(|s| cjk(s) <= 12 && words(s) <= 4 && !sentence(s)) && (cjk(right) >= 2 || letters >= 2)
 }
 
 /// 分词单位：一个汉字、一个西文单词（字母数字连写）、一段空白，或一个其他字符；返回字符下标范围
@@ -366,6 +374,25 @@ fn tidy(wrong: &str, right: &str) -> (String, String) {
     (wrong, right)
 }
 
+/// 改动是不是大到不像在纠正识别错误：按字（中文）/ 按词（西文）比对，超过一半变了。
+/// 整句重写、输入框清空后显示的占位文字都属于这种
+fn rewritten(old: &str, new: &str) -> bool {
+    let split = |s: &str| {
+        let chars: Vec<char> = s.chars().collect();
+        tokens(&chars).into_iter().map(|(a, b)| chars[a..b].iter().collect::<String>()).collect::<Vec<_>>()
+    };
+    let (os, ns) = (split(old), split(new));
+    let (mut changed_old, mut changed_new) = (0, 0);
+    for op in similar::capture_diff_slices(similar::Algorithm::Myers, &os, &ns) {
+        let (tag, o, n) = op.as_tag_tuple();
+        if tag != similar::DiffTag::Equal {
+            changed_old += o.len();
+            changed_new += n.len();
+        }
+    }
+    changed_old.max(changed_new) * 2 > os.len().max(ns.len()).max(1)
+}
+
 /// 比对识别结果和用户改后的版本，找出可能是「纠正识别错误」的替换
 pub fn extract_corrections(old: &str, new: &str) -> Vec<Correction> {
     let (oc, nc): (Vec<char>, Vec<char>) = (old.chars().collect(), new.chars().collect());
@@ -375,16 +402,7 @@ pub fn extract_corrections(old: &str, new: &str) -> Vec<Correction> {
     let ns: Vec<String> = nt.iter().map(|&r| text(&nc, r)).collect();
     let ops = similar::capture_diff_slices(similar::Algorithm::Myers, &os, &ns);
 
-    // 改动的比例太大：用户重写了这段话，不是在纠正识别错误
-    let (mut changed_old, mut changed_new) = (0, 0);
-    for op in &ops {
-        let (tag, o, n) = op.as_tag_tuple();
-        if tag != similar::DiffTag::Equal {
-            changed_old += o.len();
-            changed_new += n.len();
-        }
-    }
-    if changed_old.max(changed_new) * 2 > os.len().max(ns.len()).max(1) {
+    if rewritten(old, new) {
         return Vec::new();
     }
 
@@ -416,7 +434,7 @@ pub fn extract_corrections(old: &str, new: &str) -> Vec<Correction> {
         let core_wrong: String = oc[oa..ob].iter().collect();
         let core_right: String = nc[na..nb].iter().collect();
         // 中文的改动扩展到完整的词：只改了「到→导」时，要学的是「思维到图 → 思维导图」。
-        // 分词可能把专有名词切碎（思维 / 导图），不足 4 个字时再并入相邻的词（先左后右）。
+        // 分词可能把专有名词切碎（思维 / 导图），只有两个字时再并入相邻的词（先左后右）；三个字的（王建国）已经是完整的词。
         // 只并入两个字以上、不带虚词的词：并入「在」「图」「作为」「服务于」只会让词条变得别扭
         if nc[na..nb].iter().any(|&c| is_cjk(c)) {
             let new_text: String = nc.iter().collect();
@@ -427,7 +445,7 @@ pub fn extract_corrections(old: &str, new: &str) -> Vec<Correction> {
                 let w = words[i].word;
                 w.chars().count() >= 2 && w.chars().all(is_cjk) && !w.starts_with(FUNCTION_CHARS) && !w.ends_with(FUNCTION_CHARS)
             };
-            while !hit.is_empty() && words[last].end - words[first].start < 4 {
+            while !hit.is_empty() && words[last].end - words[first].start < 3 {
                 if first > 0 && joinable(first - 1) {
                     first -= 1;
                 } else if last + 1 < words.len() && joinable(last + 1) {
@@ -493,12 +511,12 @@ mod tests {
     fn scores_changed_minds_low() {
         let c = extract_corrections("我们明天下午去公司开会讨论", "我们明天晚上去公司开会讨论");
         assert_eq!(c.len(), 1);
-        assert!(c[0].score < REJECT, "{c:?}");
+        assert!(c[0].score < 0.45, "{c:?}");
     }
 
     #[test]
     fn does_not_join_function_words() {
-        // 「净值」不足 4 个字，但左边是「在」、右边是「图」「作为」，都不该并进词条
+        // 「净值」只有两个字，但左边是「在」、右边是「图」「作为」，都不该并进词条
         for (old, new) in [
             ("我们来看一下在静止曲线上的表现", "我们来看一下在净值曲线上的表现"),
             ("把静值图作为主要的展示", "把净值图作为主要的展示"),
@@ -549,12 +567,17 @@ mod tests {
         // 编出来的、没改动过的部分、只改大小写的
         let answer = vec![("静止", "禁止"), ("表现", "表演"), ("曲线", "曲线图"), ("看一下", "看一看")];
         assert!(decided(old, new, Mode::Llm, Ok(answer)).0.is_empty());
+        // 整段被换掉（输入框清空后的占位文字）：完全交给 LLM 时也不问
+        let (got, asked) = decided("既然你都发现有错了，那你就把它修了吧", "Queue another message", Mode::Llm, Ok(vec![("你", "message")]));
+        assert!(got.is_empty() && asked.is_none());
+        // 整句当词条
+        assert!(decided("帮我提交并且推送到远程", "帮我提交并且推到远程，谢谢", Mode::Llm, Ok(vec![("推送到远程", "推到远程，谢谢")])).0.is_empty());
         // 纯增删：完全交给 LLM 时也不问
         let (got, asked) = decided("明天开会", "明天下午开会", Mode::Llm, Ok(vec![("开会", "下午开会")]));
         assert!(got.is_empty() && asked.is_none());
-        // 读音差得太远的候选：本地比对 + LLM 时不问
-        let (got, asked) = decided("我们明天下午去公司开会讨论", "我们明天晚上去公司开会讨论", Mode::Hybrid, Ok(vec![("下午", "晚上")]));
-        assert!(got.is_empty() && asked.is_none());
+        // 读音差得远的候选也交给 LLM（音译的相似度本地估得偏低），由它拒绝
+        let (got, asked) = decided("让克劳德帮我检查一下代码", "让Claude帮我检查一下代码", Mode::Hybrid, Ok(vec![]));
+        assert!(got.is_empty() && matches!(asked, Some(Some(ref c)) if c.len() == 1), "{asked:?}");
     }
 
     /// 按时间变化的输入框：script 为 (从开始算起的毫秒数, 文字, 焦点是否还在)，取最近一个已到时间的状态；
@@ -611,6 +634,21 @@ mod tests {
         let mut edits = Vec::new();
         observe(&src, inserted, counter, 0, timing, |a, b| edits.push((a.to_string(), b.to_string())));
         edits
+    }
+
+    #[test]
+    fn ignores_placeholder_after_sending() {
+        // 改完按回车发送：输入框清空，读到的是占位文字。要比对的是发送前的最后一版
+        let edits = run(
+            vec![
+                (0, Some("我用思维到图整理需求"), true),
+                (30, Some("我用思维导图整理需求"), true),
+                (60, Some("Queue another message"), true),
+            ],
+            "我用思维到图整理需求",
+            &AtomicU64::new(0),
+        );
+        assert_eq!(edits, [("我用思维到图整理需求".into(), "我用思维导图整理需求".into())]);
     }
 
     #[test]

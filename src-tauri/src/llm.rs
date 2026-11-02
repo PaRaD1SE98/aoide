@@ -147,15 +147,19 @@ const CORRECT_PROMPT: &str = r#"Below is a speech recognition result. Using only
 </transcript>"#;
 
 /// 从用户的修改中学词条（见 learn.rs）：{task} 为 REVIEW_TASK（本地比对找到的候选交给 LLM 把关）
-/// 或 EXTRACT_TASK（整段修改交给 LLM 找）。LLM 只输出该学的词条，并把词条整理成完整、干净的词
+/// 或 EXTRACT_TASK（整段修改交给 LLM 找）。LLM 逐处标注是识别错误（error）还是用户改了内容（edit），
+/// 只有 error 的会学；词条整理成完整、干净的词。
+/// 只让它输出「该学的」时，它倾向于把每处替换都报出来，逐处标注后误学少得多（见 learn_eval.rs）
 const LEARN_PROMPT: &str = r#"Below is a speech recognition result and the version the user edited by hand.
 {task}
 
-A recognition error is text that sounds like what the user said but is the wrong word, so it usually reads oddly or makes no sense in the sentence: "静止曲线" for "净值曲线", "tori" for "Tauri", "奥伊德" for "Aoide". If the recognized word is an ordinary word that fits the sentence and does not sound like the correction ("下午" changed to "晚上", "会议" changed to "会面"), the user changed their mind, and that is not a recognition error. Changes that only touch punctuation, letter case or how a number is written are not either. When unsure, leave it out.
+Label each change "error" or "edit":
+- "error": the user fixed a speech recognition error. The recognizer heard the word right but wrote the wrong word for that sound: a homophone or near-homophone, or a name or term written the way it sounds. Examples: "思维到图" for "思维导图", "静止曲线" for "净值曲线", "全线" for "权限", "tori" for "Tauri", "get hub" for "GitHub", "奥伊德" for "Aoide", "克劳德" for "Claude".
+- "edit": the user changed what they wanted to say. Read both sides aloud: if they do not sound alike, it is an edit, even when the new wording is better. A different time, place, person, number or fact ("下午" to "晚上", "北京" to "上海", "小王" to "小李"), a synonym or better word ("尽快" to "马上", "觉得" to "认为", "good" to "great", "Can" to "Could"), and adding, removing or reordering words are all edits. So are changes that only touch punctuation, letter case or how a number is written.
 
-Make each entry the whole word, name or term that was misheard, and nothing more: leave out neighbouring words, particles, and grammatical endings such as a possessive "'s". For example, if the user changed "在静止曲线" to "在净值曲线", the entry is "静止曲线 => 净值曲线" (or "静止 => 净值"), not "在静止曲线 => 在净值曲线"; if the user changed "Transancellous" to "Chancellor's", the entry is "Transancellous => Chancellor". Copy the misheard side exactly from the recognition result and the correct side exactly from the edited version.
+For an "error", write the whole word, name or term that was misheard, and nothing more: leave out neighbouring words, particles, and grammatical endings such as a possessive "'s". For example, "在静止曲线" changed to "在净值曲线" is "静止曲线 => 净值曲线" (or "静止 => 净值"), not "在静止曲线 => 在净值曲线"; "Transancellous" changed to "Chancellor's" is "Transancellous => Chancellor". Copy the original side exactly from the recognition result and the edited side exactly from the edited version.
 
-Output one entry per line as "misheard => correct", and nothing else. If there is none, output only "none".
+Output one line per change as "original => edited | error" or "original => edited | edit", and nothing else. If the edited version is unrelated to the recognition result (for example the text box was cleared and shows a placeholder), output only "none".
 
 <recognized>
 {old}
@@ -164,9 +168,9 @@ Output one entry per line as "misheard => correct", and nothing else. If there i
 {new}
 </edited>"#;
 
-const REVIEW_TASK: &str = "Comparing them found these changes:\n{candidates}For each change, decide whether the user corrected a speech recognition error or rewrote the content, and output an entry for each one that corrects a recognition error.";
+const REVIEW_TASK: &str = "Comparing them found these changes:\n{candidates}Label each of them.";
 
-const EXTRACT_TASK: &str = "Find every place where the user corrected a speech recognition error, and output an entry for each.";
+const EXTRACT_TASK: &str = "Find every place where the user changed the text, and label each one.";
 
 /// 模型的上下文窗口（prompt + 思考 + 答案的总 token 上限）
 const CONTEXT_TOKENS: usize = 8192;
@@ -508,7 +512,7 @@ pub fn review_corrections(old: &str, new: &str, candidates: Option<&[(String, St
     Ok(parse_entries(&Api::from(cfg)?.call(&prompt)?))
 }
 
-/// 解析「误识别 => 正确写法」，每行一条；容忍列表符号、编号、引号和其他箭头写法
+/// 解析「原文 => 改后 | error/edit」，每行一条，只取标为 error 的；容忍列表符号、编号、引号和其他箭头写法
 fn parse_entries(answer: &str) -> Vec<(String, String)> {
     let quotes: &[char] = &['"', '\'', '`', '“', '”', '‘', '’', '「', '」'];
     answer
@@ -520,7 +524,11 @@ fn parse_entries(answer: &str) -> Vec<(String, String)> {
                 Some(rest) if digits.len() < line.len() => rest,
                 _ => line,
             };
-            let (wrong, right) = ["=>", "->", "→"].iter().find_map(|sep| line.split_once(sep))?;
+            let (pair, label) = line.rsplit_once('|')?;
+            if !label.trim().trim_matches(['"', '\'', '`', '*']).eq_ignore_ascii_case("error") {
+                return None;
+            }
+            let (wrong, right) = ["=>", "->", "→"].iter().find_map(|sep| pair.split_once(sep))?;
             let clean = |s: &str| s.trim().trim_matches(quotes).trim().to_string();
             let (wrong, right) = (clean(wrong), clean(right));
             (!wrong.is_empty() && !right.is_empty()).then_some((wrong, right))
@@ -700,8 +708,10 @@ NOTE:"), "{p}");
 
     #[test]
     fn parses_learned_entries() {
-        assert_eq!(parse_entries("静止 => 净值\ntori => Tauri"), [("静止".into(), "净值".into()), ("tori".into(), "Tauri".into())]);
-        assert_eq!(parse_entries("1. \"静止\" -> \"净值\"\n- 「奥伊德」→「Aoide」"), [("静止".into(), "净值".into()), ("奥伊德".into(), "Aoide".into())]);
+        assert_eq!(parse_entries("静止 => 净值 | error\n下午 => 晚上 | edit\ntori => Tauri | error"), [("静止".into(), "净值".into()), ("tori".into(), "Tauri".into())]);
+        assert_eq!(parse_entries("1. \"静止\" -> \"净值\" | Error\n- 「奥伊德」→「Aoide」 | `error`"), [("静止".into(), "净值".into()), ("奥伊德".into(), "Aoide".into())]);
+        // 没有标注的、标注不认识的都不学
+        assert!(parse_entries("静止 => 净值\n会议 => 会面 | maybe").is_empty());
         assert!(parse_entries("none").is_empty());
         assert!(parse_entries("No corrections.").is_empty());
     }

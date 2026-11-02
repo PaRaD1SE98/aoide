@@ -7,6 +7,8 @@ mod hotkeys;
 mod i18n;
 mod keys;
 mod learn;
+#[cfg(test)]
+mod learn_eval;
 mod learned_card;
 mod llm;
 mod models;
