@@ -1,32 +1,24 @@
+/* 弹窗（结果、词库提示、通知、翻译）统一用录音悬浮条的样式：半透明黑底、细白描边，不随系统的浅色 / 深色主题变化。
+   颜色和 overlay.rs 里画胶囊用的一致 */
 :root {
-  color-scheme: light dark;
-  --card: #fbfbfb;
-  --stroke: #e0e0e0;
-  --text: #1b1b1b;
-  --muted: #5f5f5f;
-  --control: #ffffff;
-  --control-hover: #f0f0f0;
-  --control-stroke: #d6d6d6;
-  --accent: #005fb8;
-  --accent-hover: #1a6fc0;
-  --on-accent: #ffffff;
-  --shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  color-scheme: dark;
+  --card: rgba(24, 24, 27, 0.92);
+  --stroke: rgba(255, 255, 255, 0.16);
+  --text: #ffffff;
+  --muted: rgba(255, 255, 255, 0.62);
+  --control: rgba(255, 255, 255, 0.08);
+  --control-hover: rgba(255, 255, 255, 0.14);
+  --control-stroke: rgba(255, 255, 255, 0.14);
+  --accent: #60cdff;
+  --accent-soft: rgba(96, 205, 255, 0.16);
+  --accent-soft-hover: rgba(96, 205, 255, 0.26);
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --card: #2b2b2b;
-    --stroke: #3a3a3a;
-    --text: #ffffff;
-    --muted: #c5c5c5;
-    --control: #373737;
-    --control-hover: #424242;
-    --control-stroke: #454545;
-    --accent: #60cdff;
-    --accent-hover: #4cc2f5;
-    --on-accent: #000000;
-    --shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-  }
+/* 滚动条（scrollbar.css）默认跟系统主题走；弹窗底色总是黑的，固定用浅色滑块。html:root 比 :root 优先，不受加载顺序影响 */
+html:root {
+  --scroll-thumb: rgba(255, 255, 255, 0.22);
+  --scroll-thumb-hover: rgba(255, 255, 255, 0.42);
 }
 
 * { box-sizing: border-box; }
@@ -84,7 +76,7 @@ header img { width: 16px; height: 16px; }
 footer {
   display: flex;
   justify-content: flex-end;
-  padding: 6px 12px 12px;
+  padding: 2px 10px 10px;
 }
 
 button {
@@ -96,9 +88,11 @@ button {
 }
 button:hover { background: var(--control-hover); }
 
-.btn { height: 30px; min-width: 88px; padding: 0 16px; }
-.btn.accent { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-.btn.accent:hover { background: var(--accent-hover); }
+/* 操作按钮：紧凑的胶囊、半透明浅色底。这些窗口是瞄一眼就走的提示，不是对话框，按钮不该比正文更抢眼；
+   主操作也不用实心色块，只用浅蓝文字配淡蓝底 */
+.btn { height: 26px; padding: 0 12px; border-color: transparent; border-radius: 13px; font-size: 12px; }
+.btn.accent { background: var(--accent-soft); color: var(--accent); }
+.btn.accent:hover { background: var(--accent-soft-hover); }
 
 .icon-btn {
   width: 28px;
