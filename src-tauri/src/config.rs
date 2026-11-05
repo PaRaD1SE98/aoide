@@ -40,6 +40,8 @@ pub struct Config {
     pub device: String,
     /// 录音期间静音其他程序的声音，结束后恢复
     pub mute_while_recording: bool,
+    /// 默认麦克风是蓝牙耳机时，改用电脑内置的麦克风录音，耳机不切到通话模式（仅 macOS）
+    pub builtin_mic_for_bluetooth: bool,
     /// 启用 LLM 润色（未填 API Base 时自动跳过）
     pub polish: bool,
     /// OpenAI 格式 API base，如 https://api.openai.com/v1
@@ -121,6 +123,7 @@ impl Default for Config {
             min_duration: 3,
             device: "gpu".into(),
             mute_while_recording: true,
+            builtin_mic_for_bluetooth: true,
             polish: true,
             polish_api: String::new(),
             polish_api_key: String::new(),

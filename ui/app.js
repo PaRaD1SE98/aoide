@@ -600,6 +600,8 @@ async function init() {
   defaultModelDir = s.default_model_dir;
   systemLanguage = s.system_language;
   PLATFORM = s.platform;
+  // 蓝牙耳机改用内置麦克风：只在 macOS 上实现
+  $("builtin-mic-card").hidden = PLATFORM !== "macos";
   defaultPrompts = {
     style_prompt: s.default_style_prompt,
     polish_prompt: s.default_polish_prompt,

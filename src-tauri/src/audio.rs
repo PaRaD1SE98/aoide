@@ -26,7 +26,7 @@ struct Shared {
     done_cv: Condvar,
 }
 
-/// 一次录音会话：start() 后台采集默认麦克风，直到 stop()
+/// 一次录音会话：start() 后台采集默认麦克风（见 start 的参数），直到 stop()
 ///
 /// 每次录音新建一个实例，转录线程持有自己那次的实例，
 /// 快速连按时新录音不会覆盖还没处理完的上一段音频。
@@ -36,13 +36,14 @@ pub struct Recorder {
 }
 
 impl Recorder {
-    pub fn start() -> Arc<Self> {
+    /// avoid_bluetooth：默认麦克风是蓝牙耳机时改用内置麦克风（macOS，见 platform::input_instead_of_default）
+    pub fn start(avoid_bluetooth: bool) -> Arc<Self> {
         let shared = Arc::new(Shared::default());
         let (tx, rx) = mpsc::channel::<()>();
         let s = shared.clone();
         std::thread::spawn(move || {
             // cpal 的 Stream 不能跨线程，建流、等停止信号、销毁都在这个线程里
-            if let Err(e) = run_stream(&s, rx) {
+            if let Err(e) = run_stream(&s, rx, avoid_bluetooth) {
                 log::error!("Recording failed: {e}");
             }
             *s.done.lock().unwrap() = true;
@@ -78,9 +79,23 @@ impl Recorder {
     }
 }
 
-fn run_stream(s: &Arc<Shared>, rx: mpsc::Receiver<()>) -> Result<(), String> {
-    let device = cpal::default_host()
-        .default_input_device()
+/// 要用的麦克风：一般是系统默认的；avoid_bluetooth 时按平台的建议换掉蓝牙耳机的麦克风
+fn input_device(avoid_bluetooth: bool) -> Option<cpal::Device> {
+    let host = cpal::default_host();
+    if avoid_bluetooth {
+        if let Some((from, to)) = crate::platform::input_instead_of_default() {
+            let found = host.input_devices().ok().and_then(|mut all| all.find(|d| d.name().is_ok_and(|n| n == to)));
+            if found.is_some() {
+                log::info!("Default microphone \"{from}\" is Bluetooth; recording from \"{to}\" so the headset stays in music mode");
+                return found;
+            }
+        }
+    }
+    host.default_input_device()
+}
+
+fn run_stream(s: &Arc<Shared>, rx: mpsc::Receiver<()>, avoid_bluetooth: bool) -> Result<(), String> {
+    let device = input_device(avoid_bluetooth)
         .ok_or(crate::i18n::tr("没有找到麦克风", "No microphone found", "マイクが見つかりません"))?;
     let supported = device.default_input_config().map_err(|e| e.to_string())?;
     let channels = supported.channels() as usize;

@@ -368,7 +368,7 @@ impl Controller {
             }
             // 开始音播完才开录：提示音不会被录进去。在开麦克风之前静音：蓝牙耳机切到通话模式前就记下它原来的状态
             cue.finish();
-            let r = Recorder::start();
+            let r = Recorder::start(self.config().builtin_mic_for_bluetooth);
             s.recorder = Some(r.clone());
             (r, self.begin_task())
         };
@@ -750,7 +750,7 @@ impl Controller {
             } else {
                 self.start_cue(Cue::ReviseStart).finish();
                 r.selected = Some(selected.clone());
-                r.recorder = Some(Recorder::start());
+                r.recorder = Some(Recorder::start(self.config().builtin_mic_for_bluetooth));
                 r.screen = Some(screen::begin(&self.config()));
             }
         }

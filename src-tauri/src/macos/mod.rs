@@ -6,6 +6,7 @@
 
 mod ax;
 mod cf;
+mod coreaudio;
 pub mod focus;
 pub mod hook;
 pub mod input;
@@ -145,6 +146,12 @@ pub fn system_language() -> &'static str {
     } else {
         "en"
     }
+}
+
+/// 录音时代替默认麦克风的设备：默认麦克风是蓝牙耳机、又有内置麦克风时，返回（耳机麦克风名, 内置麦克风名）。
+/// 用耳机麦克风录音会让耳机切到通话模式，见 coreaudio.rs
+pub fn input_instead_of_default() -> Option<(String, String)> {
+    coreaudio::builtin_mic_instead_of_bluetooth()
 }
 
 /// 是否日文键盘（JIS 布局：空格右侧是「かな」和右 Command，没有右 Option）

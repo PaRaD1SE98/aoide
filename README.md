@@ -143,6 +143,7 @@ Settings are stored in `%APPDATA%\Aoide\config.json` (macOS: `~/Library/Applicat
 | `max_duration` | `90` | Maximum recording length in seconds; recording stops automatically |
 | `min_duration` | `3` | Recordings shorter than this are padded with silence to this length; `0` disables |
 | `mute_while_recording` | `true` | Mute other apps that are playing audio while recording, and restore them afterwards. Aoide's own cues are not affected. On macOS the output device is muted |
+| `builtin_mic_for_bluetooth` | `true` | macOS only: when the default microphone is a Bluetooth headset, record with the Mac's built-in microphone instead. The headset's microphone switches it to call mode, so playback sounds worse and drops out afterwards. Without a built-in microphone, the headset's is used |
 | `device` | `gpu` | `gpu` (Vulkan; Metal on Apple silicon Macs, CPU on Intel Macs) / `cpu`. Whisper only; SenseVoice always runs on the CPU |
 | `polish` | `true` | Enable LLM polishing (skipped while `polish_api` is empty) |
 | `polish_api` | *(empty)* | OpenAI-compatible API base URL, e.g. `https://api.openai.com/v1` |
