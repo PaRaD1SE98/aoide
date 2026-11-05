@@ -7,6 +7,9 @@
     .page { flex: 1; padding: 20px 32px; background: #fff; }
     .page h3 { margin: 0 0 12px; font-size: 18px; }
     .line { height: 10px; margin: 10px 0; border-radius: 5px; background: #e8eaef; }
+    /* 弹窗页面是深色配色（result.css 的 color-scheme: dark）；iframe 的配色和里面的页面不一致时，
+       浏览器会给它垫一层不透明底色，半透明的卡片和阴影就看不出来了 */
+    iframe.result { color-scheme: dark; }
   </style>
 </head>
 <body>

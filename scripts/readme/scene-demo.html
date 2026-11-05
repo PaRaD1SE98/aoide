@@ -53,17 +53,19 @@
     .lang-strip .ico { font: 14px "Segoe Fluent Icons", "Segoe MDL2 Assets"; color: #34d399; }
     .lang-strip .label { font-size: 12px; color: #c5c5c5; }
     .lang-strip .box { height: 28px; padding: 0 12px; line-height: 26px; border-radius: 14px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); }
-    .tcard { position: absolute; left: 50%; bottom: 60px; transform: translateX(-50%); width: 440px; display: flex; flex-direction: column; gap: 6px; padding: 10px 14px 12px; background: #fbfbfb; border: 1px solid #e0e0e0; border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
-    .tcard .head { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #5f5f5f; }
-    .tcard .head .x { margin-left: auto; font: 10px "Segoe Fluent Icons", "Segoe MDL2 Assets"; }
-    .tcard .flabel { font-size: 12px; color: #5f5f5f; }
-    .tcard .orig { padding: 6px 8px; border: 1px solid #d6d6d6; border-radius: 6px; background: #fff; }
-    .tcard .row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #5f5f5f; }
-    .tcard .row .box { padding: 2px 10px; border: 1px solid #d6d6d6; border-radius: 4px; background: #fff; color: #1b1b1b; font-size: 13px; }
-    .tcard .tr { color: #1b1b1b; }
+    /* 核对小窗：样子同 ui/result.css（半透明黑底；标题栏和按钮栏离卡片上下边、右边都是 10，内容左边距 12） */
+    .tcard { position: absolute; left: 50%; bottom: 60px; transform: translateX(-50%); width: 440px; display: flex; flex-direction: column; gap: 6px; padding: 0 10px 10px 12px; background: rgba(24,24,27,.92); color: #fff; border: 1px solid rgba(255,255,255,.16); border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+    .tcard .head { display: flex; align-items: center; gap: 8px; height: 26px; margin: 10px 0 0; font-size: 12px; color: rgba(255,255,255,.62); }
+    .tcard .head .logo { width: 16px; height: 16px; }
+    .tcard .head .x { margin-left: auto; width: 26px; height: 26px; line-height: 26px; text-align: center; font: 10px/26px "Segoe Fluent Icons", "Segoe MDL2 Assets"; }
+    .tcard .flabel { font-size: 12px; color: rgba(255,255,255,.62); padding-right: 2px; }
+    .tcard .orig { margin-right: 2px; padding: 6px 8px; border: 1px solid rgba(255,255,255,.14); border-radius: 6px; background: rgba(255,255,255,.08); }
+    .tcard .row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: rgba(255,255,255,.62); }
+    .tcard .row .box { padding: 2px 10px; border: 1px solid rgba(255,255,255,.14); border-radius: 6px; background: rgba(255,255,255,.08); color: #fff; font-size: 13px; }
+    .tcard .tr { color: #fff; }
     .tcard .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 2px; }
-    .tcard .btn { height: 28px; padding: 0 14px; line-height: 26px; border: 1px solid #d6d6d6; border-radius: 4px; background: #fff; font-size: 12px; }
-    .tcard .btn.accent { background: #005fb8; border-color: #005fb8; color: #fff; }
+    .tcard .btn { height: 26px; padding: 0 12px; line-height: 26px; border-radius: 13px; background: rgba(255,255,255,.08); font-size: 12px; }
+    .tcard .btn.accent { background: rgba(96,205,255,.16); color: #60cdff; }
     .speech #stext { white-space: nowrap; }
   </style>
 </head>
@@ -82,7 +84,7 @@
   <div class="keys" id="keys"><div class="kbd-row" id="kbd"></div><div class="hint" id="khint"></div></div>
   <div class="lang-strip" id="strip"><span class="ico">&#xE8C1;</span><span class="label" id="into1"></span><span class="box" id="target1"></span></div>
   <div class="tcard" id="tcard">
-    <div class="head"><span id="ttitle"></span><span class="x">&#xE711;</span></div>
+    <div class="head"><img class="logo" src="icon.png" alt=""><span id="ttitle"></span><span class="x">&#xE711;</span></div>
     <span class="flabel" id="olabel"></span>
     <div class="orig" id="heard"></div>
     <div class="row"><span id="into2"></span><span class="box" id="target2"></span></div>
