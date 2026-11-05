@@ -4,18 +4,33 @@
 //! 只在它原本没被静音时静音，恢复时只取消我们静音的设备，用户原本就静音的保持原样。
 //! 开始提示音播完后才静音，结束时先恢复再播结束音（见 controller.rs），提示音都听得到。
 //! 被静音的设备同时记在文件里：程序被强退来不及恢复时，下次启动按文件恢复。
+//!
+//! 蓝牙耳机的麦克风一打开，耳机就从音乐模式切到通话模式，麦克风关掉后再切回来。
+//! 切换要一两秒，期间设的静音可能被切换冲掉，也可能在切回音乐模式后才生效。所以：
+//! - 录音期间一直盯着：设备的静音被冲掉了就再静音，默认输出换了设备也一并静音；
+//! - 恢复后再盯几秒：被切换重新静音的，再取消一次。
 
 use super::cf::{CFTypeRef, CF};
 use std::ffi::c_void;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 
 /// 被我们静音的设备（设备 UID，重新插拔后也不变），恢复时按 UID 找回
 static MUTED: Mutex<Vec<String>> = Mutex::new(Vec::new());
 /// 当前是否应处于静音状态。快速开始又停止时，恢复可能抢在静音之前执行；
 /// 静音在锁内检查这个标志，避免录音已结束却留下静音
 static WANTED: AtomicBool = AtomicBool::new(false);
+/// 每次开始或结束加一。录音期间和恢复后盯着设备的线程，发现它变了就退出
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+
+/// 录音期间检查设备静音状态的间隔
+const WATCH_EVERY: Duration = Duration::from_millis(250);
+/// 一次录音里，同一设备的静音被冲掉后最多再静音几次：用户自己按了取消静音时不和他一直较劲
+const MAX_REMUTES: usize = 4;
+/// 恢复后隔多久再检查一次（累计约 4 秒，蓝牙耳机切回音乐模式一般在这之内）
+const RECHECK_AFTER: [u64; 5] = [200, 400, 700, 1200, 1500];
 
 type AudioObjectId = u32;
 
@@ -34,6 +49,8 @@ const SYSTEM_OBJECT: AudioObjectId = 1;
 const DEFAULT_OUTPUT: u32 = code(b"dOut");
 const DEVICES: u32 = code(b"dev#");
 const DEVICE_UID: u32 = code(b"uid ");
+const NAME: u32 = code(b"lnam");
+const TRANSPORT: u32 = code(b"tran");
 const MUTE: u32 = code(b"mute");
 const SCOPE_GLOBAL: u32 = code(b"glob");
 const SCOPE_OUTPUT: u32 = code(b"outp");
@@ -78,10 +95,24 @@ fn all_devices() -> Vec<AudioObjectId> {
     }
 }
 
+/// 取字符串属性（UID、名称）
+fn string_property(id: AudioObjectId, selector: u32) -> Option<String> {
+    let addr = Address { selector, scope: SCOPE_GLOBAL, element: 0 };
+    let s: CFTypeRef = get::<usize>(id, &addr)? as CFTypeRef;
+    CF::owned(s)?.to_string()
+}
+
 fn device_uid(id: AudioObjectId) -> Option<String> {
-    let addr = Address { selector: DEVICE_UID, scope: SCOPE_GLOBAL, element: 0 };
-    let uid: CFTypeRef = get::<usize>(id, &addr)? as CFTypeRef;
-    CF::owned(uid)?.to_string()
+    string_property(id, DEVICE_UID)
+}
+
+/// 日志里的设备描述：名称和连接方式（blue = 蓝牙，bltn = 内置，usb = USB）
+fn describe(id: AudioObjectId) -> String {
+    let name = string_property(id, NAME).unwrap_or_else(|| format!("device {id}"));
+    let transport = get::<u32>(id, &Address { selector: TRANSPORT, scope: SCOPE_GLOBAL, element: 0 })
+        .map(|t| String::from_utf8_lossy(&t.to_be_bytes()).trim().to_string())
+        .unwrap_or_else(|| "?".into());
+    format!("\"{name}\" ({transport})")
 }
 
 /// 设备上可以设置静音的通道：有主通道开关就只用它
@@ -108,16 +139,55 @@ fn set_muted(id: AudioObjectId, element: u32, muted: bool) -> bool {
     unsafe { AudioObjectSetPropertyData(id, &addr, 0, std::ptr::null(), size, &value as *const u32 as *const c_void) == 0 }
 }
 
-/// 录音开始：静音默认输出设备
-pub fn begin() {
-    WANTED.store(true, Ordering::SeqCst);
-    mute_output();
+/// 设备的所有静音通道都设为 muted；返回是否至少设成功一个
+fn set_device(id: AudioObjectId, elements: &[u32], muted: bool) -> bool {
+    elements.iter().fold(false, |any, &e| set_muted(id, e, muted) || any)
 }
 
-/// 录音结束：恢复（可重复调用）
+fn all_muted(id: AudioObjectId, elements: &[u32]) -> bool {
+    !elements.is_empty() && elements.iter().all(|&e| is_muted(id, e))
+}
+
+fn any_muted(id: AudioObjectId, elements: &[u32]) -> bool {
+    elements.iter().any(|&e| is_muted(id, e))
+}
+
+/// 录音开始：静音默认输出设备，并在录音期间盯着它
+pub fn begin() {
+    let generation = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+    WANTED.store(true, Ordering::SeqCst);
+    mute_output();
+    std::thread::spawn(move || {
+        let mut remutes = 0;
+        loop {
+            std::thread::sleep(WATCH_EVERY);
+            if GENERATION.load(Ordering::SeqCst) != generation {
+                return;
+            }
+            if remutes < MAX_REMUTES && keep_muted() {
+                remutes += 1;
+            }
+        }
+    });
+}
+
+/// 录音结束：恢复（可重复调用），之后再盯几秒
 pub fn end() {
+    let generation = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     WANTED.store(false, Ordering::SeqCst);
-    restore();
+    let restored = restore();
+    if restored.is_empty() {
+        return;
+    }
+    std::thread::spawn(move || {
+        for ms in RECHECK_AFTER {
+            std::thread::sleep(Duration::from_millis(ms));
+            if GENERATION.load(Ordering::SeqCst) != generation {
+                return;
+            }
+            unmute_again(&restored);
+        }
+    });
 }
 
 /// 启动时调用：上次运行留下了未恢复的静音（被强退、崩溃），现在恢复
@@ -155,37 +225,109 @@ fn mute_output() {
         log::warn!("Mute: no default output device");
         return;
     };
+    mute_device(id, &mut muted);
+}
+
+/// 静音一个还没被我们静音的设备
+fn mute_device(id: AudioObjectId, muted: &mut Vec<String>) {
     let Some(uid) = device_uid(id) else { return };
+    if muted.contains(&uid) {
+        return;
+    }
     let elements = mute_elements(id);
-    if muted.contains(&uid) || elements.is_empty() || elements.iter().all(|&e| is_muted(id, e)) {
+    if elements.is_empty() {
+        log::info!("Mute: output {} has no mute control", describe(id));
+        return;
+    }
+    if all_muted(id, &elements) {
+        log::info!("Mute: output {} is already muted", describe(id));
         return;
     }
     // 先落盘再静音：静音之后、写文件之前被强退也不会漏掉
     let mut pending = muted.clone();
     pending.push(uid.clone());
     save_pending(&pending);
-    if elements.iter().fold(false, |any, &e| set_muted(id, e, true) || any) {
-        log::info!("Muted output device while recording");
+    if set_device(id, &elements, true) {
+        log::info!("Muted output {} while recording (reads back {})", describe(id), state(id, &elements));
         muted.push(uid);
+    } else {
+        log::warn!("Mute: setting mute on output {} failed", describe(id));
     }
 }
 
-fn restore() {
+/// 录音期间每隔一会儿调用：静音被冲掉的设备再静音，默认输出换成的新设备也静音。返回是否重新静音了
+fn keep_muted() -> bool {
+    let mut muted = MUTED.lock().unwrap();
+    if !WANTED.load(Ordering::SeqCst) {
+        return false;
+    }
+    let mut remuted = false;
+    for id in all_devices() {
+        if !device_uid(id).is_some_and(|uid| muted.contains(&uid)) {
+            continue;
+        }
+        let elements = mute_elements(id);
+        if !elements.is_empty() && !all_muted(id, &elements) && set_device(id, &elements, true) {
+            log::info!("Output {} was unmuted while recording (Bluetooth mode switch?), muted it again", describe(id));
+            remuted = true;
+        }
+    }
+    if let Some(id) = default_output() {
+        if device_uid(id).is_some_and(|uid| !muted.contains(&uid)) {
+            log::info!("Default output changed to {} while recording", describe(id));
+            mute_device(id, &mut muted);
+        }
+    }
+    remuted
+}
+
+/// 恢复后每隔一会儿调用：恢复过的设备又变成静音（蓝牙耳机切回音乐模式时带回了静音），再取消一次
+fn unmute_again(restored: &[String]) {
+    let _guard = MUTED.lock().unwrap();
+    if WANTED.load(Ordering::SeqCst) {
+        return;
+    }
+    for id in all_devices() {
+        if !device_uid(id).is_some_and(|uid| restored.contains(&uid)) {
+            continue;
+        }
+        let elements = mute_elements(id);
+        if any_muted(id, &elements) {
+            let ok = set_device(id, &elements, false);
+            log::info!("Output {} was muted again after restoring, unmuted it {}", describe(id), if ok { "again" } else { "- failed" });
+        }
+    }
+}
+
+fn state(id: AudioObjectId, elements: &[u32]) -> &'static str {
+    if all_muted(id, elements) {
+        "muted"
+    } else if any_muted(id, elements) {
+        "partly muted"
+    } else {
+        "unmuted"
+    }
+}
+
+/// 取消我们静音的设备；返回这些设备的 UID（恢复后还要再盯几秒）
+fn restore() -> Vec<String> {
     let mut muted = MUTED.lock().unwrap();
     if muted.is_empty() {
         // 记了文件但没静音成功时，文件也要清掉
         let _ = std::fs::remove_file(pending_file());
-        return;
+        return Vec::new();
     }
     for id in all_devices() {
         if device_uid(id).is_some_and(|uid| muted.contains(&uid)) {
-            for e in mute_elements(id) {
-                set_muted(id, e, false);
+            let elements = mute_elements(id);
+            if !set_device(id, &elements, false) {
+                log::warn!("Restore: unmuting output {} failed", describe(id));
             }
+            log::info!("Restored output {} (reads back {})", describe(id), state(id, &elements));
         }
     }
     // 找不到的设备（已拔掉）也不再记着：重新接上时它的静音状态由系统保存，用户能看到
-    log::info!("Restored {} audio device(s)", muted.len());
-    muted.clear();
+    let restored = std::mem::take(&mut *muted);
     let _ = std::fs::remove_file(pending_file());
+    restored
 }
