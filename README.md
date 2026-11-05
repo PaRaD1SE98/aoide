@@ -36,6 +36,8 @@ Your speech is transcribed on your own machine with [SenseVoice](https://github.
 
 No account and no cloud service needed. Audio only leaves your computer if you choose to use a speech recognition API instead of the local model.
 
+If you find Aoide useful, please give it a ⭐ star. It helps more people discover it.
+
 ## Features
 
 | Feature | How | What happens |
