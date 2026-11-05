@@ -22,8 +22,9 @@ const DEFAULT_INPUT: u32 = code(b"dIn ");
 const DEFAULT_OUTPUT: u32 = code(b"dOut");
 const DEVICES: u32 = code(b"dev#");
 const DEVICE_UID: u32 = code(b"uid ");
-/// 设备名（kAudioDevicePropertyDeviceNameCFString，cpal 的 Device::name 用的也是它）
-const NAME: u32 = code(b"name");
+/// 设备名（kAudioObjectPropertyName，即 kAudioDevicePropertyDeviceNameCFString，cpal 的 Device::name 用的也是它）。
+/// 不能用 'name'（kAudioDevicePropertyDeviceName）：它返回的是 C 字符串，不是 CFString，当成 CFString 读会崩溃
+const NAME: u32 = code(b"lnam");
 const TRANSPORT: u32 = code(b"tran");
 const SAMPLE_RATE: u32 = code(b"nsrt");
 const STREAMS: u32 = code(b"stm#");
