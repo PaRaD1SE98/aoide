@@ -143,6 +143,7 @@ Aoide 使用 OpenAI 的语音识别格式（`POST {API 地址}/audio/transcripti
 | `max_duration` | `90` | 单次录音最长秒数，超时自动停止 |
 | `min_duration` | `3` | 短于此秒数的录音用静音补齐到该长度再识别；设 `0` 关闭 |
 | `mute_while_recording` | `true` | 录音期间静音其他正在播放声音的程序，结束后恢复；Aoide 自己的提示音不受影响。macOS 上静音的是输出设备 |
+| `builtin_mic_for_bluetooth` | `true` | 仅 macOS：默认麦克风是蓝牙耳机时改用电脑内置的麦克风录音。用耳机麦克风会让耳机切到通话模式，播放音质变差、结束后断音；没有内置麦克风时仍用耳机的 |
 | `device` | `gpu` | `gpu`（Vulkan；Apple 芯片的 Mac 上为 Metal，Intel Mac 上为 CPU）/ `cpu`。仅对 Whisper 生效，SenseVoice 固定使用 CPU |
 | `polish` | `true` | 是否启用 LLM 润色（`polish_api` 为空时自动跳过） |
 | `polish_api` | *（空）* | OpenAI 格式 API base，如 `https://api.openai.com/v1` |

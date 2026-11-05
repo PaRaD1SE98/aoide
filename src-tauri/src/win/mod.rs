@@ -32,6 +32,11 @@ pub fn prepare() {
     std::env::set_var("VK_LOADER_LAYERS_DISABLE", value);
 }
 
+/// 录音时代替默认麦克风的设备（macOS 上用于避开蓝牙耳机的麦克风）；Windows 上总是用默认麦克风
+pub fn input_instead_of_default() -> Option<(String, String)> {
+    None
+}
+
 /// Tauri 应用创建后、创建任何窗口前调用
 pub fn setup(_app: &mut App) {
     // 禁止窗口幽灵化：界面线程短暂卡顿时，系统不会用带标题栏的默认外壳替换窗口

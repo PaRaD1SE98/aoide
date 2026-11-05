@@ -57,6 +57,25 @@ impl Drop for Task {
     }
 }
 
+/// 正在播放的开始音（见 Controller::start_cue）
+#[must_use]
+struct StartCue {
+    done: Instant,
+    /// 播完后再静音（macOS：静音的是整个输出设备，提示音也会被静音）
+    mute: bool,
+}
+
+impl StartCue {
+    /// 等开始音播完（之后才开麦克风，提示音不会被录进去），需要时再静音
+    fn finish(self) {
+        let left = self.done.saturating_duration_since(Instant::now());
+        thread::sleep(left);
+        if self.mute {
+            mute::begin();
+        }
+    }
+}
+
 pub struct Controller {
     app: AppHandle,
     config: RwLock<Config>,
@@ -121,15 +140,26 @@ impl Controller {
         };
         drop(rev_task); // 修订录音中被取消时，停止修订的流程不会再走到，由这里结束任务
         translate_card::close_picker(&self.app);
-        mute::end();
         overlay::set(Mode::Hidden);
         self.set_tray(TrayState::Idle);
-        sound::play(Cue::Cancel);
+        mute::end_with(Cue::Cancel);
         log::info!("Task canceled");
     }
 
     pub fn config(&self) -> Config {
         self.config.read().unwrap().clone()
+    }
+
+    /// 开始音：最先播放（在更新托盘、悬浮条之前），按下快捷键马上就能听到；并静音其他声音（设置开着时）。
+    /// Windows 只静音其他程序，先静音再播开始音；macOS 静音的是整个输出设备，开始音得先播完再静音（StartCue::finish）。
+    /// 结束时对应的是 mute::end_with：按平台决定先播结束音还是先恢复声音
+    fn start_cue(&self, cue: Cue) -> StartCue {
+        let quiet = self.config().mute_while_recording;
+        if quiet && mute::CUE_HEARD_WHILE_MUTED {
+            mute::begin();
+        }
+        sound::play(cue);
+        StartCue { done: Instant::now() + sound::length(cue), mute: quiet && !mute::CUE_HEARD_WHILE_MUTED }
     }
 
     /// 在屏幕底部的提示小窗里显示一条消息（见 notice.rs）
@@ -314,12 +344,11 @@ impl Controller {
         let (rec, task) = {
             let mut s = self.rec.lock().unwrap();
             if s.recording {
-                // 先恢复声音再播结束音：macOS 静音的是整个输出设备
-                mute::end();
-                sound::play(Cue::Stop);
+                // 先关麦克风再恢复声音：蓝牙耳机在麦克风关掉后才切回音乐模式
                 if let Some(r) = &s.recorder {
                     r.stop();
                 }
+                mute::end_with(Cue::Stop);
                 s.recording = false;
                 if s.translate {
                     translate_card::close_picker(&self.app);
@@ -329,6 +358,7 @@ impl Controller {
             }
             s.recording = true;
             s.translate = translate;
+            let cue = self.start_cue(Cue::Start);
             self.set_tray(TrayState::Recording);
             if translate {
                 overlay::set(Mode::Translating);
@@ -336,9 +366,9 @@ impl Controller {
             } else {
                 overlay::set(Mode::Recording);
             }
-            // 开始音播完才开录：提示音不会被录进去
-            sound::play_sync(Cue::Start);
-            let r = Recorder::start();
+            // 开始音播完才开录：提示音不会被录进去。在开麦克风之前静音：蓝牙耳机切到通话模式前就记下它原来的状态
+            cue.finish();
+            let r = Recorder::start(self.config().builtin_mic_for_bluetooth);
             s.recorder = Some(r.clone());
             (r, self.begin_task())
         };
@@ -348,9 +378,6 @@ impl Controller {
         let cfg = self.config();
         // 屏幕上下文：趁录音时在后台截取前台窗口（用户正在操作的程序）
         let shot = screen::begin(&cfg);
-        if cfg.mute_while_recording {
-            mute::begin(); // 在开始提示音之后静音，提示音本身也不受影响
-        }
         // 悬浮条在最后 20 秒显示倒计时
         let limit = Duration::from_secs(cfg.max_duration.into());
         overlay::set_deadline(Some(Instant::now() + limit));
@@ -365,8 +392,7 @@ impl Controller {
                 s.recording = false;
             }
             drop(s);
-            mute::end();
-            sound::play(Cue::Stop);
+            mute::end_with(Cue::Stop);
             if translate {
                 translate_card::close_picker(&self.app);
             }
@@ -722,9 +748,9 @@ impl Controller {
                 r.active = false;
                 r.task = None;
             } else {
-                sound::play_sync(Cue::ReviseStart);
+                self.start_cue(Cue::ReviseStart).finish();
                 r.selected = Some(selected.clone());
-                r.recorder = Some(Recorder::start());
+                r.recorder = Some(Recorder::start(self.config().builtin_mic_for_bluetooth));
                 r.screen = Some(screen::begin(&self.config()));
             }
         }
@@ -734,9 +760,6 @@ impl Controller {
         }
         self.set_tray(TrayState::Recording);
         overlay::set(Mode::Revising);
-        if self.config().mute_while_recording {
-            mute::begin();
-        }
         log::info!("Revision recording started: {} chars selected", selected.chars().count());
     }
 
@@ -755,8 +778,7 @@ impl Controller {
         if let Some(r) = &rec {
             r.stop();
         }
-        mute::end();
-        sound::play(Cue::Stop);
+        mute::end_with(Cue::Stop);
         overlay::set(Mode::Processing);
 
         let cfg = self.config();

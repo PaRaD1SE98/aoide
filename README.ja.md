@@ -143,6 +143,7 @@ Aoide は OpenAI の音声認識形式（`POST {API ベース URL}/audio/transcr
 | `max_duration` | `90` | 1 回の録音の最大秒数。超えると自動で停止します |
 | `min_duration` | `3` | これより短い録音は、無音を足してこの長さにしてから認識します。`0` で無効 |
 | `mute_while_recording` | `true` | 録音中は音を再生しているほかのアプリをミュートし、終了後に元に戻します。Aoide の効果音には影響しません。macOS では出力デバイスをミュートします |
+| `builtin_mic_for_bluetooth` | `true` | macOS のみ：既定のマイクが Bluetooth イヤホンのとき、Mac 内蔵のマイクで録音します。イヤホンのマイクを使うと通話モードに切り替わり、再生音質が落ちて終了後に音が途切れます。内蔵マイクがない場合はイヤホンのマイクを使います |
 | `device` | `gpu` | `gpu`（Vulkan。Apple シリコンの Mac では Metal、Intel Mac では CPU）/ `cpu`。Whisper のみ有効で、SenseVoice は常に CPU で動作します |
 | `polish` | `true` | LLM による整形を有効にする（`polish_api` が空の場合はスキップ） |
 | `polish_api` | *（空）* | OpenAI 互換 API のベース URL。例：`https://api.openai.com/v1` |
