@@ -64,7 +64,8 @@ pub fn end_with(cue: Cue) {
         return;
     }
     std::thread::spawn(move || {
-        crate::sound::play_sync(cue);
+        crate::sound::play(cue);
+        std::thread::sleep(crate::sound::length(cue));
         restore(&|| GENERATION.load(Ordering::SeqCst) == generation, FADE);
     });
 }

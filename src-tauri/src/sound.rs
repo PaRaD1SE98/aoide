@@ -72,14 +72,45 @@ pub fn play(cue: Cue) {
     crate::platform::sound::play(bytes(cue), false);
 }
 
-/// 播完才返回：开始音用它，避免提示音被录进去，也保证播完后才静音其他程序
-pub fn play_sync(cue: Cue) {
-    crate::platform::sound::play(bytes(cue), true);
+/// 提示音的时长（按 WAV 头计算），另加一点余量：系统开始播放有少许延迟
+pub fn length(cue: Cue) -> std::time::Duration {
+    const MARGIN: std::time::Duration = std::time::Duration::from_millis(60);
+    wav_length(bytes(cue)).unwrap_or(std::time::Duration::from_millis(400)) + MARGIN
+}
+
+/// WAV 的播放时长：data 块的字节数 ÷ 每秒字节数
+fn wav_length(wav: &[u8]) -> Option<std::time::Duration> {
+    if wav.len() < 12 || &wav[0..4] != b"RIFF" || &wav[8..12] != b"WAVE" {
+        return None;
+    }
+    let mut byte_rate = 0u32;
+    let mut i = 12;
+    while i + 8 <= wav.len() {
+        let id = &wav[i..i + 4];
+        let len = u32::from_le_bytes(wav[i + 4..i + 8].try_into().ok()?) as usize;
+        if id == b"fmt " && len >= 16 && i + 20 <= wav.len() {
+            byte_rate = u32::from_le_bytes(wav[i + 16..i + 20].try_into().ok()?);
+        } else if id == b"data" && byte_rate > 0 {
+            let len = len.min(wav.len() - (i + 8));
+            return Some(std::time::Duration::from_secs_f64(len as f64 / byte_rate as f64));
+        }
+        i += 8 + len + (len & 1);
+    }
+    None
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn measures_cue_length() {
+        for cue in [Cue::Start, Cue::ReviseStart, Cue::Stop, Cue::Cancel, Cue::Error] {
+            let length = wav_length(bytes(cue)).unwrap();
+            println!("{cue:?}: {length:?}");
+            assert!(length > std::time::Duration::from_millis(50) && length < std::time::Duration::from_secs(2));
+        }
+    }
 
     #[test]
     fn halves_pcm_samples_only() {

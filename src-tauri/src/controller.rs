@@ -57,6 +57,25 @@ impl Drop for Task {
     }
 }
 
+/// 正在播放的开始音（见 Controller::start_cue）
+#[must_use]
+struct StartCue {
+    done: Instant,
+    /// 播完后再静音（macOS：静音的是整个输出设备，提示音也会被静音）
+    mute: bool,
+}
+
+impl StartCue {
+    /// 等开始音播完（之后才开麦克风，提示音不会被录进去），需要时再静音
+    fn finish(self) {
+        let left = self.done.saturating_duration_since(Instant::now());
+        thread::sleep(left);
+        if self.mute {
+            mute::begin();
+        }
+    }
+}
+
 pub struct Controller {
     app: AppHandle,
     config: RwLock<Config>,
@@ -131,18 +150,16 @@ impl Controller {
         self.config.read().unwrap().clone()
     }
 
-    /// 播放开始音并静音其他声音（设置开着时），播完才返回：提示音不会被录进去。
-    /// Windows 只静音其他程序，先静音再播开始音；macOS 静音的是整个输出设备，开始音得先播完再静音。
+    /// 开始音：最先播放（在更新托盘、悬浮条之前），按下快捷键马上就能听到；并静音其他声音（设置开着时）。
+    /// Windows 只静音其他程序，先静音再播开始音；macOS 静音的是整个输出设备，开始音得先播完再静音（StartCue::finish）。
     /// 结束时对应的是 mute::end_with：按平台决定先播结束音还是先恢复声音
-    fn start_cue(&self, cue: Cue) {
+    fn start_cue(&self, cue: Cue) -> StartCue {
         let quiet = self.config().mute_while_recording;
         if quiet && mute::CUE_HEARD_WHILE_MUTED {
             mute::begin();
         }
-        sound::play_sync(cue);
-        if quiet && !mute::CUE_HEARD_WHILE_MUTED {
-            mute::begin();
-        }
+        sound::play(cue);
+        StartCue { done: Instant::now() + sound::length(cue), mute: quiet && !mute::CUE_HEARD_WHILE_MUTED }
     }
 
     /// 在屏幕底部的提示小窗里显示一条消息（见 notice.rs）
@@ -341,6 +358,7 @@ impl Controller {
             }
             s.recording = true;
             s.translate = translate;
+            let cue = self.start_cue(Cue::Start);
             self.set_tray(TrayState::Recording);
             if translate {
                 overlay::set(Mode::Translating);
@@ -349,7 +367,7 @@ impl Controller {
                 overlay::set(Mode::Recording);
             }
             // 开始音播完才开录：提示音不会被录进去。在开麦克风之前静音：蓝牙耳机切到通话模式前就记下它原来的状态
-            self.start_cue(Cue::Start);
+            cue.finish();
             let r = Recorder::start();
             s.recorder = Some(r.clone());
             (r, self.begin_task())
@@ -730,7 +748,7 @@ impl Controller {
                 r.active = false;
                 r.task = None;
             } else {
-                self.start_cue(Cue::ReviseStart);
+                self.start_cue(Cue::ReviseStart).finish();
                 r.selected = Some(selected.clone());
                 r.recorder = Some(Recorder::start());
                 r.screen = Some(screen::begin(&self.config()));
