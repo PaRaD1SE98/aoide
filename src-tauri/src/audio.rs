@@ -84,6 +84,11 @@ fn run_stream(s: &Arc<Shared>, rx: mpsc::Receiver<()>) -> Result<(), String> {
         .ok_or(crate::i18n::tr("没有找到麦克风", "No microphone found", "マイクが見つかりません"))?;
     let supported = device.default_input_config().map_err(|e| e.to_string())?;
     let channels = supported.channels() as usize;
+    log::info!(
+        "Recording from \"{}\" ({} Hz, {channels} ch)",
+        device.name().unwrap_or_default(),
+        supported.sample_rate().0
+    );
     s.rate.store(supported.sample_rate().0, Ordering::SeqCst);
     let config = supported.config();
 

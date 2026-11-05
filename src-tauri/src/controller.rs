@@ -314,12 +314,13 @@ impl Controller {
         let (rec, task) = {
             let mut s = self.rec.lock().unwrap();
             if s.recording {
-                // 先恢复声音再播结束音：macOS 静音的是整个输出设备
-                mute::end();
-                sound::play(Cue::Stop);
+                // 先关麦克风再恢复声音（蓝牙耳机在麦克风关掉后才切回音乐模式），
+                // 再播结束音：macOS 静音的是整个输出设备
                 if let Some(r) = &s.recorder {
                     r.stop();
                 }
+                mute::end();
+                sound::play(Cue::Stop);
                 s.recording = false;
                 if s.translate {
                     translate_card::close_picker(&self.app);
