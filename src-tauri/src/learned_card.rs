@@ -16,7 +16,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 pub const LABEL: &str = "learned";
 /// 逻辑尺寸（含四周 8 像素的阴影留白），按显示器缩放；高度随词条数增加，超过 MAX_ROWS 条时滚动
 const WIDTH: f64 = 304.0;
-const BASE_HEIGHT: f64 = 52.0;
+const BASE_HEIGHT: f64 = 56.0;
 const ROW_HEIGHT: f64 = 20.0;
 const MAX_ROWS: usize = 4;
 /// 离屏幕右下角的距离（加上阴影留白，卡片离边缘约 12 像素）
