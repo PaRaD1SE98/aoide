@@ -121,15 +121,28 @@ impl Controller {
         };
         drop(rev_task); // 修订录音中被取消时，停止修订的流程不会再走到，由这里结束任务
         translate_card::close_picker(&self.app);
-        mute::end();
         overlay::set(Mode::Hidden);
         self.set_tray(TrayState::Idle);
-        sound::play(Cue::Cancel);
+        mute::end_with(Cue::Cancel);
         log::info!("Task canceled");
     }
 
     pub fn config(&self) -> Config {
         self.config.read().unwrap().clone()
+    }
+
+    /// 播放开始音并静音其他声音（设置开着时），播完才返回：提示音不会被录进去。
+    /// Windows 只静音其他程序，先静音再播开始音；macOS 静音的是整个输出设备，开始音得先播完再静音。
+    /// 结束时对应的是 mute::end_with：按平台决定先播结束音还是先恢复声音
+    fn start_cue(&self, cue: Cue) {
+        let quiet = self.config().mute_while_recording;
+        if quiet && mute::CUE_HEARD_WHILE_MUTED {
+            mute::begin();
+        }
+        sound::play_sync(cue);
+        if quiet && !mute::CUE_HEARD_WHILE_MUTED {
+            mute::begin();
+        }
     }
 
     /// 在屏幕底部的提示小窗里显示一条消息（见 notice.rs）
@@ -314,13 +327,11 @@ impl Controller {
         let (rec, task) = {
             let mut s = self.rec.lock().unwrap();
             if s.recording {
-                // 先关麦克风再恢复声音（蓝牙耳机在麦克风关掉后才切回音乐模式），
-                // 再播结束音：macOS 静音的是整个输出设备
+                // 先关麦克风再恢复声音：蓝牙耳机在麦克风关掉后才切回音乐模式
                 if let Some(r) = &s.recorder {
                     r.stop();
                 }
-                mute::end();
-                sound::play(Cue::Stop);
+                mute::end_with(Cue::Stop);
                 s.recording = false;
                 if s.translate {
                     translate_card::close_picker(&self.app);
@@ -337,8 +348,8 @@ impl Controller {
             } else {
                 overlay::set(Mode::Recording);
             }
-            // 开始音播完才开录：提示音不会被录进去
-            sound::play_sync(Cue::Start);
+            // 开始音播完才开录：提示音不会被录进去。在开麦克风之前静音：蓝牙耳机切到通话模式前就记下它原来的状态
+            self.start_cue(Cue::Start);
             let r = Recorder::start();
             s.recorder = Some(r.clone());
             (r, self.begin_task())
@@ -349,9 +360,6 @@ impl Controller {
         let cfg = self.config();
         // 屏幕上下文：趁录音时在后台截取前台窗口（用户正在操作的程序）
         let shot = screen::begin(&cfg);
-        if cfg.mute_while_recording {
-            mute::begin(); // 在开始提示音之后静音，提示音本身也不受影响
-        }
         // 悬浮条在最后 20 秒显示倒计时
         let limit = Duration::from_secs(cfg.max_duration.into());
         overlay::set_deadline(Some(Instant::now() + limit));
@@ -366,8 +374,7 @@ impl Controller {
                 s.recording = false;
             }
             drop(s);
-            mute::end();
-            sound::play(Cue::Stop);
+            mute::end_with(Cue::Stop);
             if translate {
                 translate_card::close_picker(&self.app);
             }
@@ -723,7 +730,7 @@ impl Controller {
                 r.active = false;
                 r.task = None;
             } else {
-                sound::play_sync(Cue::ReviseStart);
+                self.start_cue(Cue::ReviseStart);
                 r.selected = Some(selected.clone());
                 r.recorder = Some(Recorder::start());
                 r.screen = Some(screen::begin(&self.config()));
@@ -735,9 +742,6 @@ impl Controller {
         }
         self.set_tray(TrayState::Recording);
         overlay::set(Mode::Revising);
-        if self.config().mute_while_recording {
-            mute::begin();
-        }
         log::info!("Revision recording started: {} chars selected", selected.chars().count());
     }
 
@@ -756,8 +760,7 @@ impl Controller {
         if let Some(r) = &rec {
             r.stop();
         }
-        mute::end();
-        sound::play(Cue::Stop);
+        mute::end_with(Cue::Stop);
         overlay::set(Mode::Processing);
 
         let cfg = self.config();

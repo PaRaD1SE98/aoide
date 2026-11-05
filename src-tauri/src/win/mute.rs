@@ -2,14 +2,18 @@
 //!
 //! 不动系统总音量，而是逐个处理 Windows 的音频会话（音量合成器里的每一项）：
 //! 只静音其他程序当前正在出声、且原本没被静音的会话。本程序自己的提示音和
-//! Windows 系统提示音不受影响，所以提示音何时播放都听得到。
+//! Windows 系统提示音不受影响，所以开始时先静音再播开始音，结束时先播结束音、播完再恢复。
+//! 恢复时音量从低到高渐强，原本音量很大时不会突然响起来。
 //! 恢复时只取消我们静音的那些会话，用户原本就静音的保持原样。
-//! 被静音的会话同时记在文件里：程序被强退来不及恢复时，下次启动按文件恢复。
+//! 被静音的会话（和原来的音量）同时记在文件里：程序被强退来不及恢复时，下次启动按文件恢复。
 
 use super::com::ComGuard;
+use crate::sound::Cue;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 use windows::core::Interface;
 use windows::Win32::Foundation::S_OK;
 use windows::Win32::Media::Audio::{
@@ -18,45 +22,85 @@ use windows::Win32::Media::Audio::{
 };
 use windows::Win32::System::Com::{CoCreateInstance, CoTaskMemFree, CLSCTX_ALL};
 
-/// 被我们静音的会话（会话实例 ID），恢复时按 ID 找回
-static MUTED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// 提示音在静音期间也听得到（只静音其他程序）
+pub const CUE_HEARD_WHILE_MUTED: bool = true;
+
+/// 一个被我们静音的会话
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Muted {
+    /// 会话实例 ID，恢复时按它找回
+    id: String,
+    /// 静音前的音量（0–1）：渐强恢复的目标，强退后也按它调回来
+    #[serde(default)]
+    volume: Option<f32>,
+}
+
+/// 被我们静音的会话，恢复（含渐强）完成后才清空
+static MUTED: Mutex<Vec<Muted>> = Mutex::new(Vec::new());
 /// 当前是否应处于静音状态。快速开始又停止时，恢复可能抢在静音之前执行；
 /// 静音在锁内检查这个标志，避免录音已结束却留下静音
 static WANTED: AtomicBool = AtomicBool::new(false);
+/// 每次开始或结束加一。结束后播提示音、渐强恢复的线程，发现它变了（又开始了录音）就停下
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+
+/// 渐强时长与步数
+const FADE: Duration = Duration::from_millis(600);
+const FADE_STEPS: u32 = 20;
 
 /// 录音开始：静音其他程序正在播放的声音
 pub fn begin() {
+    GENERATION.fetch_add(1, Ordering::SeqCst);
     WANTED.store(true, Ordering::SeqCst);
     mute_others();
 }
 
-/// 录音结束：恢复（可重复调用）
-pub fn end() {
+/// 录音结束：先播结束音，播完再渐强恢复其他程序的声音。在后台进行，立即返回
+pub fn end_with(cue: Cue) {
+    let generation = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     WANTED.store(false, Ordering::SeqCst);
-    restore();
+    if MUTED.lock().unwrap().is_empty() {
+        let _ = std::fs::remove_file(pending_file());
+        crate::sound::play(cue);
+        return;
+    }
+    std::thread::spawn(move || {
+        crate::sound::play_sync(cue);
+        restore(&|| GENERATION.load(Ordering::SeqCst) == generation, FADE);
+    });
+}
+
+/// 退出、更新前调用：立即恢复，不播提示音、不渐强
+pub fn end() {
+    GENERATION.fetch_add(1, Ordering::SeqCst);
+    WANTED.store(false, Ordering::SeqCst);
+    restore(&|| true, Duration::ZERO);
 }
 
 /// 启动时调用：上次运行留下了未恢复的静音（被强退、崩溃），现在恢复
 pub fn recover() {
-    let Some(ids) = std::fs::read_to_string(pending_file())
-        .ok()
-        .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
-    else {
+    let Ok(text) = std::fs::read_to_string(pending_file()) else { return };
+    // 旧版本只记了会话 ID
+    let entries = serde_json::from_str::<Vec<Muted>>(&text).ok().or_else(|| {
+        serde_json::from_str::<Vec<String>>(&text)
+            .ok()
+            .map(|ids| ids.into_iter().map(|id| Muted { id, volume: None }).collect())
+    });
+    let Some(entries) = entries else {
         let _ = std::fs::remove_file(pending_file());
         return;
     };
-    log::info!("Recovering {} audio session(s) left muted by the last run", ids.len());
-    MUTED.lock().unwrap().extend(ids);
-    restore();
+    log::info!("Recovering {} audio session(s) left muted by the last run", entries.len());
+    *MUTED.lock().unwrap() = entries;
+    restore(&|| true, Duration::ZERO);
 }
 
 fn pending_file() -> PathBuf {
     crate::config::data_dir().join("muted-sessions.json")
 }
 
-fn save_pending(ids: &[String]) {
+fn save_pending(entries: &[Muted]) {
     let _ = std::fs::create_dir_all(crate::config::data_dir());
-    let json = serde_json::to_string(ids).expect("session ids are serializable");
+    let json = serde_json::to_string(entries).expect("muted sessions are serializable");
     if let Err(e) = std::fs::write(pending_file(), json) {
         log::warn!("Save muted sessions failed: {e}");
     }
@@ -99,6 +143,14 @@ fn other_sessions() -> windows::core::Result<Vec<Session>> {
     Ok(out)
 }
 
+fn set_volume(s: &Session, volume: f32) {
+    let _ = unsafe { s.volume.SetMasterVolume(volume, std::ptr::null()) };
+}
+
+fn set_mute(s: &Session, muted: bool) -> bool {
+    unsafe { s.volume.SetMute(muted, std::ptr::null()) }.is_ok()
+}
+
 fn mute_others() {
     let mut muted = MUTED.lock().unwrap();
     if !WANTED.load(Ordering::SeqCst) {
@@ -112,24 +164,36 @@ fn mute_others() {
             return;
         }
     };
-    let targets: Vec<Session> = sessions
-        .into_iter()
-        .filter(|s| {
-            let already = unsafe { s.volume.GetMute() }.is_ok_and(|m| m.as_bool());
-            s.active && !already && !muted.contains(&s.id)
-        })
-        .collect();
+    let mut targets = Vec::new();
+    for s in sessions {
+        if let Some(entry) = muted.iter().find(|m| m.id == s.id) {
+            // 上次结束后还没恢复完（结束音还在播、正在渐强）：音量调回原值，重新静音
+            if let Some(v) = entry.volume {
+                set_volume(&s, v);
+            }
+            set_mute(&s, true);
+            continue;
+        }
+        let already = unsafe { s.volume.GetMute() }.is_ok_and(|m| m.as_bool());
+        if s.active && !already {
+            targets.push(s);
+        }
+    }
     if targets.is_empty() {
         return;
     }
     // 先落盘再静音：静音之后、写文件之前被强退也不会漏掉。
     // 静音失败的会话多记了也无妨，恢复时对它取消静音不改变什么
+    let entries: Vec<Muted> = targets
+        .iter()
+        .map(|s| Muted { id: s.id.clone(), volume: unsafe { s.volume.GetMasterVolume() }.ok() })
+        .collect();
     let mut pending = muted.clone();
-    pending.extend(targets.iter().map(|s| s.id.clone()));
+    pending.extend(entries.iter().cloned());
     save_pending(&pending);
-    for s in targets {
-        if unsafe { s.volume.SetMute(true, std::ptr::null()) }.is_ok() {
-            muted.push(s.id);
+    for (s, entry) in targets.iter().zip(entries) {
+        if set_mute(s, true) {
+            muted.push(entry);
         }
     }
     if !muted.is_empty() {
@@ -137,34 +201,95 @@ fn mute_others() {
     }
 }
 
-fn restore() {
-    let mut muted = MUTED.lock().unwrap();
-    if muted.is_empty() {
-        // 记了文件但一个都没静音成功时，文件也要清掉
-        let _ = std::fs::remove_file(pending_file());
-        return;
-    }
+/// 取消我们静音的会话，音量在 fade 内从低到高渐强。
+/// 渐强途中又开始录音（current() 变成 false）：音量调回原值，静音交给 begin（这些会话还记着）
+fn restore(current: &dyn Fn() -> bool, fade: Duration) {
     let _com = ComGuard::new();
-    match other_sessions() {
-        Ok(sessions) => {
-            for s in sessions.iter().filter(|s| muted.contains(&s.id)) {
-                let _ = unsafe { s.volume.SetMute(false, std::ptr::null()) };
+    let steps = if fade.is_zero() { 0 } else { FADE_STEPS };
+    let gain = |s: u32| (s as f32 / FADE_STEPS as f32).powi(2);
+    let targets: Vec<(Session, Option<f32>)> = {
+        let mut muted = MUTED.lock().unwrap();
+        if !current() {
+            return;
+        }
+        if muted.is_empty() {
+            // 记了文件但一个都没静音成功时，文件也要清掉
+            let _ = std::fs::remove_file(pending_file());
+            return;
+        }
+        let sessions = match other_sessions() {
+            Ok(s) => s,
+            // 记录和文件都留着：下次结束录音或下次启动时重试
+            Err(e) => {
+                log::warn!("Restore audio failed: {e}");
+                return;
             }
+        };
+        let targets: Vec<(Session, Option<f32>)> = sessions
+            .into_iter()
+            .filter_map(|s| {
+                let volume = muted.iter().find(|m| m.id == s.id)?.volume;
+                Some((s, volume))
+            })
+            .collect();
+        for (s, volume) in &targets {
+            // 渐强从很小的音量开始；不知道原来音量的（旧版本留下的记录）直接取消静音
+            match volume {
+                Some(v) if steps > 0 => set_volume(s, v * gain(1)),
+                Some(v) => set_volume(s, *v),
+                None => {}
+            }
+            set_mute(s, false);
+        }
+        if steps == 0 {
             log::info!("Restored {} audio session(s)", muted.len());
             muted.clear();
             let _ = std::fs::remove_file(pending_file());
+            return;
         }
-        // 记录和文件都留着：下次结束录音或下次启动时重试
-        Err(e) => log::warn!("Restore audio failed: {e}"),
+        targets
+    };
+    for step in 2..=steps {
+        std::thread::sleep(fade / steps);
+        let _muted = MUTED.lock().unwrap();
+        if !current() {
+            // 又开始了录音：音量调回原值、重新静音（这些会话还记着，begin 也会处理）。
+            // 被下一次结束（如取消）打断时什么都不做，由它从小音量重新渐强
+            if WANTED.load(Ordering::SeqCst) {
+                for (s, volume) in &targets {
+                    if let Some(v) = volume {
+                        set_volume(s, *v);
+                    }
+                    set_mute(s, true);
+                }
+            }
+            return;
+        }
+        for (s, volume) in &targets {
+            if let Some(v) = volume {
+                set_volume(s, v * gain(step));
+            }
+        }
     }
+    let mut muted = MUTED.lock().unwrap();
+    if !current() {
+        return;
+    }
+    for (s, volume) in &targets {
+        if let Some(v) = volume {
+            set_volume(s, *v);
+        }
+    }
+    log::info!("Restored {} audio session(s)", muted.len());
+    muted.clear();
+    let _ = std::fs::remove_file(pending_file());
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
 
-    fn muted_state_of(pid: u32) -> Option<bool> {
+    fn session_of(pid: u32) -> Option<(bool, f32)> {
         let _com = ComGuard::new();
         unsafe {
             let enumerator: IMMDeviceEnumerator = CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
@@ -176,7 +301,8 @@ mod tests {
                     let control = sessions.GetSession(i).ok()?;
                     let control2 = control.cast::<IAudioSessionControl2>().ok()?;
                     if control2.GetProcessId().ok() == Some(pid) {
-                        return control.cast::<ISimpleAudioVolume>().ok()?.GetMute().ok().map(|b| b.as_bool());
+                        let volume = control.cast::<ISimpleAudioVolume>().ok()?;
+                        return Some((volume.GetMute().ok()?.as_bool(), volume.GetMasterVolume().ok()?));
                     }
                 }
             }
@@ -218,29 +344,47 @@ mod tests {
             .spawn()
             .unwrap();
         std::thread::sleep(Duration::from_secs(2));
-        // PowerShell 可能经由子进程出声，按会话所属 PID 找不到时直接比较全局记录
+        let original = session_of(child.id()).map(|s| s.1);
+        println!("child before: {:?}", session_of(child.id()));
+
         begin();
         let muted_count = MUTED.lock().unwrap().len();
-        println!("muted sessions: {muted_count}, child state: {:?}", muted_state_of(child.id()));
+        println!("muted sessions: {muted_count}, child: {:?}", session_of(child.id()));
         assert!(muted_count >= 1);
-        assert_eq!(muted_state_of(child.id()), Some(true));
-
+        assert_eq!(session_of(child.id()).map(|s| s.0), Some(true));
         assert!(pending_file().is_file());
 
-        end();
-        println!("after restore: {:?}", muted_state_of(child.id()));
+        // 结束：提示音播完后渐强恢复；渐强途中音量低于原值，结束后回到原值
+        end_with(Cue::Stop);
+        std::thread::sleep(Duration::from_millis(900));
+        let mid = session_of(child.id());
+        println!("fading: {mid:?}");
+        std::thread::sleep(Duration::from_millis(1500));
+        println!("after restore: {:?}", session_of(child.id()));
         assert!(MUTED.lock().unwrap().is_empty());
-        assert_eq!(muted_state_of(child.id()), Some(false));
+        assert_eq!(session_of(child.id()).map(|s| s.0), Some(false));
+        assert_eq!(session_of(child.id()).map(|s| s.1), original);
         assert!(!pending_file().is_file());
+
+        // 渐强途中又开始录音：音量回到原值并重新静音，之后照常恢复
+        begin();
+        end_with(Cue::Stop);
+        std::thread::sleep(Duration::from_millis(700));
+        begin();
+        println!("restarted while fading: {:?}", session_of(child.id()));
+        assert_eq!(session_of(child.id()), original.map(|v| (true, v)));
+        end_with(Cue::Stop);
+        std::thread::sleep(Duration::from_millis(2500));
+        assert_eq!(session_of(child.id()), original.map(|v| (false, v)));
 
         // 模拟强退：静音后内存里的记录丢失，下次启动按文件恢复
         begin();
         WANTED.store(false, Ordering::SeqCst);
         MUTED.lock().unwrap().clear();
-        assert_eq!(muted_state_of(child.id()), Some(true));
+        assert_eq!(session_of(child.id()).map(|s| s.0), Some(true));
         recover();
-        println!("after recover: {:?}", muted_state_of(child.id()));
-        assert_eq!(muted_state_of(child.id()), Some(false));
+        println!("after recover: {:?}", session_of(child.id()));
+        assert_eq!(session_of(child.id()), original.map(|v| (false, v)));
         assert!(!pending_file().is_file());
         let _ = child.kill();
     }
