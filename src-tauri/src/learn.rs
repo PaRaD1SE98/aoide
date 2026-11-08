@@ -4,7 +4,9 @@
 //! 流程：
 //! 1. 粘贴后记下输入框全文，用插入位置前后的原文作为锚点，之后每 0.5 秒、以及每次按键后，重新定位这段文字。
 //!    按键后的读取让「改完马上按回车发送」也能读到清空前的最后一版
-//! 2. 改动停下 2.5 秒、焦点离开输入框、输入框被清空（聊天发送）、开始下一次语音输入时，比对一次
+//! 2. 观察结束时比对一次：焦点离开输入框、输入框被清空（聊天发送）、开始下一次语音输入、或观察满 3 分钟。
+//!    不在「停下几秒」时比对：用输入法打字时，还没选字的拼音、假名留在输入框里，停下想一想很正常，
+//!    这时比对会把拼音当成改正。结束时还残留着没选字的内容（见 composing）的话，用之前最后一版没有残留的
 //! 3. 比对按字（中文）/ 按词（西文）进行，只看「替换」；中文的改动扩展到完整的词（jieba 分词），
 //!    改动太大（整句重写）、纯增删、只改标点大小写、含数字的都不算
 //! 4. 按设置的学习方式（learn_mode）决定学哪些（LLM 给的词条必须真的来自这次修改；没配置 LLM 或调用失败时按本地比对）：
@@ -35,8 +37,6 @@ const TICK: Duration = Duration::from_millis(25);
 const KEY_DELAY: Duration = Duration::from_millis(50);
 /// 按键触发的读取，两次之间至少隔多久（连续打字时不至于读得太频繁）
 const MIN_GAP: Duration = Duration::from_millis(100);
-/// 改动停下多久算「改完了」
-const SETTLE: Duration = Duration::from_millis(2500);
 /// 焦点离开 / 文字找不到持续多久后结束观察
 const GONE: Duration = Duration::from_millis(1200);
 /// 最长观察时间
@@ -71,7 +71,7 @@ pub fn watch(app: AppHandle, inserted: String, cfg: Config) {
             log::info!("Learn: focused control is not readable, not watching");
             return;
         };
-        let timing = Timing { poll: POLL, tick: TICK, key_delay: KEY_DELAY, min_gap: MIN_GAP, settle: SETTLE, gone: GONE, max: MAX_WATCH };
+        let timing = Timing { poll: POLL, tick: TICK, key_delay: KEY_DELAY, min_gap: MIN_GAP, gone: GONE, max: MAX_WATCH };
         observe(&w, &inserted, &GENERATION, generation, timing, |old, new| process(&app, old, new, &cfg));
     });
 }
@@ -102,13 +102,12 @@ struct Timing {
     tick: Duration,
     key_delay: Duration,
     min_gap: Duration,
-    settle: Duration,
     gone: Duration,
     max: Duration,
 }
 
-/// 观察循环：每当一版修改稳定下来、或观察结束时，调用 on_edit(上次比对过的版本, 现在的版本)。
-/// 计数器 counter 变得不等于 generation 时（开始了新的语音输入）结束观察
+/// 观察循环：观察结束时（焦点离开、文字消失、超时、计数器 counter 变得不等于 generation 即开始了新的语音输入）
+/// 有修改的话调用一次 on_edit(插入的版本, 改后的版本)
 fn observe(src: &impl Source, inserted: &str, counter: &AtomicU64, generation: u64, timing: Timing, mut on_edit: impl FnMut(&str, &str)) {
     let Some(start) = src.text() else { return };
     let Some(pos) = start.rfind(inserted) else {
@@ -118,9 +117,8 @@ fn observe(src: &impl Source, inserted: &str, counter: &AtomicU64, generation: u
     let prefix = start[..pos].to_string();
     let suffix = start[pos + inserted.len()..].to_string();
     let started = Instant::now();
-    let mut processed = inserted.to_string(); // 已比对过的版本
     let mut current = inserted.to_string(); // 最近一次定位到的版本
-    let mut changed_at = Instant::now();
+    let mut settled = inserted.to_string(); // 最近一版没有残留输入法未选字内容的
     let mut gone_since: Option<Instant> = None;
     let mut last_read = Instant::now();
     let mut seen_keys = src.keys();
@@ -149,8 +147,10 @@ fn observe(src: &impl Source, inserted: &str, counter: &AtomicU64, generation: u
                 Some(r) if rewritten(&current, &r) => gone_since = gone_since.or(Some(Instant::now())),
                 Some(r) => {
                     if r != current {
+                        if !composing(inserted, &r) {
+                            settled = r.clone();
+                        }
                         current = r;
-                        changed_at = Instant::now();
                     }
                     gone_since = if src.still_focused() { None } else { gone_since.or(Some(Instant::now())) };
                 }
@@ -161,14 +161,51 @@ fn observe(src: &impl Source, inserted: &str, counter: &AtomicU64, generation: u
         if gone_since.is_some_and(|t| t.elapsed() >= timing.gone) {
             break;
         }
-        if current != processed && changed_at.elapsed() >= timing.settle {
-            on_edit(&processed, &current);
-            processed = current.clone();
+    }
+    if current != settled {
+        log::info!("Learn: the last version still had unconverted input method text, using the one before it");
+    }
+    if settled != inserted {
+        on_edit(inserted, &settled);
+    }
+}
+
+/// 改后的文字里有没有输入法还没选字的内容（中文拼音、日文罗马字）。只看改动的部分，原文本来就有的不算：
+/// - 拼音带分隔符：小写字母和 ' 组成、至少一个 '（如 ce'shi），紧挨着非 ASCII 字符（中文、全角标点）。
+///   英文的 don't 前后是空格和字母，不会算进来
+/// - 假名后面紧跟小写字母：日文输入时还没凑成假名的罗马字（如 しおr）
+fn composing(old: &str, new: &str) -> bool {
+    let a: Vec<char> = old.chars().collect();
+    let b: Vec<char> = new.chars().collect();
+    let pre = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+    let suf = a[pre..].iter().rev().zip(b[pre..].iter().rev()).take_while(|(x, y)| x == y).count();
+    // 改动的部分前后各带一个字，用来看它紧挨着什么
+    let lo = pre.saturating_sub(1);
+    let hi = (b.len() - suf + 1).min(b.len());
+    let part = &b[lo..hi];
+    let kana = |c: char| ('\u{3041}'..='\u{30FF}').contains(&c);
+    if part.windows(2).any(|w| kana(w[0]) && w[1].is_ascii_lowercase()) {
+        return true;
+    }
+    // 找由小写字母和 ' 组成、含 ' 的一段，看它两端
+    let mut i = 0;
+    while i < part.len() {
+        if !part[i].is_ascii_lowercase() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < part.len() && (part[i].is_ascii_lowercase() || part[i] == '\'') {
+            i += 1;
+        }
+        let run = &part[start..i];
+        let separated = run.windows(3).any(|w| w[0].is_ascii_lowercase() && w[1] == '\'' && w[2].is_ascii_lowercase());
+        let beside_wide = (start > 0 && !part[start - 1].is_ascii()) || (i < part.len() && !part[i].is_ascii());
+        if separated && beside_wide {
+            return true;
         }
     }
-    if current != processed {
-        on_edit(&processed, &current);
-    }
+    false
 }
 
 /// 在全文里定位插入的那段文字：优先用完整的前后文，前后文被改动过时退而用紧挨着的 20 个字符
@@ -614,7 +651,6 @@ mod tests {
         tick: Duration::from_millis(5),
         key_delay: Duration::from_millis(10),
         min_gap: Duration::from_millis(10),
-        settle: Duration::from_millis(120),
         gone: Duration::from_millis(60),
         max: Duration::from_secs(3),
     };
@@ -695,8 +731,8 @@ mod tests {
     }
 
     #[test]
-    fn compares_each_settled_version_once() {
-        // 两次分开的修改：各比对一次，第二次以第一次改完的版本为基准
+    fn compares_once_when_watching_ends() {
+        // 中间停了很久的两次修改：观察结束时一起比对一次
         let edits = run(
             vec![
                 (0, Some("用奥伊德和tori写的"), true),
@@ -707,13 +743,45 @@ mod tests {
             "用奥伊德和tori写的",
             &AtomicU64::new(0),
         );
-        assert_eq!(
-            edits,
-            [
-                ("用奥伊德和tori写的".into(), "用Aoide和tori写的".into()),
-                ("用Aoide和tori写的".into(), "用Aoide和Tauri写的".into()),
-            ]
+        assert_eq!(edits, [("用奥伊德和tori写的".into(), "用Aoide和Tauri写的".into())]);
+    }
+
+    #[test]
+    fn ignores_unconverted_input_method_text() {
+        // 打拼音时停下来想（拼音留在输入框里很久），选好字后发送：只比对选好字的版本
+        let edits = run(
+            vec![
+                (0, Some("我用思维到图整理需求"), true),
+                (30, Some("我用思维dao'tu整理需求"), true),
+                (300, Some("我用思维导图整理需求"), true),
+                (330, Some(""), true),
+            ],
+            "我用思维到图整理需求",
+            &AtomicU64::new(0),
         );
+        assert_eq!(edits, [("我用思维到图整理需求".into(), "我用思维导图整理需求".into())]);
+        // 拼音还没选字焦点就离开了：用残留之前的版本（这里没改过，就不比对）
+        let edits = run(
+            vec![(0, Some("我用思维到图整理需求"), true), (30, Some("我用思维dao'tu整理需求"), true), (300, Some("我用思维dao'tu整理需求"), false)],
+            "我用思维到图整理需求",
+            &AtomicU64::new(0),
+        );
+        assert!(edits.is_empty());
+    }
+
+    #[test]
+    fn detects_composing_text() {
+        let base = "如果是你改的词。后面";
+        assert!(composing(base, "如果是你改的词。ce'shi'ce'shi后面"));
+        assert!(composing("我用思维到图整理", "我用思维dao'tu整理"));
+        assert!(composing("詩織さんにお願い", "しおrさんにお願い"));
+        // 改完的正常文字
+        assert!(!composing(base, "如果是你改的词。测试测试后面"));
+        assert!(!composing("瑞克特很好用", "react很好用"));
+        assert!(!composing("I dont know", "I don't know"));
+        assert!(!composing("我说 dont 吧", "我说 don't 吧"));
+        // 原文里本来就有的不算
+        assert!(!composing("他说ni'hao。", "她说ni'hao。"));
     }
 
     #[test]
