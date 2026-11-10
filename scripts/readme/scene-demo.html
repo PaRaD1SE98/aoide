@@ -67,6 +67,24 @@
     .tcard .btn { height: 26px; padding: 0 12px; line-height: 26px; border-radius: 13px; background: rgba(255,255,255,.08); font-size: 12px; }
     .tcard .btn.accent { background: rgba(96,205,255,.16); color: #60cdff; }
     .speech #stext { white-space: nowrap; }
+
+    /* 记住你的词：手动改对的词、下次自动认对的词 */
+    .fixed { border-radius: 3px; }
+    .hit { border-radius: 2px; }
+    /* 词条入库提示：屏幕右下角（任务栏上方）的小条，样子同 ui/learned.html（悬停才出现的关闭按钮也占着位置） */
+    .toast { position: absolute; right: 12px; bottom: 60px; width: 288px; display: flex; flex-direction: column; background: rgba(24,24,27,.92); color: #fff; border: 1px solid rgba(255,255,255,.16); border-radius: 10px; box-shadow: 0 2px 6px rgba(0,0,0,.4); overflow: hidden; }
+    .toast .row { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 12px; }
+    .toast .ico { flex: none; align-self: flex-start; margin-top: 2px; color: #60cdff; font: 16px/1 "Segoe Fluent Icons", "Segoe MDL2 Assets"; }
+    .toast .main { flex: 1; min-width: 0; }
+    .toast .title { color: rgba(255,255,255,.62); font-size: 11px; line-height: 16px; }
+    .toast .item { display: flex; align-items: baseline; gap: 6px; font-size: 13px; line-height: 20px; white-space: nowrap; }
+    .toast .from { color: rgba(255,255,255,.62); text-decoration: line-through; }
+    .toast .arrow { color: rgba(255,255,255,.62); font: 9px "Segoe Fluent Icons", "Segoe MDL2 Assets"; }
+    .toast .to { font-weight: 600; }
+    .toast .undo { flex: none; height: 26px; padding: 0 10px; line-height: 26px; color: #60cdff; font-size: 12px; }
+    .toast .spacer { flex: none; width: 26px; }
+    .toast .countdown { height: 2px; background: rgba(255,255,255,.16); }
+    .toast .bar { height: 100%; background: #60cdff; transform-origin: left; }
   </style>
 </head>
 <body>
@@ -75,6 +93,7 @@
     <div class="step" id="step1"><b id="s1t"></b><span id="s1d"></span></div>
     <div class="step" id="step2"><b id="s2t"></b><span id="s2d"></span></div>
     <div class="step" id="step3"><b id="s3t"></b><span id="s3d"></span></div>
+    <div class="step" id="step4"><b id="s4t"></b><span id="s4d"></span></div>
   </div>
   <div class="window">
     <div class="titlebar"><span class="name" id="app"></span><span class="ctl">&#xE921;</span><span class="ctl">&#xE922;</span><span class="ctl">&#xE8BB;</span></div>
@@ -90,6 +109,14 @@
     <div class="row"><span id="into2"></span><span class="box" id="target2"></span></div>
     <div class="tr" id="tr"></div>
     <div class="foot"><span class="btn" id="copy"></span><span class="btn accent" id="retr"></span></div>
+  </div>
+  <div class="toast" id="toast">
+    <div class="row">
+      <span class="ico">&#xE82D;</span>
+      <div class="main"><div class="title" id="ltitle"></div><div class="item"><span class="from" id="lfrom"></span><span class="arrow">&#xE72A;</span><span class="to" id="lto"></span></div></div>
+      <span class="undo" id="lundo"></span><span class="spacer"></span>
+    </div>
+    <div class="countdown"><div class="bar" id="lbar"></div></div>
   </div>
   <img class="capsule" id="capsule" alt="">
   <div class="taskbar"><span>&#xE8FC;</span><span class="on">&#xE8BD;</span><span>&#xE8B7;</span><span>&#xE774;</span></div>
@@ -118,6 +145,14 @@
       target: "英语",
       out3: "Sure, I'll send them before I leave work today. Feel free to ask me if you have any questions.",
       into: "译成", ttitle: "语音翻译", olabel: "识别出的原文（有识别错误可以直接修改）", copy: "复制译文", retr: "重新翻译",
+      s4t: "④ 记住你的词", s4d: "改一次就记住",
+      q4: "周五的技术分享谁来讲？",
+      said4: "嗯周五请林汐来讲吧，她最近在做向量检索",
+      out4: ["周五请", "林希", "林汐", "来讲吧，她最近在做向量检索。"],
+      fixHint: "直接在输入框里改对",
+      said5: "然后林汐说她会提前十分钟到",
+      out5: ["另外，", "林汐", "说她会提前 10 分钟到。"],
+      ltitle: "已加入词库", lundo: "撤销",
     }, en: {
       app: "Team chat",
       s1t: "① Dictate", s1d: "polished by an LLM", s2t: "② Voice edit", s2d: "say how to change it",
@@ -136,6 +171,14 @@
       target: "Japanese",
       out3: "はい、今日の退勤前にお送りします。ご不明な点があれば、お気軽にお知らせください。",
       into: "Into", ttitle: "Voice translation", olabel: "Recognized text (fix any recognition errors here)", copy: "Copy translation", retr: "Retranslate",
+      s4t: "④ Your words", s4d: "fix it once",
+      q4: "Who's presenting at Friday's tech talk?",
+      said4: "let's ask Siobhan she's been working on vector search",
+      out4: ["Let's ask ", "Shivon", "Siobhan", ". She's been working on vector search."],
+      fixHint: "Fix it right in the text box",
+      said5: "oh and Siobhan says she'll be there ten minutes early",
+      out5: ["Also, ", "Siobhan", " says she'll be there 10 minutes early."],
+      ltitle: "Added to vocabulary", lundo: "Undo",
     }, ja: {
       app: "チームチャット",
       s1t: "① 音声入力", s1d: "LLM が自動で整形", s2t: "② 音声で修正", s2d: "直し方を話す",
@@ -154,8 +197,16 @@
       target: "英語",
       out3: "Sure, I'll send them before I head home today. Let me know if you have any questions.",
       into: "翻訳先", ttitle: "音声翻訳", olabel: "認識された原文（認識の誤りはここで直接修正できます）", copy: "訳文をコピー", retr: "再翻訳",
+      s4t: "④ 単語学習", s4d: "一度直せば覚える",
+      q4: "金曜の技術共有会、誰が発表する？",
+      said4: "えーと、金曜は詩織さんにお願いしよう、最近ベクトル検索をやってるから",
+      out4: ["金曜は", "志織", "詩織", "さんにお願いしましょう。最近ベクトル検索に取り組んでいます。"],
+      fixHint: "入力欄でそのまま直す",
+      said5: "あと詩織さん、10分早く来るって",
+      out5: ["あと、", "詩織", "さんは 10 分早く来るそうです。"],
+      ltitle: "辞書に追加しました", lundo: "元に戻す",
     } }[lang];
-    for (const id of ["app", "s1t", "s1d", "s2t", "s2d", "s3t", "s3d", "ttitle", "olabel", "copy", "retr", "heard3"]) {
+    for (const id of ["app", "s1t", "s1d", "s2t", "s2d", "s3t", "s3d", "s4t", "s4d", "ttitle", "olabel", "copy", "retr", "heard3", "ltitle", "lundo"]) {
       const el = document.getElementById(id === "heard3" ? "heard" : id);
       el.textContent = L[id];
     }
@@ -163,13 +214,21 @@
     for (const id of ["target1", "target2"]) document.getElementById(id).textContent = L.target;
     document.getElementById("tr").textContent = L.out3;
     document.getElementById("slabel").textContent = L.mic;
+    // 第 ④ 段：[前文, 认错的词, 改对的词, 后文]
+    const [pre4, wrong4, right4, post4] = L.out4;
+    const fixed4 = pre4 + right4 + post4;
+    const out5 = L.out5.join("");
+    document.getElementById("lfrom").textContent = wrong4;
+    document.getElementById("lto").textContent = right4;
 
     // === 时间轴（毫秒）===
     const T = {
       rec1: 700, stop1: 4600, pol1: 5500, out1: 7000, send1: 8200, q2: 8900,
       type2: 9500, typed2: 10700, sel2: 11000, rev2: 11700, stop2: 14500, pol2: 15300, out2: 16700, send2: 17900,
       q3: 18600, rec3: 19300, stop3: 23300, pol3: 24100, out3: 25500, card3: 26700, send3: 29500,
-      end: 30700,
+      q4: 30500, rec4: 31200, stop4: 35000, pol4: 35800, out4: 37000, fix4: 38200, fixed4: 38800, send4: 39900, toast4: 40600,
+      rec5: 41800, stop5: 44400, pol5: 45000, out5: 46000, send5: 47800,
+      end: 49200,
     };
     const FPS = 30;
     const FRAMES = { recording: 240, revising: 180, translating: 180, transcribing: 60, polishing: 90 };
@@ -178,12 +237,16 @@
       [T.rec1, T.stop1, "recording"], [T.stop1, T.pol1, "transcribing"], [T.pol1, T.out1, "polishing"],
       [T.rev2, T.stop2, "revising"], [T.stop2, T.pol2, "transcribing"], [T.pol2, T.out2, "polishing"],
       [T.rec3, T.stop3, "translating"], [T.stop3, T.pol3, "transcribing"], [T.pol3, T.out3, "polishing"],
+      [T.rec4, T.stop4, "recording"], [T.stop4, T.pol4, "transcribing"], [T.pol4, T.out4, "polishing"],
+      [T.rec5, T.stop5, "recording"], [T.stop5, T.pol5, "transcribing"], [T.pol5, T.out5, "polishing"],
     ];
     // 按键：[按下时刻, 键, 提示]
     const PRESSES = [
       [T.rec1, ["Right Alt"], L.tap], [T.stop1, ["Right Alt"], L.tap],
       [T.rev2, ["Right Alt", "Space"], L.hold], [T.stop2, ["Right Alt"], L.tap],
       [T.rec3, ["Right Alt", "T"], L.holdT], [T.stop3, ["Right Alt"], L.tap],
+      [T.rec4, ["Right Alt"], L.tap], [T.stop4, ["Right Alt"], L.tap], [T.fix4, [], L.fixHint],
+      [T.rec5, ["Right Alt"], L.tap], [T.stop5, ["Right Alt"], L.tap],
     ];
 
     const $ = (id) => document.getElementById(id);
@@ -211,7 +274,8 @@
       t = t % T.end;
       $("step1").classList.toggle("on", t < T.q2);
       $("step2").classList.toggle("on", t >= T.q2 && t < T.q3);
-      $("step3").classList.toggle("on", t >= T.q3);
+      $("step3").classList.toggle("on", t >= T.q3 && t < T.q4);
+      $("step4").classList.toggle("on", t >= T.q4);
 
       // 聊天记录
       const msgs = [["", L.q1]];
@@ -220,6 +284,9 @@
       if (t >= T.send2) msgs.push(["me", L.out2]);
       if (t >= T.q3) msgs.push(["", L.q3]);
       if (t >= T.send3) msgs.push(["me", L.out3]);
+      if (t >= T.q4) msgs.push(["", L.q4]);
+      if (t >= T.send4) msgs.push(["me", fixed4]);
+      if (t >= T.send5) msgs.push(["me", out5]);
       $("chat").innerHTML = msgs.map(([c, s]) => `<div class="msg ${c}">${esc(s)}</div>`).join("");
 
       // 输入框
@@ -240,6 +307,26 @@
       } else if (t >= T.out3 && t < T.send3) {
         const flash = fadeOut(1 - ramp(t, T.out3, 900));
         html = `<span class="new" style="background:rgba(52,211,153,${0.35 * flash})">${esc(L.out3)}</span>${caret}`;
+      } else if (t >= T.out4 && t < T.fix4) {
+        // 输入后人名认错了（演示里给认错的词标上红色波浪线，程序本身不会标）
+        const flash = fadeOut(1 - ramp(t, T.out4, 900));
+        const wave = t >= T.out4 + 500 ? "text-decoration: underline wavy #e5484d; text-underline-offset: 3px;" : "";
+        html = `<span class="new" style="background:rgba(251,191,36,${0.35 * flash})">${esc(pre4)}<span style="${wave}">${esc(wrong4)}</span>${esc(post4)}</span>${caret}`;
+      } else if (t >= T.fix4 && t < T.fixed4) {
+        // 选中认错的词
+        const n = Math.round(len(wrong4) * ramp(t, T.fix4, 250));
+        const w = Array.from(wrong4);
+        html = esc(pre4) + `<span class="sel">${esc(w.slice(0, n).join(""))}</span>${esc(w.slice(n).join("") + post4)}`;
+      } else if (t >= T.fixed4 && t < T.send4) {
+        // 打上正确的写法
+        const flash = fadeOut(1 - ramp(t, T.fixed4 + 300, 700));
+        html = `${esc(pre4)}<span class="fixed" style="background:rgba(43,111,214,${0.18 * flash})">${esc(right4)}</span>${caret}${esc(post4)}`;
+      } else if (t >= T.out5 && t < T.send5) {
+        // 再说一次就认对了：整段照常闪一下，认对的词多标一会儿
+        const flash = fadeOut(1 - ramp(t, T.out5, 900));
+        const mark = fadeOut(1 - ramp(t, T.out5 + 900, 600));
+        const [a, b, c] = L.out5;
+        html = `<span class="new" style="background:rgba(251,191,36,${0.35 * flash})">${esc(a)}<span class="hit" style="box-shadow:inset 0 -2px 0 rgba(43,111,214,${mark})">${esc(b)}</span>${esc(c)}</span>${caret}`;
       }
       $("input").innerHTML = html;
 
@@ -249,6 +336,8 @@
       if (t >= T.rec1 && t < T.out1 + 400) [said, start, stop, out] = [L.said1, T.rec1, T.stop1, T.out1];
       if (t >= T.rev2 && t < T.out2 + 400) [said, start, stop, out] = [L.said2, T.rev2, T.stop2, T.out2];
       if (t >= T.rec3 && t < T.out3 + 400) [said, start, stop, out] = [L.said3, T.rec3, T.stop3, T.out3];
+      if (t >= T.rec4 && t < T.out4 + 400) [said, start, stop, out] = [L.said4, T.rec4, T.stop4, T.out4];
+      if (t >= T.rec5 && t < T.out5 + 400) [said, start, stop, out] = [L.said5, T.rec5, T.stop5, T.out5];
       if (said) {
         const n = Math.max(1, Math.round(len(said) * ramp(t, start + 200, stop - start - 500)));
         const [open, close] = lang === "ja" ? ["「", "」"] : ["“", "”"];
@@ -277,6 +366,10 @@
       // 语音翻译：录音时悬浮条上方显示目标语言；译文输入后弹出核对小窗，发送消息时关掉
       $("strip").style.opacity = t >= T.rec3 && t < T.stop3 ? Math.min(ramp(t, T.rec3, 120), fadeOut(1 - ramp(t, T.stop3 - 120, 120))) : 0;
       $("tcard").style.opacity = t >= T.card3 && t < T.send3 ? Math.min(ramp(t, T.card3, 150), fadeOut(1 - ramp(t, T.send3 - 150, 150))) : 0;
+
+      // 记住你的词：改对后发送，右下角弹出入库提示；底部倒计时条按程序里的 8 秒缩短
+      $("toast").style.opacity = t >= T.toast4 ? Math.min(ramp(t, T.toast4, 150), fadeOut(1 - ramp(t, T.end - 200, 150))) : 0;
+      $("lbar").style.transform = `scaleX(${1 - clamp((t - T.toast4) / 8000)})`;
 
       // 悬浮条：用程序自身绘制的逐帧图片；出现/消失时淡入淡出约 100 ms
       const cap = $("capsule");

@@ -36,7 +36,7 @@ try {
 # 2. 界面页面副本 + 模拟接口
 Copy-Item (Join-Path $root "ui") "$tmp\ui" -Recurse
 Copy-Item (Join-Path $PSScriptRoot "readme\*") $tmp
-foreach ($page in "index.html", "result.html") {
+foreach ($page in "index.html", "result.html", "learned.html") {
     $file = "$tmp\ui\$page"
     $html = [IO.File]::ReadAllText($file)
     $html = $html.Replace('<script src="i18n.js"></script>', '<script src="../mock.js"></script><script src="i18n.js"></script>')
@@ -47,6 +47,7 @@ foreach ($page in "index.html", "result.html") {
 $scenes = @(
     @{ name = "states"; w = 760; h = 150 },
     @{ name = "result"; w = 960; h = 540 },
+    @{ name = "learned"; w = 760; h = 300 },
     @{ name = "settings"; w = 1060; h = 700 }
 )
 function Render($page, $w, $h, $png) {

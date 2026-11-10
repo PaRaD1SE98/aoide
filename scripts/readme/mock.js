@@ -69,11 +69,12 @@
     { id: 1, term: "SenseVoice", manual: true, enabled: true, variants: [] },
   ];
   const responses = { get_settings: settings, list_models: models, get_ui_language: lang, get_result: result, get_vocab: vocab,
-    get_learned: pick({
-      zh: [{ wrong: "思维到图", right: "思维导图", count: 1 }, { wrong: "奥伊德", right: "Aoide", count: 2 }],
-      en: [{ wrong: "tori", right: "Tauri", count: 1 }, { wrong: "Aida", right: "Aoide", count: 2 }],
-      ja: [{ wrong: "義事録", right: "議事録", count: 1 }, { wrong: "あおいで", right: "Aoide", count: 2 }],
-    }) };
+    // 词条入库提示（learned.html）：和演示动图里学到的是同一个词
+    get_learned: { ask: false, items: [pick({
+      zh: { wrong: "林希", right: "林汐", count: 1 },
+      en: { wrong: "Shivon", right: "Siobhan", count: 1 },
+      ja: { wrong: "志織", right: "詩織", count: 1 },
+    })] } };
   window.__TAURI__ = {
     core: { invoke: async (cmd) => responses[cmd] ?? null },
     event: { listen: async () => {} },

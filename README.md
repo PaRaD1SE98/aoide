@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/en/demo.webp" width="760" alt="Demo: dictating into a chat app, the LLM cleans up the speech; selecting a reply and rewriting it by voice; then speaking one language and typing another">
+  <img src="docs/images/en/demo.webp" width="760" alt="Demo: dictating into a chat app, the LLM cleans up the speech; selecting a reply and rewriting it by voice; speaking one language and typing another; then fixing a misrecognized name once, after which Aoide gets it right">
 </p>
 
 <p align="center"><sub><i>Aoide</i> (pronounced "ay-OY-dee") is named after the Greek Muse of voice and song</sub></p>
@@ -59,6 +59,9 @@ If you find Aoide useful, please give it a ⭐ star. It helps more people discov
 
 - **Context-aware insertion**: when the cursor sits inside existing text, the LLM sees the text before and after the cursor and writes only the piece that belongs at the cursor, matching the surrounding language and punctuation. The existing text is never changed — the result is pasted at the cursor. Short dictation is inserted as transcribed for speed; the LLM step kicks in for longer input (configurable). Requires an LLM API; password fields are never read.
 - **Learns your words**: names, product names and jargon that keep coming out wrong only need to be fixed once. Correct the word in the text box after it is typed, and Aoide compares your edit with what it typed, checks that the two sound alike (so rewording is not mistaken for a recognition error), adds the pair to your vocabulary and shows a small notice with **Undo**. Next time, a misrecognition you have corrected repeatedly is replaced directly; others are passed to the LLM together with the related vocabulary entries, so it can fix them in context. You can also add words by hand under **Settings → Vocabulary**.
+
+  ![The notice in the bottom-right corner after you correct a misrecognized name, with an Undo button](docs/images/en/learned.png)
+
 - **LLM polishing**: removes filler words ("um", "uh", 嗯, 那个…) and joins broken sentences, then organizes what you said: several points become a short lead-in plus a numbered list, a longer explanation is split into paragraphs, and a short message stays a single sentence. Nothing you didn't say is added. The layout and wording rules live in one **Output style** prompt shared by polishing, insertion, voice edit and translation; edit it under **Settings → Prompts**.
 - **Automatic updates**: Aoide checks for a new version once a day, lets you know with a notice at the bottom of the screen and a tray menu item, and updates in one click: the signed installer is downloaded, verified and installed, and Aoide restarts on its own. It never updates while you are dictating. You can turn the daily check off and check manually under **Settings → About**.
 - **Two speech engines**: SenseVoice (default) is fast on any CPU, very accurate for Chinese and rarely hallucinates; Whisper models run on the GPU through Vulkan (NVIDIA, AMD or Intel, no CUDA install required) and fall back to CPU automatically. On Apple silicon Macs they run on the GPU through Metal.

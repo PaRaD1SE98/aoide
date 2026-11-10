@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="desktop.css">
+  <style>
+    /* 屏幕右下角的一块：聊天窗口里刚发出改对的消息，右下角弹出词条入库提示 */
+    html, body { width: 760px; height: 300px; }
+    .window { left: 28px; top: 20px; transform: none; width: 520px; height: 150px; }
+    .chat { flex: 1; padding: 10px 16px; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; background: #f5f6f8; }
+    .msg { max-width: 80%; padding: 7px 12px; border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+    .msg.me { align-self: flex-end; background: #d9e8ff; }
+    .msg b { font-weight: 600; }
+    /* 嵌入真实的 ui/learned.html：窗口离屏幕右下角 4（CORNER_GAP），卡片四周还有 8 的阴影留白；
+       iframe 要和弹窗页面一样用深色配色，否则浏览器会给它垫一层不透明底色 */
+    .learned { position: absolute; right: 4px; bottom: 52px; width: 304px; height: 76px; border: 0; background: transparent; color-scheme: dark; }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <div class="titlebar"><span class="name" id="app"></span><span class="ctl">&#xE921;</span><span class="ctl">&#xE922;</span><span class="ctl">&#xE8BB;</span></div>
+    <div class="chat">
+      <div class="msg" id="q"></div>
+      <div class="msg me" id="a"></div>
+    </div>
+  </div>
+  <iframe class="learned" id="card"></iframe>
+  <div class="taskbar"><span>&#xE8FC;</span><span class="on">&#xE8BD;</span><span>&#xE8B7;</span><span>&#xE774;</span></div>
+  <script>
+    const lang = ["zh", "en", "ja"].includes(new URLSearchParams(location.search).get("lang")) ? new URLSearchParams(location.search).get("lang") : "en";
+    document.documentElement.lang = lang;
+    // 发出的消息里改对的词加粗（和演示动图第 ④ 段是同一个场景）
+    const text = {
+      zh: { app: "团队聊天", q: "周五的技术分享谁来讲？", a: ["周五请", "林汐", "来讲吧，她最近在做向量检索。"] },
+      en: { app: "Team chat", q: "Who's presenting at Friday's tech talk?", a: ["Let's ask ", "Siobhan", ". She's been working on vector search."] },
+      ja: { app: "チームチャット", q: "金曜の技術共有会、誰が発表する？", a: ["金曜は", "詩織", "さんにお願いしましょう。最近ベクトル検索に取り組んでいます。"] },
+    }[lang];
+    document.getElementById("app").textContent = text.app;
+    document.getElementById("q").textContent = text.q;
+    const [pre, word, post] = text.a;
+    document.getElementById("a").append(pre, Object.assign(document.createElement("b"), { textContent: word }), post);
+    document.getElementById("card").src = `ui/learned.html?lang=${lang}`;
+  </script>
+</body>
+</html>
